@@ -1,0 +1,4 @@
+Contact: mailto:security@tapehouse.xyz
+Expires: 2027-09-21T00:00:00.000Z
+Preferred-Languages: en, es
+Canonical: https://tapehouse.xyz/.well-known/security.txt

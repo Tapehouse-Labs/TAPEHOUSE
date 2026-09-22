@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Entry, PlainPage } from "../components/PlainPage";
 
 export const metadata: Metadata = {
-  title: "Methodology — Tapehouse",
+  title: "Methodology",
+  alternates: { canonical: "/methodology" },
   description: "How every figure on the Tapehouse site was measured, and what the illustrative model assumes.",
 };
 

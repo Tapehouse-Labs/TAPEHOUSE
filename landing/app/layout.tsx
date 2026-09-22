@@ -1,15 +1,33 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Inter_Tight, Spline_Sans_Mono } from "next/font/google";
 import "./globals.css";
+import { SITE_URL, X_HANDLE } from "./site";
 
 const archivo = Archivo({ variable: "--font-archivo", subsets: ["latin"], display: "swap" });
 const interTight = Inter_Tight({ variable: "--font-inter-tight", subsets: ["latin"], display: "swap" });
 const splineMono = Spline_Sans_Mono({ variable: "--font-spline-mono", subsets: ["latin"], display: "swap" });
 
+const DESCRIPTION =
+  "Borrow against every Stock Token you hold. Your whole portfolio backs one loan, the liquidation price is stated before you sign, and the price keeps moving when the market doesn’t.";
+
 export const metadata: Metadata = {
-  title: "Tapehouse — Portfolio margin for Stock Tokens",
-  description:
-    "Borrow against every Stock Token you hold. Your whole portfolio backs one loan, the liquidation price is stated before you sign, and the price keeps moving when the market doesn’t.",
+  metadataBase: new URL(SITE_URL),
+  title: { default: "Tapehouse — Portfolio margin for Stock Tokens", template: "%s — Tapehouse" },
+  description: DESCRIPTION,
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: "Tapehouse",
+    url: "/",
+    title: "Tapehouse — Portfolio margin for Stock Tokens",
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: `@${X_HANDLE}`,
+    title: "Tapehouse — Portfolio margin for Stock Tokens",
+    description: DESCRIPTION,
+  },
 };
 
 export const viewport: Viewport = {

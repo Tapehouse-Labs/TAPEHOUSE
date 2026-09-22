@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { APP_URL, CONTACT_EMAIL, EXTERNAL } from "../site";
+import { APP_URL, CONTACT_EMAIL, EXTERNAL, SECURITY_EMAIL } from "../site";
 import { Mark } from "./Mark";
 
 type Item = { label: string; href: string; external?: boolean };
@@ -19,6 +19,7 @@ const COLUMNS: { title: string; items: Item[] }[] = [
     items: [
       { label: "Integrate the feed", href: "/#ch-method" },
       { label: "Methodology", href: "/methodology" },
+      { label: "Report a vulnerability", href: `mailto:${SECURITY_EMAIL}`, external: true },
     ],
   },
   {
@@ -63,8 +64,7 @@ export function Footer() {
                       {item.external ? (
                         <a
                           href={item.href}
-                          target="_blank"
-                          rel="noreferrer"
+                          {...(item.href.startsWith("mailto:") ? {} : { target: "_blank", rel: "noreferrer" })}
                           className="text-body transition-colors duration-200 hover:text-strong"
                         >
                           {item.label}

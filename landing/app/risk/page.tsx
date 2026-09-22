@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Entry, PlainPage } from "../components/PlainPage";
 
 export const metadata: Metadata = {
-  title: "Risk disclosure — Tapehouse",
+  title: "Risk disclosure",
+  alternates: { canonical: "/risk" },
   description: "What can go wrong when you borrow against Stock Tokens with Tapehouse.",
 };
 
