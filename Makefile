@@ -18,7 +18,10 @@ endif
 ifeq ($(strip $(ARBITRUM_RPC_URL)),)
 ARBITRUM_RPC_URL := https://arbitrum.gateway.tenderly.co
 endif
-export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL
+ifeq ($(strip $(ROBINHOOD_LOGS_RPC_URL)),)
+ROBINHOOD_LOGS_RPC_URL := https://rpc.mainnet.chain.robinhood.com
+endif
+export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LOGS_RPC_URL
 
 .PHONY: all build test lint coverage gas snapshot \
 	check-toolchains check-node check-foundry check-slither check-docker submodules \

@@ -40,6 +40,9 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    env:
+      ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL }}
+      ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -64,6 +67,9 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    env:
+      ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL }}
+      ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -76,7 +82,6 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
         with:
           version: v1.8.3
-          cache: false
       - run: /usr/bin/make --version
       - run: /usr/bin/make build test
       - run: /usr/bin/make coverage gas
