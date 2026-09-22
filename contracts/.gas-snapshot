@@ -1,0 +1,3 @@
+RegistryForkTest:test_RobinhoodEntriesAreTheContractsTheyClaimToBe() (gas: 562545)
+RegistryForkTest:test_RobinhoodTestnetEntriesAreTheContractsTheyClaimToBe() (gas: 39089)
+RegistryTest:test_EveryEntryIsChecksummedAndFilesAreNamedAfterTheirChain() (gas: 3003)

@@ -80,7 +80,7 @@ jobs:
       - run: /usr/bin/make --version
       - run: /usr/bin/make build test
       - run: /usr/bin/make coverage gas
-      - run: /usr/bin/make -n lint snapshot
+      - run: /usr/bin/make -n lint snapshot devnode devnode-stop
 
   workflows:
     name: Workflows
