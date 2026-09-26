@@ -207,6 +207,7 @@ case "$session-$nyse" in
   2-1 | 2-2 | 2-3) expected="3 2" spy_half=55 ;;
   1-3) [ "$boundary_ms" -gt "$now_ms" ] || fail "a closed session reopens at $boundary_ms, before now"
     expected="2 1" spy_half=80 ;;
+  1-2) expected="2 1" spy_half=80 ;;
   *) fail "session() = $session $nyse $nyse_next $change_ms $boundary_ms" ;;
 esac
 quote() {

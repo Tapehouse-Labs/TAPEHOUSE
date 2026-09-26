@@ -33,7 +33,8 @@ pub fn next_anchor(
     index_px: u64,
     index_ms: u64,
 ) -> Option<Anchor> {
-    let near = index_ms.abs_diff(cl_at_s.saturating_mul(1000)) <= ANCHOR_MAX_LAG_MS;
+    let near =
+        u128::from(index_ms).abs_diff(u128::from(cl_at_s) * 1000) <= u128::from(ANCHOR_MAX_LAG_MS);
     let new = cl_at_s > anchor.at_s && cl_px != anchor.cl_px;
     (cl_px > 0 && index_px > 0 && new && near).then_some(Anchor {
         cl_px,
@@ -79,6 +80,17 @@ mod tests {
                 case["name"]
             );
         }
+    }
+
+    #[test]
+    fn a_print_beyond_u64_milliseconds_is_far_from_any_package() {
+        let cl_at_s = u64::MAX / 1000 + 1000;
+        let anchor = Anchor {
+            cl_px: 1,
+            index_px: 1,
+            at_s: cl_at_s - 1,
+        };
+        assert_eq!(next_anchor(anchor, 2, cl_at_s, 3, u64::MAX), None);
     }
 
     #[test]
