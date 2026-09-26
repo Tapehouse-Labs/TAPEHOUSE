@@ -1,0 +1,588 @@
+{
+ "quotes": [
+  {
+   "name": "NVDA: Friday, market open",
+   "input": {
+    "live247_px": "21943546450",
+    "live247_age_s": "15",
+    "cl_px": "21931552275",
+    "cl_age_s": "17949",
+    "cl_session_open": true,
+    "var_cpb2": "75119"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "21943546450",
+    "half_bps": "30",
+    "low": "21877715810",
+    "high": "22009377089"
+   }
+  },
+  {
+   "name": "NVDA: Friday, after the close",
+   "input": {
+    "live247_px": "22197004664",
+    "live247_age_s": "6",
+    "cl_px": "22244729849",
+    "cl_age_s": "3904",
+    "cl_session_open": true,
+    "var_cpb2": "269863"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "22197004664",
+    "half_bps": "30",
+    "low": "22130413650",
+    "high": "22263595677"
+   }
+  },
+  {
+   "name": "NVDA: Saturday, early morning",
+   "input": {
+    "live247_px": "22217832650",
+    "live247_age_s": "8",
+    "cl_px": "22244729849",
+    "cl_age_s": "36306",
+    "cl_session_open": false,
+    "var_cpb2": "8458"
+   },
+   "expected": {
+    "state": "CLOSED",
+    "live": "1",
+    "mid": "22217832650",
+    "half_bps": "55",
+    "low": "22095634570",
+    "high": "22340030729"
+   }
+  },
+  {
+   "name": "NVDA: Sunday, an hour before the reopen",
+   "input": {
+    "live247_px": "22222720590",
+    "live247_age_s": "19",
+    "cl_px": "22244729849",
+    "cl_age_s": "183878",
+    "cl_session_open": false,
+    "var_cpb2": "50760"
+   },
+   "expected": {
+    "state": "CLOSED",
+    "live": "1",
+    "mid": "22222720590",
+    "half_bps": "55",
+    "low": "22100495626",
+    "high": "22344945553"
+   }
+  },
+  {
+   "name": "NVDA: Monday, the minute of the reopen",
+   "input": {
+    "live247_px": "22282370662",
+    "live247_age_s": "20",
+    "cl_px": "22280257368",
+    "cl_age_s": "110",
+    "cl_session_open": true,
+    "var_cpb2": "103037"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "22282370662",
+    "half_bps": "30",
+    "low": "22215523550",
+    "high": "22349217773"
+   }
+  },
+  {
+   "name": "NVDA: Monday, overnight session",
+   "input": {
+    "live247_px": "22334574135",
+    "live247_age_s": "11",
+    "cl_px": "22391843798",
+    "cl_age_s": "6170",
+    "cl_session_open": true,
+    "var_cpb2": "58957"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "22334574135",
+    "half_bps": "30",
+    "low": "22267570412",
+    "high": "22401577857"
+   }
+  },
+  {
+   "name": "TSLA: Friday, market open",
+   "input": {
+    "live247_px": "36360996071",
+    "live247_age_s": "15",
+    "cl_px": "36375500000",
+    "cl_age_s": "5841",
+    "cl_session_open": true,
+    "var_cpb2": "245549"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "36360996071",
+    "half_bps": "30",
+    "low": "36251913082",
+    "high": "36470079059"
+   }
+  },
+  {
+   "name": "TSLA: Friday, after the close",
+   "input": {
+    "live247_px": "36421609986",
+    "live247_age_s": "6",
+    "cl_px": "36379999999",
+    "cl_age_s": "4309",
+    "cl_session_open": true,
+    "var_cpb2": "35086"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "36421609986",
+    "half_bps": "30",
+    "low": "36312345156",
+    "high": "36530874815"
+   }
+  },
+  {
+   "name": "TSLA: Saturday, early morning",
+   "input": {
+    "live247_px": "36464557350",
+    "live247_age_s": "8",
+    "cl_px": "36379999999",
+    "cl_age_s": "36712",
+    "cl_session_open": false,
+    "var_cpb2": "9902"
+   },
+   "expected": {
+    "state": "CLOSED",
+    "live": "1",
+    "mid": "36464557350",
+    "half_bps": "55",
+    "low": "36264002284",
+    "high": "36665112415"
+   }
+  },
+  {
+   "name": "TSLA: Sunday, an hour before the reopen",
+   "input": {
+    "live247_px": "36525001030",
+    "live247_age_s": "19",
+    "cl_px": "36379999999",
+    "cl_age_s": "184283",
+    "cl_session_open": false,
+    "var_cpb2": "28031"
+   },
+   "expected": {
+    "state": "CLOSED",
+    "live": "1",
+    "mid": "36525001030",
+    "half_bps": "55",
+    "low": "36324113524",
+    "high": "36725888535"
+   }
+  },
+  {
+   "name": "TSLA: Monday, the minute of the reopen",
+   "input": {
+    "live247_px": "36643420287",
+    "live247_age_s": "20",
+    "cl_px": "36519500000",
+    "cl_age_s": "91",
+    "cl_session_open": true,
+    "var_cpb2": "370699"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "36643420287",
+    "half_bps": "31",
+    "low": "36529825684",
+    "high": "36757014889"
+   }
+  },
+  {
+   "name": "TSLA: Monday, overnight session",
+   "input": {
+    "live247_px": "36636139275",
+    "live247_age_s": "11",
+    "cl_px": "36702500000",
+    "cl_age_s": "6811",
+    "cl_session_open": true,
+    "var_cpb2": "55189"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "36636139275",
+    "half_bps": "30",
+    "low": "36526230857",
+    "high": "36746047692"
+   }
+  },
+  {
+   "name": "SYN: 24/7 leg down, session open",
+   "input": {
+    "live247_px": "0",
+    "live247_age_s": "0",
+    "cl_px": "22245000000",
+    "cl_age_s": "600",
+    "cl_session_open": true,
+    "var_cpb2": "0"
+   },
+   "expected": {
+    "state": "DEGRADED",
+    "live": "1",
+    "mid": "22245000000",
+    "half_bps": "105",
+    "low": "22011427500",
+    "high": "22478572500"
+   }
+  },
+  {
+   "name": "SYN: every leg down, weekend",
+   "input": {
+    "live247_px": "22200000000",
+    "live247_age_s": "900",
+    "cl_px": "22245000000",
+    "cl_age_s": "90000",
+    "cl_session_open": false,
+    "var_cpb2": "0"
+   },
+   "expected": {
+    "state": "HALTED",
+    "live": "0",
+    "mid": "0",
+    "half_bps": "0",
+    "low": "0",
+    "high": "0"
+   }
+  },
+  {
+   "name": "SYN: 1.2% disagreement, session open",
+   "input": {
+    "live247_px": "22000000000",
+    "live247_age_s": "10",
+    "cl_px": "22264000000",
+    "cl_age_s": "300",
+    "cl_session_open": true,
+    "var_cpb2": "40000"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "22000000000",
+    "half_bps": "100",
+    "low": "21780000000",
+    "high": "22220000000"
+   }
+  },
+  {
+   "name": "SYN: high volatility",
+   "input": {
+    "live247_px": "22000000000",
+    "live247_age_s": "10",
+    "cl_px": "22050000000",
+    "cl_age_s": "300",
+    "cl_session_open": true,
+    "var_cpb2": "9000000"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "22000000000",
+    "half_bps": "155",
+    "low": "21659000000",
+    "high": "22341000000"
+   }
+  },
+  {
+   "name": "Chainlink at the end of the heartbeat grace",
+   "input": {
+    "live247_px": "22000000000",
+    "live247_age_s": "10",
+    "cl_px": "22050000000",
+    "cl_age_s": "86460",
+    "cl_session_open": true,
+    "var_cpb2": "40000"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "22000000000",
+    "half_bps": "30",
+    "low": "21934000000",
+    "high": "22066000000"
+   }
+  },
+  {
+   "name": "Chainlink one second past the heartbeat grace",
+   "input": {
+    "live247_px": "22000000000",
+    "live247_age_s": "10",
+    "cl_px": "22050000000",
+    "cl_age_s": "86461",
+    "cl_session_open": true,
+    "var_cpb2": "40000"
+   },
+   "expected": {
+    "state": "DEGRADED",
+    "live": "1",
+    "mid": "22000000000",
+    "half_bps": "55",
+    "low": "21879000000",
+    "high": "22121000000"
+   }
+  },
+  {
+   "name": "24/7 leg at the age limit",
+   "input": {
+    "live247_px": "22000000000",
+    "live247_age_s": "120",
+    "cl_px": "22050000000",
+    "cl_age_s": "300",
+    "cl_session_open": true,
+    "var_cpb2": "40000"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "22000000000",
+    "half_bps": "30",
+    "low": "21934000000",
+    "high": "22066000000"
+   }
+  },
+  {
+   "name": "24/7 leg one second past the age limit",
+   "input": {
+    "live247_px": "22000000000",
+    "live247_age_s": "121",
+    "cl_px": "22050000000",
+    "cl_age_s": "300",
+    "cl_session_open": true,
+    "var_cpb2": "40000"
+   },
+   "expected": {
+    "state": "DEGRADED",
+    "live": "1",
+    "mid": "22050000000",
+    "half_bps": "105",
+    "low": "21818475000",
+    "high": "22281525000"
+   }
+  },
+  {
+   "name": "Chainlink asleep does not widen the band",
+   "input": {
+    "live247_px": "22000000000",
+    "live247_age_s": "10",
+    "cl_px": "30000000000",
+    "cl_age_s": "300",
+    "cl_session_open": false,
+    "var_cpb2": "40000"
+   },
+   "expected": {
+    "state": "CLOSED",
+    "live": "1",
+    "mid": "22000000000",
+    "half_bps": "55",
+    "low": "21879000000",
+    "high": "22121000000"
+   }
+  },
+  {
+   "name": "volatility at the half-width cap",
+   "input": {
+    "live247_px": "22000000000",
+    "live247_age_s": "10",
+    "cl_px": "22050000000",
+    "cl_age_s": "300",
+    "cl_session_open": true,
+    "var_cpb2": "835325604"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "22000000000",
+    "half_bps": "1500",
+    "low": "18700000000",
+    "high": "25300000000"
+   }
+  },
+  {
+   "name": "variance at the top of u128",
+   "input": {
+    "live247_px": "22000000000",
+    "live247_age_s": "10",
+    "cl_px": "22050000000",
+    "cl_age_s": "300",
+    "cl_session_open": true,
+    "var_cpb2": "340282366920938463463374607431768211455"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "22000000000",
+    "half_bps": "1500",
+    "low": "18700000000",
+    "high": "25300000000"
+   }
+  },
+  {
+   "name": "24/7 leg zero, Chainlink stale, session open",
+   "input": {
+    "live247_px": "0",
+    "live247_age_s": "10",
+    "cl_px": "22050000000",
+    "cl_age_s": "90000",
+    "cl_session_open": true,
+    "var_cpb2": "40000"
+   },
+   "expected": {
+    "state": "HALTED",
+    "live": "0",
+    "mid": "0",
+    "half_bps": "0",
+    "low": "0",
+    "high": "0"
+   }
+  },
+  {
+   "name": "Chainlink zero, session open",
+   "input": {
+    "live247_px": "22000000000",
+    "live247_age_s": "10",
+    "cl_px": "0",
+    "cl_age_s": "300",
+    "cl_session_open": true,
+    "var_cpb2": "40000"
+   },
+   "expected": {
+    "state": "DEGRADED",
+    "live": "1",
+    "mid": "22000000000",
+    "half_bps": "55",
+    "low": "21879000000",
+    "high": "22121000000"
+   }
+  },
+  {
+   "name": "prices at the top of u64",
+   "input": {
+    "live247_px": "18446744073709551615",
+    "live247_age_s": "10",
+    "cl_px": "18446744073709551614",
+    "cl_age_s": "300",
+    "cl_session_open": true,
+    "var_cpb2": "40000"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "18446744073709551615",
+    "half_bps": "30",
+    "low": "18391403841488422960",
+    "high": "18502084305930680269"
+   }
+  }
+ ],
+ "ewma": [
+  {
+   "name": "rise of 1%",
+   "var": "0",
+   "prev_px": "22000000000",
+   "px": "22220000000",
+   "dt_s": "60",
+   "expected": "6000000"
+  },
+  {
+   "name": "fall of 1%, exact",
+   "var": "0",
+   "prev_px": "22000000000",
+   "px": "21780000000",
+   "dt_s": "60",
+   "expected": "6000000"
+  },
+  {
+   "name": "fall that floors toward minus infinity",
+   "var": "1000",
+   "prev_px": "3",
+   "px": "2",
+   "dt_s": "60",
+   "expected": "6666694273"
+  },
+  {
+   "name": "sample 45 s after the last",
+   "var": "50000",
+   "prev_px": "22000000000",
+   "px": "22010000000",
+   "dt_s": "45",
+   "expected": "63489"
+  },
+  {
+   "name": "sample after a 10-minute gap",
+   "var": "50000",
+   "prev_px": "22000000000",
+   "px": "22300000000",
+   "dt_s": "600",
+   "expected": "1162642"
+  },
+  {
+   "name": "no move decays the variance",
+   "var": "250000",
+   "prev_px": "22000000000",
+   "px": "22000000000",
+   "dt_s": "60",
+   "expected": "235000"
+  },
+  {
+   "name": "zero elapsed time leaves the variance",
+   "var": "250000",
+   "prev_px": "22000000000",
+   "px": "22300000000",
+   "dt_s": "0",
+   "expected": "250000"
+  },
+  {
+   "name": "zero previous price leaves the variance",
+   "var": "250000",
+   "prev_px": "0",
+   "px": "22300000000",
+   "dt_s": "60",
+   "expected": "250000"
+  },
+  {
+   "name": "price to zero is a full loss",
+   "var": "0",
+   "prev_px": "22000000000",
+   "px": "0",
+   "dt_s": "60",
+   "expected": "60000000000"
+  },
+  {
+   "name": "jump beyond the return cap",
+   "var": "0",
+   "prev_px": "1",
+   "px": "18446744073709551615",
+   "dt_s": "1",
+   "expected": "74769074762901517850839147140769382"
+  },
+  {
+   "name": "variance at its bound",
+   "var": "1329227995784915872903807060280344575",
+   "prev_px": "1",
+   "px": "18446744073709551615",
+   "dt_s": "1",
+   "expected": "1324243390800722438380417783804293282"
+  }
+ ]
+}

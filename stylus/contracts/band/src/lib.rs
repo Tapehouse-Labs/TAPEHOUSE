@@ -6,16 +6,19 @@ extern crate alloc;
 
 pub mod chainlink;
 pub mod error;
+pub mod quote;
 pub mod redstone;
 
 use alloc::vec::Vec;
 
 use stylus_sdk::abi::Bytes;
-use stylus_sdk::alloy_primitives::{Address, B256, U64, U256, address};
+use stylus_sdk::alloy_primitives::{Address, B256, U64, U128, U256, address};
 use stylus_sdk::alloy_sol_types::sol;
 use stylus_sdk::call::RawCall;
 use stylus_sdk::prelude::*;
-use stylus_sdk::storage::{StorageAddress, StorageB256, StorageMap, StorageU64, StorageU256};
+use stylus_sdk::storage::{
+    StorageAddress, StorageB256, StorageBool, StorageMap, StorageU64, StorageU128, StorageU256,
+};
 
 use crate::error::{
     BandError, DuplicateAsset, InvalidFeed, LengthMismatch, NoLegs, PackageNotNewer, ZeroSymbol,
@@ -32,6 +35,14 @@ pub struct Price {
     value: StorageU256,
     package_timestamp_ms: StorageU64,
     written_at: StorageU64,
+    sample_ms: StorageU64,
+    tracked: StorageBool,
+}
+
+#[storage]
+pub struct Volatility {
+    var_cpb2: StorageU128,
+    sample_px: StorageU64,
 }
 
 #[storage]
@@ -45,6 +56,7 @@ pub struct Asset {
 pub struct Band {
     prices: StorageMap<B256, Price>,
     assets: StorageMap<B256, Asset>,
+    volatility: StorageMap<B256, Volatility>,
 }
 
 #[public]
@@ -80,6 +92,9 @@ impl Band {
             let mut asset = self.assets.setter(symbol);
             asset.chainlink_feed.set(feed);
             asset.redstone_feed_id.set(feed_id);
+            if feed_id != B256::ZERO {
+                self.prices.setter(feed_id).tracked.set(true);
+            }
         }
         Ok(())
     }
@@ -140,6 +155,7 @@ impl Band {
                 .package_timestamp_ms
                 .set(U64::from(verified.timestamp_ms));
             price.written_at.set(U64::from(now));
+            self.record_sample(*feed_id, *value, verified.timestamp_ms);
             self.vm().log(PriceWritten {
                 feedId: *feed_id,
                 value: *value,
@@ -158,6 +174,40 @@ impl Band {
             price.package_timestamp_ms.get().to::<u64>(),
             price.written_at.get().to::<u64>(),
         )
+    }
+
+    /// The variance of a configured asset's 24/7 feed, in centi-basis-points squared per minute. Zero
+    /// before its second sample and for a feed no asset uses.
+    pub fn variance(&self, feed_id: B256) -> u128 {
+        self.volatility.getter(feed_id).var_cpb2.get().to::<u128>()
+    }
+}
+
+impl Band {
+    fn record_sample(&mut self, feed_id: B256, value: U256, package_timestamp_ms: u64) {
+        let price = self.prices.getter(feed_id);
+        let sample_ms = price.sample_ms.get().to::<u64>();
+        let Ok(px) = u64::try_from(value) else {
+            return;
+        };
+        if !price.tracked.get() || !quote::sample_due(sample_ms, package_timestamp_ms) {
+            return;
+        }
+        let volatility = self.volatility.getter(feed_id);
+        let last = quote::Sample {
+            var_cpb2: volatility.var_cpb2.get().to::<u128>(),
+            px: volatility.sample_px.get().to::<u64>(),
+            ms: sample_ms,
+        };
+        if let Some(next) = quote::next_sample(last, px, package_timestamp_ms) {
+            let mut volatility = self.volatility.setter(feed_id);
+            volatility.var_cpb2.set(U128::from(next.var_cpb2));
+            volatility.sample_px.set(U64::from(next.px));
+            self.prices
+                .setter(feed_id)
+                .sample_ms
+                .set(U64::from(next.ms));
+        }
     }
 }
 
@@ -423,6 +473,76 @@ mod tests {
     fn a_feed_without_code_is_no_reading() {
         let vm = TestVM::default();
         assert_eq!(chainlink::latest(&vm, FEED), (U256::ZERO, 0));
+    }
+
+    #[test]
+    fn the_constructor_tracks_each_24_7_feed() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        vm.mock_static_call(
+            FEED,
+            DECIMALS_CALL.to_vec(),
+            Ok(U256::from(8u8).to_be_bytes::<32>().to_vec()),
+        );
+        band.constructor(
+            vec![symbol("NVDA"), symbol("SPY")],
+            vec![Address::ZERO, FEED],
+            vec![symbol("NVDA---24_7"), B256::ZERO],
+        )
+        .unwrap();
+        assert!(band.prices.getter(symbol("NVDA---24_7")).tracked.get());
+        assert!(!band.prices.getter(B256::ZERO).tracked.get());
+        assert!(!band.prices.getter(symbol("NY_MARKET_STATUS")).tracked.get());
+    }
+
+    #[test]
+    fn samples_fold_into_the_variance_of_a_tracked_feed() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        let feed_id = symbol("NVDA---24_7");
+        band.prices.setter(feed_id).tracked.set(true);
+        band.record_sample(feed_id, U256::from(22_000_000_000u64), 1_790_000_000_000);
+        assert_eq!(band.variance(feed_id), 0);
+        band.record_sample(feed_id, U256::from(22_300_000_000u64), 1_790_000_049_999);
+        assert_eq!(band.variance(feed_id), 0);
+        band.record_sample(feed_id, U256::from(22_300_000_000u64), 1_790_000_050_000);
+        assert_eq!(
+            band.variance(feed_id),
+            quote::ewma_update(0, 22_000_000_000, 22_300_000_000, 50)
+        );
+        assert_eq!(
+            band.prices.getter(feed_id).sample_ms.get().to::<u64>(),
+            1_790_000_050_000
+        );
+        assert_eq!(
+            band.volatility.getter(feed_id).sample_px.get().to::<u64>(),
+            22_300_000_000
+        );
+    }
+
+    #[test]
+    fn an_untracked_feed_keeps_no_variance() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        let feed_id = symbol("NY_MARKET_STATUS");
+        band.record_sample(feed_id, U256::from(101_000_000u64), 1_790_000_000_000);
+        band.record_sample(feed_id, U256::from(100_000_000u64), 1_790_000_060_000);
+        assert_eq!(band.variance(feed_id), 0);
+        assert_eq!(band.prices.getter(feed_id).sample_ms.get().to::<u64>(), 0);
+    }
+
+    #[test]
+    fn a_value_beyond_u64_is_not_a_sample() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        let feed_id = symbol("NY_MARKET_NEXT_CHANGE_TIME");
+        band.prices.setter(feed_id).tracked.set(true);
+        band.record_sample(
+            feed_id,
+            U256::from(179_017_020_000_000_000_000u128),
+            1_790_000_000_000,
+        );
+        assert_eq!(band.prices.getter(feed_id).sample_ms.get().to::<u64>(), 0);
     }
 
     #[test]

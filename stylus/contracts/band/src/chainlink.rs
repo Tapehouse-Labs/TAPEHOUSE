@@ -9,6 +9,10 @@ pub const CL_HEARTBEAT_S: u64 = 86_400;
 /// Deviation threshold of the Robinhood Chain equity feeds, in basis points.
 pub const CL_DEV_BPS: u64 = 50;
 
+/// Maximum age of a live Chainlink answer: the heartbeat plus 60 s, because heartbeat rounds land
+/// up to 27 s late.
+pub const CL_MAX_AGE_S: u64 = CL_HEARTBEAT_S + 60;
+
 /// Decimals every configured feed must report.
 pub const DECIMALS: u8 = 8;
 

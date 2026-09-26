@@ -793,6 +793,8 @@ version = "0.1.0"
 dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
+ "proptest",
+ "serde_json",
  "stylus-sdk",
 ]
 

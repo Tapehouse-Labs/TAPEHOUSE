@@ -85,6 +85,20 @@ cast wallet import tapehouse-deployer --interactive
 - `price(bytes32 feedId)` returns the value, its package timestamp in milliseconds and the block timestamp it was written at, and never reverts.
 - `asset(bytes32 symbol)` returns the asset's Chainlink feed and RedStone feed ID, both zero for an unknown symbol.
 - `legs(bytes32 symbol)` returns the Chainlink answer and its `updatedAt` in seconds, then the stored RedStone 24/7 value and its package timestamp in milliseconds. Zero for a leg that is unset or unreadable; it never reverts and never judges staleness.
+- `variance(bytes32 feedId)` returns the EWMA variance of a configured asset's 24/7 feed, in centi-basis-points squared per minute.
+  - λ = 0.94 per sample.
+  - A feed's first written price is its first sample. After that, a sample is a written price at least 50 s of package time after the previous sample, and its return is normalised to one minute.
+  - A zero price, or one above 2^64 − 1, is never sampled.
+  - A gap never resets the variance.
+
+The band itself, in `stylus/contracts/band/src/quote.rs`, is integer arithmetic over both legs:
+
+| Term | Rule |
+|---|---|
+| Live legs | The 24/7 leg is live up to 120 s old. Chainlink is live while its session is open and it is at most 86,460 s old (the heartbeat plus 60 s). |
+| Centre | The live 24/7 leg, else Chainlink. Never an average with a sleeping leg. |
+| Half-width | At least 30 bps, and at least z = 3 volatility over a 3-minute latency. It adds the disagreement above Chainlink's 50 bps deviation when both legs are live, 25 bps with one leg, and 50 bps without the 24/7 leg. It is capped at 1,500 bps. |
+| State | Open or closed with Chainlink's session, degraded with fewer live legs than expected, halted with none. |
 
 The asset configuration is set once, in the constructor, and cannot change. Each asset has a Chainlink feed, a RedStone feed ID or both. Every configured feed must report 8 decimals. The program is deployed through [StylusDeployer](https://github.com/OffchainLabs/nitro-contracts/blob/main/src/stylus/StylusDeployer.sol) at `0xcEcba2F1DC234f70Dd89F2041029807F8D03A990`, which deploys, activates and runs the constructor in one transaction, so nobody else can call the constructor first:
 

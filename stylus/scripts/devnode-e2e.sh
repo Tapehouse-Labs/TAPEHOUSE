@@ -40,6 +40,22 @@ expect_revert() {
   grep -q "$3" <<<"$out" || fail "expected revert $3, got $out"
 }
 
+price_slot() {
+  local base
+  base=$(cast index bytes32 "$1" 0)
+  cast storage --rpc-url "$rpc" "$band" "$(python3 -c "print(hex(int('$base', 16) + 1))")"
+}
+sample_ms() {
+  local word
+  word=$(price_slot "$1")
+  echo $((16#${word:18:16}))
+}
+tracked() {
+  local word
+  word=$(price_slot "$1")
+  echo $((16#${word:16:2}))
+}
+
 [ "$(cast call --rpc-url "$rpc" "$band" "price(bytes32)(uint256,uint64,uint64)" "$nvda" | tr '\n' ' ')" = "0 0 0 " ] ||
   fail "unwritten feed does not read as zero"
 
@@ -126,9 +142,57 @@ value_size_at=$((${#nvda_payload} - 172))
 oversized=${nvda_payload:0:value_size_at}ffffffe0${nvda_payload:value_size_at+8}
 expect_revert "[$nvda]" "$oversized" 0x5796f78a
 
+[ "$(cast call --rpc-url "$rpc" "$band" "variance(bytes32)(uint128)" "$nvda")" = 0 ] || fail "variance before a second sample"
+[ "$(tracked "$nvda")" = 1 ] && [ "$(sample_ms "$nvda")" = "$package_ms" ] ||
+  fail "the first write of a tracked feed is not its first sample"
+
+tsla=$(cast format-bytes32-string TSLA---24_7)
+read -r status _ <<<"$(write "[$tsla]" "$(python3 "$payload" TSLA---24_7)")"
+[ "$status" = 0x1 ] || fail "writePrices reverted for TSLA---24_7"
+tsla_first_ms=$(sample_ms "$tsla")
+[ "$tsla_first_ms" -gt 0 ] || fail "the first TSLA---24_7 write is not a sample"
+attempts=0
+until tsla_payload=$(python3 "$payload" TSLA---24_7) &&
+  cast call --rpc-url "$rpc" "$band" "writePrices(bytes32[],bytes)" "[$tsla]" "$tsla_payload" > /dev/null 2>&1; do
+  attempts=$((attempts + 1))
+  [ "$attempts" -le 8 ] || fail "no newer TSLA---24_7 package within 40 s"
+  sleep 5
+done
+read -r status gas l1 _ <<<"$(write "[$tsla]" "$tsla_payload")"
+[ "$status" = 0x1 ] || fail "writePrices reverted for TSLA---24_7"
+read -r _ tsla_ms _ <<<"$(cast call --rpc-url "$rpc" "$band" "price(bytes32)(uint256,uint64,uint64)" "$tsla" | cut -d' ' -f1 | tr '\n' ' ')"
+[ $((tsla_ms - tsla_first_ms)) -lt 50000 ] || fail "the gateway gave no TSLA---24_7 package within 50 s"
+[ "$(sample_ms "$tsla")" = "$tsla_first_ms" ] || fail "a write within 50 s was sampled"
+no_sample_gas=$((gas - l1))
+
+first_ms=$package_ms first_px=$value attempts=0
+while :; do
+  attempts=$((attempts + 1))
+  [ "$attempts" -le 20 ] || fail "no NVDA---24_7 package 50 s newer than the first within 200 s"
+  sleep 10
+  next_payload=$(python3 "$payload" NVDA---24_7)
+  cast call --rpc-url "$rpc" "$band" "writePrices(bytes32[],bytes)" "[$nvda]" "$next_payload" > /dev/null 2>&1 || continue
+  read -r status gas l1 _ <<<"$(write "[$nvda]" "$next_payload")"
+  [ "$status" = 0x1 ] || fail "writePrices reverted for NVDA---24_7"
+  read -r px ms _ <<<"$(cast call --rpc-url "$rpc" "$band" "price(bytes32)(uint256,uint64,uint64)" "$nvda" | cut -d' ' -f1 | tr '\n' ' ')"
+  if [ $((ms - first_ms)) -lt 50000 ]; then
+    [ "$(sample_ms "$nvda")" = "$first_ms" ] || fail "a write within 50 s was sampled"
+    continue
+  fi
+  if [ "$px" -ge "$first_px" ]; then r=$(((px - first_px) * 1000000 / first_px)); else r=$((((first_px - px) * 1000000 + first_px - 1) / first_px)); fi
+  expected_var=$((6 * (r * r * 60 / ((ms - first_ms) / 1000)) / 100))
+  [ "$(cast call --rpc-url "$rpc" "$band" "variance(bytes32)(uint128)" "$nvda" | cut -d' ' -f1)" = "$expected_var" ] ||
+    fail "variance is not the EWMA of $first_px and $px over $((ms - first_ms)) ms"
+  [ "$(sample_ms "$nvda")" = "$ms" ] || fail "the sample did not move to the package at $ms ms"
+  echo "NVDA---24_7 sample after $((ms - first_ms)) ms: variance $expected_var, L2 gas $((gas - l1)); a write without a sample: $no_sample_gas"
+  break
+done
+
 read -r status gas l1 _ <<<"$(write "$status_feeds" "$(python3 "$payload" NY_MARKET_STATUS)")"
 [ "$status" = 0x1 ] || fail "writePrices reverted for NY_MARKET_STATUS"
 change_time=$(cast call --rpc-url "$rpc" "$band" "price(bytes32)(uint256,uint64,uint64)" "$(cast format-bytes32-string NY_MARKET_NEXT_CHANGE_TIME)" | head -n 1 | cut -d' ' -f1)
 [ "$(cast to-base "$change_time" 16 | wc -c)" -gt 19 ] || fail "NY_MARKET_NEXT_CHANGE_TIME $change_time fits in 64 bits"
+status_current=$(cast format-bytes32-string NY_MARKET_CURRENT_STATUS)
+[ "$(tracked "$status_current")" = 0 ] && [ "$(sample_ms "$status_current")" = 0 ] || fail "an untracked feed was sampled"
 echo "NY_MARKET_STATUS: 3 feeds, NEXT_CHANGE_TIME = $change_time, L2 gas $((gas - l1))"
 echo "PASS"
