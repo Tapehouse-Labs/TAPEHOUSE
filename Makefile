@@ -175,7 +175,7 @@ check-activation: check-stylus
 deploy-stylus: check-docker check-foundry
 	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
 		{ echo "Usage: make deploy-stylus CHAIN=<4663|46630|42161|412346> SIGNER='<signer flags>' [REGISTRY=<file>]"; exit 1; }
-	@args=$$(stylus/scripts/band-args.sh $(or $(REGISTRY),deployments/$(CHAIN).json)) && \
+	@set -f; args=$$(stylus/scripts/band-args.sh $(or $(REGISTRY),deployments/$(CHAIN).json)) && \
 		CARGO_STYLUS_VERSION=$(CARGO_STYLUS_VERSION) stylus/scripts/reproducible.sh deploy $(RPC_URL_$(CHAIN)) $(CONTRACT) \
 		$(SIGNER) -- $$args
 

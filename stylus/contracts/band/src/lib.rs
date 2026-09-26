@@ -56,6 +56,7 @@ pub struct Volatility {
     var_cpb2: StorageU128,
     sample_px: StorageU64,
     step_at: StorageU64,
+    last_step_at: StorageU64,
 }
 
 #[storage]
@@ -458,10 +459,21 @@ impl Band {
         asset.confirmed.set(change.confirmed);
         let feed_id = asset.redstone_feed_id.get();
         if feed_id != B256::ZERO {
-            self.volatility
-                .setter(feed_id)
-                .step_at
-                .set(U64::from(change.effective_at));
+            let sample_ms = self.prices.getter(feed_id).sample_ms.get().to::<u64>();
+            let mut volatility = self.volatility.setter(feed_id);
+            let pending = volatility.step_at.get().to::<u64>();
+            let last = volatility.last_step_at.get().to::<u64>();
+            let unsampled = pending.saturating_mul(1000) > sample_ms;
+            volatility.step_at.set(U64::from(if unsampled {
+                pending.min(change.effective_at)
+            } else {
+                change.effective_at
+            }));
+            volatility.last_step_at.set(U64::from(if unsampled {
+                last.max(change.effective_at)
+            } else {
+                change.effective_at
+            }));
         }
         self.vm().log(MultiplierRecorded {
             symbol,
@@ -610,6 +622,12 @@ impl Band {
             let mut volatility = self.volatility.setter(feed_id);
             volatility.var_cpb2.set(U128::from(next.var_cpb2));
             volatility.sample_px.set(U64::from(next.px));
+            if restart {
+                let last = volatility.last_step_at.get().to::<u64>();
+                if last.saturating_mul(1000) > package_timestamp_ms {
+                    volatility.step_at.set(U64::from(last));
+                }
+            }
             self.prices
                 .setter(feed_id)
                 .sample_ms
@@ -1587,6 +1605,39 @@ mod tests {
             Err(BandError::NoToken(NoToken {
                 symbol: symbol("NVDA")
             }))
+        );
+    }
+
+    #[test]
+    fn two_steps_recorded_before_a_sample_each_restart_it() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        let feed_id = symbol("NVDA---24_7");
+        band.prices.setter(feed_id).tracked.set(true);
+        band.assets
+            .setter(symbol("NVDA"))
+            .redstone_feed_id
+            .set(feed_id);
+        band.record_sample(feed_id, U256::from(22_000_000_000u64), 1_790_000_000_000);
+        band.record_sample(feed_id, U256::from(22_300_000_000u64), 1_790_000_060_000);
+        let variance = band.variance(feed_id);
+        let step = |effective_at| Change {
+            before: 0,
+            after: 1,
+            effective_at,
+            confirmed: false,
+        };
+        band.record_change(symbol("NVDA"), step(1_790_000_100));
+        band.record_change(symbol("NVDA"), step(1_790_000_600));
+        band.record_sample(feed_id, U256::from(5_575_000_000u64), 1_790_000_120_000);
+        assert_eq!(band.variance(feed_id), variance);
+        band.record_sample(feed_id, U256::from(5_575_000_000u64), 1_790_000_180_000);
+        let variance = band.variance(feed_id);
+        band.record_sample(feed_id, U256::from(11_150_000_000u64), 1_790_000_600_000);
+        assert_eq!(band.variance(feed_id), variance);
+        assert_eq!(
+            band.volatility.getter(feed_id).sample_px.get().to::<u64>(),
+            11_150_000_000
         );
     }
 
