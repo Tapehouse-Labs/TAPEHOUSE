@@ -61,10 +61,56 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       - run: make lint-contracts
 
+  stylus:
+    name: Stylus
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL }}
+      ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: stylus
+      - run: make check-stylus || cargo install --locked --force cargo-stylus@0.10.9
+      - run: make lint-stylus build-stylus test-stylus gas-stylus
+      - run: make check-activation
+
+  integration:
+    name: Integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        if: vars.DOCKERHUB_USERNAME != ''
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: v1.8.3
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: stylus
+      - run: make check-stylus || cargo install --locked --force cargo-stylus@0.10.9
+      - run: make devnode
+      - run: make deploy-stylus-devnode
+      - run: make test-stylus-devnode
+
   macos:
     name: Make 3.81 (macOS)
     runs-on: macos-26
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
     env:
@@ -82,10 +128,14 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
         with:
           version: v1.8.3
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: stylus
+      - run: /usr/bin/make check-stylus || cargo install --locked --force cargo-stylus@0.10.9
       - run: /usr/bin/make --version
       - run: /usr/bin/make build test
       - run: /usr/bin/make coverage gas
-      - run: /usr/bin/make -n lint snapshot devnode devnode-stop
+      - run: /usr/bin/make -n lint snapshot devnode devnode-stop deploy-stylus-devnode test-stylus-devnode check-activation
 
   workflows:
     name: Workflows

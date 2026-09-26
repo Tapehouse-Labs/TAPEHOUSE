@@ -7,9 +7,10 @@ import {AggregatorV3Interface, IUniswapV3Factory} from "./conformance/Interfaces
 
 contract RegistryForkTest is Test {
     uint256 internal constant ROBINHOOD_BLOCK = 69_922_505;
-    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 122_899_196;
+    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 124_666_543;
     uint256 internal constant ARBITRUM_BLOCK = 507_888_520;
     bytes32 internal constant BEACON_SLOT = 0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50;
+    bytes4 internal constant STYLUS_PROGRAM_PREFIX = 0xeff00000;
 
     function test_RobinhoodEntriesAreTheContractsTheyClaimToBe() public {
         string memory json = vm.readFile("../deployments/4663.json");
@@ -39,6 +40,7 @@ contract RegistryForkTest is Test {
         vm.createSelectFork("robinhood-testnet", ROBINHOOD_TESTNET_BLOCK);
         assertEq(block.chainid, 46630);
         _assertTokens(json);
+        assertEq(bytes4(vm.parseJsonAddress(json, ".tapehouse.Band").code), STYLUS_PROGRAM_PREFIX, "tapehouse.Band");
     }
 
     function test_ArbitrumEntriesAreTheContractsTheyClaimToBe() public {

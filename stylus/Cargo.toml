@@ -1,0 +1,10 @@
+[workspace]
+resolver = "3"
+members = ["contracts/*"]
+
+[profile.release]
+codegen-units = 1
+strip = true
+lto = true
+panic = "abort"
+opt-level = 3

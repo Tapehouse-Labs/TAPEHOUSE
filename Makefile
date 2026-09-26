@@ -3,11 +3,15 @@ FOUNDRY_VERSION := 1.8.3
 FOUNDRY_VERSION_RE := $(subst .,\.,$(FOUNDRY_VERSION))
 SLITHER_VERSION := 0.11.6
 SLITHER_VERSION_RE := $(subst .,\.,$(SLITHER_VERSION))
+CARGO_STYLUS_VERSION := 0.10.9
+CARGO_STYLUS_VERSION_RE := $(subst .,\.,$(CARGO_STYLUS_VERSION))
 NITRO_IMAGE := offchainlabs/nitro-node:v3.11.4-7d5ac27-slim-stripped
 DEVNODE_RPC_URL := http://127.0.0.1:8547
 DEVNODE_KEY := 0xb6b15c8cb491557369f3c7d2c287b053eb229daa9c22138887752191c9520659
 DEVNODE_ACCOUNT := 0x3f1Eae7D46d88F08fc2F8ed27FCb2AB183EB2d0E
 COVERAGE_MIN := 95
+STYLUS_MAX_COMPRESSED_BYTES := 24576
+STYLUS_SIZE_RUSTFLAGS := --remap-path-prefix=$(or $(CARGO_HOME),$(HOME)/.cargo)/registry/src=/cargo
 SNAPSHOT_FILTER := --no-match-test '^(testFuzz|invariant|statefulFuzz)'
 ifeq ($(strip $(ROBINHOOD_RPC_URL)),)
 ROBINHOOD_RPC_URL := https://robinhood.drpc.org
@@ -24,26 +28,27 @@ endif
 export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LOGS_RPC_URL
 
 .PHONY: all build test lint coverage gas snapshot \
-	check-toolchains check-node check-foundry check-slither check-docker submodules \
+	check-toolchains check-node check-foundry check-slither check-stylus check-docker submodules \
 	build-apps test-apps lint-apps \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
-	devnode devnode-stop
+	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation \
+	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode
 
 all: build
 
-build: build-contracts build-apps
+build: build-contracts build-stylus build-apps
 
-test: test-contracts test-apps
+test: test-contracts test-stylus test-apps
 
-lint: lint-contracts lint-apps
+lint: lint-contracts lint-stylus lint-apps
 
 coverage: coverage-contracts
 
-gas: gas-contracts
+gas: gas-contracts gas-stylus
 
-snapshot: snapshot-contracts
+snapshot: snapshot-contracts snapshot-stylus
 
-check-toolchains: check-node check-foundry check-slither
+check-toolchains: check-node check-foundry check-slither check-stylus
 
 check-node:
 	@node --version | grep -Eq '^v$(NODE_MAJOR)\.' || \
@@ -60,6 +65,13 @@ check-slither:
 	@slither --version 2>/dev/null | grep -Eq '^$(SLITHER_VERSION_RE)$$' || \
 		{ echo "Slither $(SLITHER_VERSION) is required, found: $$(slither --version 2>/dev/null || echo none)."; \
 		  echo "Run: pipx install --force slither-analyzer==$(SLITHER_VERSION)"; exit 1; }
+
+check-stylus:
+	@command -v rustup >/dev/null || \
+		{ echo "rustup is required. Install it from https://rustup.rs"; exit 1; }
+	@cargo stylus --version 2>/dev/null | grep -Eq '^stylus $(CARGO_STYLUS_VERSION_RE)$$' || \
+		{ echo "cargo-stylus $(CARGO_STYLUS_VERSION) is required, found: $$(cargo stylus --version 2>/dev/null || echo none)."; \
+		  echo "Run: cargo install --locked --force cargo-stylus@$(CARGO_STYLUS_VERSION)"; exit 1; }
 
 check-docker:
 	@docker info >/dev/null 2>&1 || \
@@ -116,6 +128,39 @@ gas-contracts: check-foundry submodules
 snapshot-contracts: check-foundry submodules
 	cd contracts && forge snapshot $(SNAPSHOT_FILTER)
 
+build-stylus: check-stylus
+	cd stylus && cargo build --locked --release --target wasm32-unknown-unknown --lib
+
+test-stylus: check-stylus
+	cd stylus && cargo test --locked
+
+lint-stylus: check-stylus
+	cd stylus && cargo fmt --check
+	cd stylus && cargo clippy --locked --all-targets -- -D warnings
+	cd stylus && cargo clippy --locked --release --target wasm32-unknown-unknown --lib -- -D warnings
+
+snapshot-stylus: check-stylus
+	cd stylus && RUSTFLAGS='$(STYLUS_SIZE_RUSTFLAGS)' cargo build --locked --release \
+		--target wasm32-unknown-unknown --lib --target-dir target/size
+	@for wasm in stylus/target/size/wasm32-unknown-unknown/release/*.wasm; do \
+		echo "$$(basename $$wasm .wasm) $$(wc -c < $$wasm | tr -d ' ')"; done > stylus/.wasm-size
+
+gas-stylus: snapshot-stylus
+	@for dir in stylus/contracts/*/; do \
+		(cd $$dir && cargo stylus get-initcode --output ../../target/initcode.hex >/dev/null) || exit 1; \
+		size=$$(($$(tr -d '\n' < stylus/target/initcode.hex | wc -c) / 2 - 43)); \
+		echo "$$(basename $$dir): $$size bytes compressed, limit $(STYLUS_MAX_COMPRESSED_BYTES)"; \
+		[ $$size -le $(STYLUS_MAX_COMPRESSED_BYTES) ] || exit 1; done
+	@test -z "$$(git ls-files --others --exclude-standard -- stylus/.wasm-size)" || \
+		{ echo "Untracked stylus/.wasm-size. Run: make snapshot-stylus, then git add it."; exit 1; }
+	@git diff --quiet -- stylus/.wasm-size || \
+		{ echo "WASM size changed and is not staged. Run: make snapshot-stylus, then git add it."; exit 1; }
+
+check-activation: check-stylus
+	@for rpc in $(ROBINHOOD_RPC_URL) $(ROBINHOOD_TESTNET_RPC_URL) $(ARBITRUM_RPC_URL); do \
+		for dir in stylus/contracts/*/; do \
+			(cd $$dir && cargo stylus check -e $$rpc) || exit 1; done; done
+
 devnode: check-docker check-foundry
 	@docker rm -f tapehouse-devnode >/dev/null 2>&1 || true
 	docker run -d --name tapehouse-devnode -p 127.0.0.1:8547:8547 $(NITRO_IMAGE) \
@@ -133,3 +178,15 @@ devnode: check-docker check-foundry
 
 devnode-stop:
 	docker rm -f tapehouse-devnode
+
+deploy-stylus-devnode: check-stylus check-foundry
+	@mkdir -p stylus/target
+	cd stylus/contracts/band && cargo stylus deploy --no-verify -e $(DEVNODE_RPC_URL) \
+		--private-key $(DEVNODE_KEY) > ../../target/devnode-band.log
+	@cast receipt --rpc-url $(DEVNODE_RPC_URL) \
+		$$(grep 'deployment tx hash' stylus/target/devnode-band.log | grep -o '0x[0-9a-f]\{64\}') \
+		contractAddress > stylus/target/devnode-band
+	@echo "band deployed on the dev node at $$(cat stylus/target/devnode-band)."
+
+test-stylus-devnode: check-foundry
+	stylus/scripts/devnode-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) $$(cat stylus/target/devnode-band)
