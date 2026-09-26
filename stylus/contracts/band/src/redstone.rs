@@ -70,9 +70,8 @@ pub fn verify(
         let points_count = read_size(payload, &mut end, DATA_POINTS_COUNT_BS)?;
         let value_size = read_size(payload, &mut end, DATA_POINT_VALUE_BYTE_SIZE_BS)?;
         let package_timestamp = read_uint(payload, &mut end, TIMESTAMP_BS)?;
-        let points_size = points_count
-            .checked_mul(32 + value_size)
-            .ok_or(overflow())?;
+        let point_size = value_size.checked_add(32).ok_or(overflow())?;
+        let points_size = points_count.checked_mul(point_size).ok_or(overflow())?;
         let points_start = end.checked_sub(points_size).ok_or(overflow())?;
 
         let signed_hash = keccak(&payload[points_start..signature_start]);
@@ -89,7 +88,7 @@ pub fn verify(
                     valueByteSize: U256::from(value_size),
                 }));
             }
-            let offset = points_start + point * (32 + value_size);
+            let offset = points_start + point * point_size;
             let feed_id = B256::from_slice(&payload[offset..offset + 32]);
             let Some(feed) = feed_ids.iter().position(|id| *id == feed_id) else {
                 continue;
@@ -146,7 +145,11 @@ fn trailer_start(payload: &[u8]) -> Result<usize, BandError> {
     }
     let mut end = payload.len() - REDSTONE_MARKER.len();
     let metadata_size = read_size(payload, &mut end, UNSIGNED_METADATA_BYTE_SIZE_BS)?;
-    end.checked_sub(metadata_size).ok_or(overflow())
+    end.checked_sub(metadata_size)
+        .filter(|start| *start >= DATA_PACKAGES_COUNT_BS)
+        .ok_or(BandError::IncorrectUnsignedMetadataSize(
+            IncorrectUnsignedMetadataSize {},
+        ))
 }
 
 fn read_uint(payload: &[u8], end: &mut usize, size: usize) -> Result<u64, BandError> {
@@ -504,6 +507,35 @@ mod tests {
         ]
         .concat();
         assert_eq!(verify_nvda(&truncated, TIMESTAMP_S), Err(overflow()));
+    }
+
+    #[test]
+    fn unsigned_metadata_larger_than_the_payload_is_rejected() {
+        let mut payload = nvda();
+        let metadata_size_at =
+            payload.len() - REDSTONE_MARKER.len() - UNSIGNED_METADATA_BYTE_SIZE_BS;
+        payload[metadata_size_at..metadata_size_at + UNSIGNED_METADATA_BYTE_SIZE_BS]
+            .copy_from_slice(&[0xff; UNSIGNED_METADATA_BYTE_SIZE_BS]);
+        assert_eq!(
+            verify_nvda(&payload, TIMESTAMP_S),
+            Err(BandError::IncorrectUnsignedMetadataSize(
+                IncorrectUnsignedMetadataSize {}
+            ))
+        );
+    }
+
+    #[test]
+    fn a_value_size_beyond_32_bits_overflows() {
+        let mut payload = nvda();
+        let value_size_end = payload.len()
+            - REDSTONE_MARKER.len()
+            - UNSIGNED_METADATA_BYTE_SIZE_BS
+            - DATA_PACKAGES_COUNT_BS
+            - SIGNATURE_BS
+            - DATA_POINTS_COUNT_BS;
+        payload[value_size_end - DATA_POINT_VALUE_BYTE_SIZE_BS..value_size_end]
+            .copy_from_slice(&0xffff_ffe0u32.to_be_bytes());
+        assert_eq!(verify_nvda(&payload, TIMESTAMP_S), Err(overflow()));
     }
 
     #[test]

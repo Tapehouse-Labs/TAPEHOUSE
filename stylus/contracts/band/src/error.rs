@@ -9,6 +9,8 @@ sol! {
     #[derive(Debug, PartialEq, Eq)]
     error CalldataOverOrUnderFlow();
     #[derive(Debug, PartialEq, Eq)]
+    error IncorrectUnsignedMetadataSize();
+    #[derive(Debug, PartialEq, Eq)]
     error InvalidSignature(bytes32 signedHash);
     #[derive(Debug, PartialEq, Eq)]
     error SignerNotAuthorised(address receivedSigner);
@@ -42,6 +44,7 @@ sol! {
 pub enum BandError {
     CalldataMustHaveValidPayload(CalldataMustHaveValidPayload),
     CalldataOverOrUnderFlow(CalldataOverOrUnderFlow),
+    IncorrectUnsignedMetadataSize(IncorrectUnsignedMetadataSize),
     InvalidSignature(InvalidSignature),
     SignerNotAuthorised(SignerNotAuthorised),
     TooLargeValueByteSize(TooLargeValueByteSize),

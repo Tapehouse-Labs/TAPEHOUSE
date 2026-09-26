@@ -82,8 +82,10 @@ read -r cl_price cl_updated_at price_247 price_247_ms <<<"$(legs "$symbol_tsla")
 [ "$(legs "$symbol_aapl")" = "0 0 0 0 " ] || fail "legs(AAPL) is not empty for an unknown symbol"
 echo "legs L2 gas: NVDA $(l2_gas "$(cast calldata "legs(bytes32)" "$symbol_nvda")"), unknown symbol $(l2_gas "$(cast calldata "legs(bytes32)" "$symbol_aapl")")"
 
-again=0x5585258d$(cast abi-encode "f(bytes32[],address[],bytes32[])" "[$symbol_aapl]" \
-  "[0x0000000000000000000000000000000000000000]" "[$(cast format-bytes32-string AAPL---24_7)]" | cut -c3-)
+symbol_spy=$(cast format-bytes32-string SPY)
+again=0x5585258d$(cast abi-encode "f(bytes32[],address[],bytes32[])" "[$symbol_aapl,$symbol_spy]" \
+  "[0x0000000000000000000000000000000000000000,0x0000000000000000000000000000000000000000]" \
+  "[$(cast format-bytes32-string AAPL---24_7),$(cast format-bytes32-string USA500.Y---24_7)]" | cut -c3-)
 (cd "$root/stylus/contracts/band" && cargo stylus get-initcode --output "$root/stylus/target/initcode.hex" > /dev/null 2>&1)
 plain=$(cast send --rpc-url "$rpc" --private-key "$key" --create "0x$(tr -d '\n' < "$root/stylus/target/initcode.hex")" --json |
   jq -r .contractAddress)
@@ -95,7 +97,13 @@ for program in "$plain" "$band"; do
   if out=$(cast call --rpc-url "$rpc" "$program" "$again" 2>&1); then
     fail "the constructor of $program ran a second time: $out"
   fi
+  grep -q 'data: "0x"$' <<<"$out" || fail "the second constructor call of $program reverted for another reason: $out"
 done
+jq -n '{chainId: 412346}' > "$registry.redstone"
+if out=$(BAND_ASSETS="AAPL SPY" "$(dirname "$0")/check-band.sh" "$rpc" "$plain" "$registry.redstone"); then
+  fail "check-band.sh accepted a band that configures an asset band-args.sh leaves out"
+fi
+grep -q 'FAIL: band configures SPY' <<<"$out" || fail "check-band.sh failed for another reason: $out"
 
 stub_18=$(forge create --root "$root/contracts" test/devnode/StubAggregator.sol:StubAggregator \
   --rpc-url "$rpc" --private-key "$key" --broadcast --json --constructor-args 18 1 1 "NVDA / USD" | jq -r .deployedTo)
@@ -114,6 +122,9 @@ cast rpc --rpc-url "$rpc" eth_getTransactionReceipt "$deploy_tx" | jq -r '"\(.ga
 flip=$((${#nvda_payload} - 186))
 tampered=${nvda_payload:0:flip}$(printf '%02x' $((0x${nvda_payload:flip:2} ^ 1)))${nvda_payload:flip+2}
 expect_revert "[$nvda]" "$tampered" 0xec459bc0
+value_size_at=$((${#nvda_payload} - 172))
+oversized=${nvda_payload:0:value_size_at}ffffffe0${nvda_payload:value_size_at+8}
+expect_revert "[$nvda]" "$oversized" 0x5796f78a
 
 read -r status gas l1 _ <<<"$(write "$status_feeds" "$(python3 "$payload" NY_MARKET_STATUS)")"
 [ "$status" = 0x1 ] || fail "writePrices reverted for NY_MARKET_STATUS"

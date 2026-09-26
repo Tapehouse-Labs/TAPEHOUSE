@@ -25,4 +25,9 @@ read -r symbols feeds feed_ids <<<"$args"
   --constructor-args "$symbols" "$feeds" "$feed_ids") > "$target/devnode-band.log"
 cast to-check-sum-address "$(grep 'deployed code at address' "$target/devnode-band.log" | grep -o '0x[0-9a-f]\{40\}')" \
   > "$target/devnode-band"
+tx=$(grep 'deployment tx hash' "$target/devnode-band.log" | grep -o '0x[0-9a-f]\{64\}')
+logged=$(cast receipt --rpc-url "$rpc" "$tx" --json | jq -r --arg topic "$(cast keccak 'ContractDeployed(address)')" \
+  '.logs[] | select(.address == "0xcecba2f1dc234f70dd89f2041029807f8d03a990" and .topics[0] == $topic) | .data')
+[ "$(cast to-check-sum-address "0x${logged: -40}")" = "$(cat "$target/devnode-band")" ] ||
+  { echo "StylusDeployer's ContractDeployed log names 0x${logged: -40}, not $(cat "$target/devnode-band")" >&2; exit 1; }
 echo "band deployed on the dev node at $(cat "$target/devnode-band")."

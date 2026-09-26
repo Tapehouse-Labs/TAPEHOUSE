@@ -9,6 +9,7 @@ Reads the keyless public gateways, or the main gateway when REDSTONE_API_KEY is 
 """
 
 import base64
+import http.client
 import json
 import os
 import sys
@@ -25,7 +26,7 @@ REDSTONE_MARKER = bytes.fromhex("000002ed57011e0000")
 DEFAULT_DECIMALS = 8
 
 
-def latest_packages() -> dict:
+def latest_packages(data_package_ids: list) -> dict:
     key = os.environ.get("REDSTONE_API_KEY")
     requests = (
         [urllib.request.Request(MAIN_GATEWAY + PATH, headers={"x-api-key": key})]
@@ -37,9 +38,14 @@ def latest_packages() -> dict:
     for request in requests:
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
-                return json.load(response, parse_float=Decimal)
-        except OSError as exc:
+                latest = json.load(response, parse_float=Decimal)
+        except (OSError, ValueError, http.client.HTTPException) as exc:
             error = exc
+            continue
+        missing = [i for i in data_package_ids if i not in latest]
+        if not missing:
+            return latest
+        error = f"{request.full_url} has no {', '.join(missing)}"
     raise SystemExit(f"No RedStone gateway answered: {error}")
 
 
@@ -72,7 +78,7 @@ def signed_package(package: dict) -> bytes:
 
 
 def payload(data_package_ids: list) -> bytes:
-    latest = latest_packages()
+    latest = latest_packages(data_package_ids)
     packages = [
         package for package_id in data_package_ids for package in latest[package_id]
     ]

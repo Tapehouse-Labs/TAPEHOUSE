@@ -92,6 +92,6 @@ The asset configuration is set once, in the constructor, and cannot change. Each
 stylus/scripts/check-band.sh <rpc> <band address> deployments/<chainId>.json
 ```
 
-`--constructor-args` must be the last flag. `band-args.sh` builds the arguments for the launch assets from the chain's registry file, and `check-band.sh` checks a deployed program against it. `make devnode` deploys StylusDeployer on the dev node at its canonical address, from `stylus/scripts/stylus-deployer.hex`: the salt and initcode of its deployment on Arbitrum One.
+`--constructor-args` must be the last flag. `band-args.sh` builds the arguments for the launch assets from the chain's registry file, and `check-band.sh` checks a deployed program against it: every configured asset, each feed's description, and that the launch assets it leaves out are unconfigured. A program deployed with `--no-verify` can never pass `cargo stylus verify`, so this route is for development only. `make devnode` deploys StylusDeployer on the dev node at its canonical address, from `stylus/scripts/stylus-deployer.hex`: the salt and initcode of its deployment on Arbitrum One.
 
 `stylus/scripts/redstone-payload.py` builds a payload from the latest packages, for example `python3 stylus/scripts/redstone-payload.py NVDA---24_7`. It reads the public gateways, or the main gateway when `REDSTONE_API_KEY` is set.

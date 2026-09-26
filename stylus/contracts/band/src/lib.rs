@@ -388,7 +388,7 @@ mod tests {
         let vm = TestVM::default();
         let band = Band::from(&vm);
         vm.mock_static_call(
-            FEED,
+            Address::ZERO,
             LATEST_ROUND_DATA_CALL.to_vec(),
             Ok(round(22_902_739_517, 1_790_089_676)),
         );
