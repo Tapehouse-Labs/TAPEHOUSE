@@ -38,7 +38,8 @@ if [ "$1" = initcode ]; then
     contract=$(basename "$dir")
     run sh -c "mkdir -p target && cargo stylus get-initcode --contract $contract --output target/$contract.initcode.hex"
     tr -d '\n' < "$source/target/$contract.initcode.hex" > "$stylus/target/reproducible/$contract.initcode.hex"
-    echo "$contract: $(cast keccak "0x$(cat "$stylus/target/reproducible/$contract.initcode.hex")")"
+    hash=$(cast keccak "0x$(cat "$stylus/target/reproducible/$contract.initcode.hex")")
+    echo "$contract: $hash"
   done
 else
   run cargo stylus verify --no-verify --contract "$4" -e "$2" --deployment-tx "$3" | tee "$source/verify.log"

@@ -15,7 +15,8 @@ probe=0x000000000000000000000000000000000000bEEF
 funded=0x000000000000000000000000000000000000cAFE
 runtime=0x${initcode:88}
 
-[ "$(cast keccak "$(cast code --rpc-url "$rpc" $stylus_deployer)")" = 0x85c3998f7541c47e69d221966c2725e197d243190f367eefab6eda7c90c3994a ] ||
+code=$(cast code --rpc-url "$rpc" $stylus_deployer) || { echo "Cannot read $stylus_deployer on $rpc" >&2; exit 1; }
+[ "$(cast keccak "$code")" = 0x85c3998f7541c47e69d221966c2725e197d243190f367eefab6eda7c90c3994a ] ||
   { echo "No canonical StylusDeployer at $stylus_deployer on $rpc" >&2; exit 1; }
 
 if cast call --rpc-url "$rpc" $arb_wasm "codehashVersion(bytes32)(uint16)" "$(cast keccak "$runtime")" > /dev/null 2>&1; then

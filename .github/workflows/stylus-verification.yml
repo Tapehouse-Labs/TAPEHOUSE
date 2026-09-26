@@ -80,6 +80,8 @@ jobs:
       - run: |
           [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "commit must be 40 hexadecimal characters"; exit 1; }
           [[ "$TX" =~ ^0x[0-9a-fA-F]{64}$ ]] || { echo "tx must be a 32-byte transaction hash"; exit 1; }
+          [[ "$CHAIN" =~ ^[0-9]+$ ]] || { echo "chain must be a chain ID"; exit 1; }
+          [[ "$CONTRACT" =~ ^[a-z0-9_-]+$ ]] || { echo "contract must be a program name under stylus/contracts"; exit 1; }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.commit }}

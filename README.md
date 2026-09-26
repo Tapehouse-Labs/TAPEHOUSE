@@ -116,7 +116,7 @@ It passes only when `cargo-stylus` prints `Verification successful`. Running `ca
 
 Verification covers the program's code. The configuration it was constructed with is checked by `stylus/scripts/check-band.sh`, which only reads the chain.
 
-Each deployment below verifies from the commit that added its row: `git log -1 --format=%H -S <address> -- README.md`.
+Each deployment below verifies from the commit that added its row: `git log --reverse --format=%H -S <address> -- README.md | head -n 1`.
 
 | Chain | Program | Address | Deployment |
 |---|---|---|---|
