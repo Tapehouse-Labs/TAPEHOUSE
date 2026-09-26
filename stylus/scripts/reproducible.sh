@@ -16,7 +16,19 @@ esac || { echo "Usage: reproducible.sh initcode | verify RPC_URL DEPLOYMENT_TX C
 stylus=$(cd "$(dirname "$0")/.." && pwd)
 version=${CARGO_STYLUS_VERSION:?Set CARGO_STYLUS_VERSION, as the Makefile does}
 toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' "$stylus/rust-toolchain.toml")
-image="cargo-stylus-base-$version-toolchain-$toolchain"
+binaryen=$(awk '/^\[/ { table = $0 } table == "[wasm-opt]" && $1 == "version" { gsub(/"/, "", $3); print $3 }' "$stylus/Stylus.toml")
+image="cargo-stylus-base-$version-toolchain-$toolchain${binaryen:+-binaryen-$binaryen}"
+layer=
+if [ -n "$binaryen" ]; then
+  tarball=binaryen-version_$binaryen-x86_64-linux.tar.gz
+  release=https://github.com/WebAssembly/binaryen/releases/download/version_$binaryen
+  sha=$(sed -n "s/^ *$binaryen-Linux-x86_64) platform=x86_64-linux sha=\([0-9a-f]*\) .*/\1/p" "$stylus/scripts/binaryen.sh")
+  [ -n "$sha" ] || { echo "No pinned SHA-256 for Binaryen $binaryen in binaryen.sh" >&2; exit 1; }
+  layer="RUN cd /tmp && curl -fsSL --proto '=https' --tlsv1.2 -O $release/$tarball \\
+  && curl -fsSL --proto '=https' --tlsv1.2 -O $release/$tarball.sha256 && sha256sum -c $tarball.sha256 \\
+  && echo \"$sha  $tarball\" | sha256sum -c && tar -xzf $tarball -C /opt && rm $tarball $tarball.sha256
+ENV PATH=\"/opt/binaryen-version_$binaryen/bin:\${PATH}\""
+fi
 
 docker image inspect "$image" > /dev/null 2>&1 || docker build --tag "$image" - <<DOCKERFILE
 ARG BUILD_PLATFORM=linux/amd64
@@ -25,6 +37,7 @@ RUN rustup toolchain install $toolchain-x86_64-unknown-linux-gnu
 RUN rustup default $toolchain-x86_64-unknown-linux-gnu
 RUN rustup target add wasm32-unknown-unknown
 RUN rustup component add rust-src --toolchain $toolchain-x86_64-unknown-linux-gnu
+$layer
 DOCKERFILE
 
 source=$(mktemp -d)

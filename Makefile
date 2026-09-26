@@ -5,6 +5,9 @@ SLITHER_VERSION := 0.11.6
 SLITHER_VERSION_RE := $(subst .,\.,$(SLITHER_VERSION))
 CARGO_STYLUS_VERSION := 0.10.9
 CARGO_STYLUS_VERSION_RE := $(subst .,\.,$(CARGO_STYLUS_VERSION))
+BINARYEN_VERSION := $(shell awk '/^\[/ { table = $$0 } table == "[wasm-opt]" && $$1 == "version" { gsub(/"/, "", $$3); print $$3 }' stylus/Stylus.toml)
+BINARYEN_HOME := $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/binaryen/version_$(BINARYEN_VERSION)
+export PATH := $(BINARYEN_HOME)/bin:$(PATH)
 NITRO_IMAGE := offchainlabs/nitro-node:v3.11.4-7d5ac27-slim-stripped
 DEVNODE_RPC_URL := http://127.0.0.1:8547
 DEVNODE_KEY := 0xb6b15c8cb491557369f3c7d2c287b053eb229daa9c22138887752191c9520659
@@ -77,6 +80,7 @@ check-stylus:
 	@cargo stylus --version 2>/dev/null | grep -Eq '^stylus $(CARGO_STYLUS_VERSION_RE)$$' || \
 		{ echo "cargo-stylus $(CARGO_STYLUS_VERSION) is required, found: $$(cargo stylus --version 2>/dev/null || echo none)."; \
 		  echo "Run: cargo install --locked --force cargo-stylus@$(CARGO_STYLUS_VERSION)"; exit 1; }
+	@stylus/scripts/binaryen.sh $(BINARYEN_VERSION) $(BINARYEN_HOME)
 
 check-docker:
 	@docker info >/dev/null 2>&1 || \

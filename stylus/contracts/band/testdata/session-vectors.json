@@ -1,0 +1,910 @@
+{
+ "sessions": [
+  {
+   "name": "Friday, regular hours",
+   "values": [
+    "100000000",
+    "102000000",
+    "178976160000000000000"
+   ],
+   "package_ms": [
+    "1789761589000",
+    "1789761589000",
+    "1789761589000"
+   ],
+   "close_ms": "0",
+   "now_ms": "1789761599000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "1",
+    "nyse_next": "3",
+    "change_ms": "1789761600000",
+    "boundary_ms": "1789776000000"
+   }
+  },
+  {
+   "name": "weekday, regular hours before a short close",
+   "values": [
+    "100000000",
+    "101000000",
+    "179010720000000000000"
+   ],
+   "package_ms": [
+    "1790089190000",
+    "1790089190000",
+    "1790089190000"
+   ],
+   "close_ms": "0",
+   "now_ms": "1790089200000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "1",
+    "nyse_next": "2",
+    "change_ms": "1790107200000",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "Friday, the close passed on the last regular package",
+   "values": [
+    "100000000",
+    "102000000",
+    "178976160000000000000"
+   ],
+   "package_ms": [
+    "1789761590000",
+    "1789761590000",
+    "1789761590000"
+   ],
+   "close_ms": "0",
+   "now_ms": "1789761600000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "3",
+    "nyse_next": "0",
+    "change_ms": "0",
+    "boundary_ms": "1789776000000"
+   }
+  },
+  {
+   "name": "Friday, post-market after the close",
+   "values": [
+    "102000000",
+    "100000000",
+    "178999740000000000000"
+   ],
+   "package_ms": [
+    "1789761600000",
+    "1789761600000",
+    "1789761600000"
+   ],
+   "close_ms": "1789761600000",
+   "now_ms": "1789761610000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "3",
+    "nyse_next": "1",
+    "change_ms": "1789997400000",
+    "boundary_ms": "1789776000000"
+   }
+  },
+  {
+   "name": "Friday, last second of post-market",
+   "values": [
+    "102000000",
+    "100000000",
+    "178999740000000000000"
+   ],
+   "package_ms": [
+    "1789775989000",
+    "1789775989000",
+    "1789775989000"
+   ],
+   "close_ms": "1789761600000",
+   "now_ms": "1789775999000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "3",
+    "nyse_next": "1",
+    "change_ms": "1789997400000",
+    "boundary_ms": "1789776000000"
+   }
+  },
+  {
+   "name": "Saturday, the 24/5 close",
+   "values": [
+    "102000000",
+    "100000000",
+    "178999740000000000000"
+   ],
+   "package_ms": [
+    "1789775990000",
+    "1789775990000",
+    "1789775990000"
+   ],
+   "close_ms": "1789761600000",
+   "now_ms": "1789776000000",
+   "expected": {
+    "known": true,
+    "open": false,
+    "nyse": "3",
+    "nyse_next": "1",
+    "change_ms": "1789997400000",
+    "boundary_ms": "1789948800000"
+   }
+  },
+  {
+   "name": "Sunday, a second before the reopen",
+   "values": [
+    "102000000",
+    "100000000",
+    "178999740000000000000"
+   ],
+   "package_ms": [
+    "1789948789000",
+    "1789948789000",
+    "1789948789000"
+   ],
+   "close_ms": "1789761600000",
+   "now_ms": "1789948799000",
+   "expected": {
+    "known": true,
+    "open": false,
+    "nyse": "3",
+    "nyse_next": "1",
+    "change_ms": "1789997400000",
+    "boundary_ms": "1789948800000"
+   }
+  },
+  {
+   "name": "Monday, the reopen",
+   "values": [
+    "102000000",
+    "100000000",
+    "178999740000000000000"
+   ],
+   "package_ms": [
+    "1789948790000",
+    "1789948790000",
+    "1789948790000"
+   ],
+   "close_ms": "1789761600000",
+   "now_ms": "1789948800000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "3",
+    "nyse_next": "1",
+    "change_ms": "1789997400000",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "Monday, the regular open passed",
+   "values": [
+    "102000000",
+    "100000000",
+    "178999740000000000000"
+   ],
+   "package_ms": [
+    "1789997390000",
+    "1789997390000",
+    "1789997390000"
+   ],
+   "close_ms": "1789761600000",
+   "now_ms": "1789997400000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "1",
+    "nyse_next": "0",
+    "change_ms": "0",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "Friday post-market without the Friday close",
+   "values": [
+    "102000000",
+    "100000000",
+    "178999740000000000000"
+   ],
+   "package_ms": [
+    "1789761600000",
+    "1789761600000",
+    "1789761600000"
+   ],
+   "close_ms": "1789675200000",
+   "now_ms": "1789761610000",
+   "expected": {
+    "known": true,
+    "open": false,
+    "nyse": "3",
+    "nyse_next": "1",
+    "change_ms": "1789997400000",
+    "boundary_ms": "1789948800000"
+   }
+  },
+  {
+   "name": "weekend on a band that never saw a close",
+   "values": [
+    "102000000",
+    "100000000",
+    "178999740000000000000"
+   ],
+   "package_ms": [
+    "1789819190000",
+    "1789819190000",
+    "1789819190000"
+   ],
+   "close_ms": "0",
+   "now_ms": "1789819200000",
+   "expected": {
+    "known": true,
+    "open": false,
+    "nyse": "3",
+    "nyse_next": "1",
+    "change_ms": "1789997400000",
+    "boundary_ms": "1789948800000"
+   }
+  },
+  {
+   "name": "Labor Day, a second before the reopen",
+   "values": [
+    "102000000",
+    "101000000",
+    "178884000000000000000"
+   ],
+   "package_ms": [
+    "1788825589000",
+    "1788825589000",
+    "1788825589000"
+   ],
+   "close_ms": "1788552000000",
+   "now_ms": "1788825599000",
+   "expected": {
+    "known": true,
+    "open": false,
+    "nyse": "3",
+    "nyse_next": "2",
+    "change_ms": "1788840000000",
+    "boundary_ms": "1788825600000"
+   }
+  },
+  {
+   "name": "Labor Day, the reopen",
+   "values": [
+    "102000000",
+    "101000000",
+    "178884000000000000000"
+   ],
+   "package_ms": [
+    "1788825590000",
+    "1788825590000",
+    "1788825590000"
+   ],
+   "close_ms": "1788552000000",
+   "now_ms": "1788825600000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "3",
+    "nyse_next": "2",
+    "change_ms": "1788840000000",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "Tuesday after Labor Day, the short close passed",
+   "values": [
+    "102000000",
+    "101000000",
+    "178884000000000000000"
+   ],
+   "package_ms": [
+    "1788839990000",
+    "1788839990000",
+    "1788839990000"
+   ],
+   "close_ms": "1788552000000",
+   "now_ms": "1788840000000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "2",
+    "nyse_next": "0",
+    "change_ms": "0",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "weekday overnight",
+   "values": [
+    "101000000",
+    "100000000",
+    "179017020000000000000"
+   ],
+   "package_ms": [
+    "1790132390000",
+    "1790132390000",
+    "1790132390000"
+   ],
+   "close_ms": "1790107200000",
+   "now_ms": "1790132400000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "2",
+    "nyse_next": "1",
+    "change_ms": "1790170200000",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "status an hour old",
+   "values": [
+    "101000000",
+    "100000000",
+    "179017020000000000000"
+   ],
+   "package_ms": [
+    "1790128800000",
+    "1790128800000",
+    "1790128800000"
+   ],
+   "close_ms": "1790107200000",
+   "now_ms": "1790132400000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "2",
+    "nyse_next": "1",
+    "change_ms": "1790170200000",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "status an hour and a second old",
+   "values": [
+    "101000000",
+    "100000000",
+    "179017020000000000000"
+   ],
+   "package_ms": [
+    "1790128799000",
+    "1790128799000",
+    "1790128799000"
+   ],
+   "close_ms": "1790107200000",
+   "now_ms": "1790132400000",
+   "expected": {
+    "known": false,
+    "open": false,
+    "nyse": "0",
+    "nyse_next": "0",
+    "change_ms": "0",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "status a minute ahead of the block",
+   "values": [
+    "101000000",
+    "100000000",
+    "179017020000000000000"
+   ],
+   "package_ms": [
+    "1790132460000",
+    "1790132460000",
+    "1790132460000"
+   ],
+   "close_ms": "1790107200000",
+   "now_ms": "1790132400000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "2",
+    "nyse_next": "1",
+    "change_ms": "1790170200000",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "points from different packages",
+   "values": [
+    "101000000",
+    "100000000",
+    "179017020000000000000"
+   ],
+   "package_ms": [
+    "1790132390000",
+    "1790132380000",
+    "1790132390000"
+   ],
+   "close_ms": "1790107200000",
+   "now_ms": "1790132400000",
+   "expected": {
+    "known": false,
+    "open": false,
+    "nyse": "0",
+    "nyse_next": "0",
+    "change_ms": "0",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "change time from another package",
+   "values": [
+    "101000000",
+    "100000000",
+    "179017020000000000000"
+   ],
+   "package_ms": [
+    "1790132390000",
+    "1790132390000",
+    "1790132380000"
+   ],
+   "close_ms": "1790107200000",
+   "now_ms": "1790132400000",
+   "expected": {
+    "known": false,
+    "open": false,
+    "nyse": "0",
+    "nyse_next": "0",
+    "change_ms": "0",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "unknown status value",
+   "values": [
+    "103000000",
+    "100000000",
+    "179017020000000000000"
+   ],
+   "package_ms": [
+    "1790132390000",
+    "1790132390000",
+    "1790132390000"
+   ],
+   "close_ms": "1790107200000",
+   "now_ms": "1790132400000",
+   "expected": {
+    "known": false,
+    "open": false,
+    "nyse": "0",
+    "nyse_next": "0",
+    "change_ms": "0",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "change time with a fraction of a millisecond",
+   "values": [
+    "101000000",
+    "100000000",
+    "179017020000000000001"
+   ],
+   "package_ms": [
+    "1790132390000",
+    "1790132390000",
+    "1790132390000"
+   ],
+   "close_ms": "1790107200000",
+   "now_ms": "1790132400000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "2",
+    "nyse_next": "1",
+    "change_ms": "1790170200000",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "change time zero",
+   "values": [
+    "101000000",
+    "100000000",
+    "0"
+   ],
+   "package_ms": [
+    "1790132390000",
+    "1790132390000",
+    "1790132390000"
+   ],
+   "close_ms": "1790107200000",
+   "now_ms": "1790132400000",
+   "expected": {
+    "known": false,
+    "open": false,
+    "nyse": "0",
+    "nyse_next": "0",
+    "change_ms": "0",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "change time beyond u64",
+   "values": [
+    "101000000",
+    "100000000",
+    "1844674407370955161600000000"
+   ],
+   "package_ms": [
+    "1790132390000",
+    "1790132390000",
+    "1790132390000"
+   ],
+   "close_ms": "1790107200000",
+   "now_ms": "1790132400000",
+   "expected": {
+    "known": false,
+    "open": false,
+    "nyse": "0",
+    "nyse_next": "0",
+    "change_ms": "0",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "long close followed by a long close",
+   "values": [
+    "102000000",
+    "102000000",
+    "178999740000000000000"
+   ],
+   "package_ms": [
+    "1789905590000",
+    "1789905590000",
+    "1789905590000"
+   ],
+   "close_ms": "1789761600000",
+   "now_ms": "1789905600000",
+   "expected": {
+    "known": true,
+    "open": false,
+    "nyse": "3",
+    "nyse_next": "3",
+    "change_ms": "1789997400000",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "synthetic: daylight saving ends, post-market",
+   "values": [
+    "102000000",
+    "100000000",
+    "179362980000000000000"
+   ],
+   "package_ms": [
+    "1793404789000",
+    "1793404789000",
+    "1793404789000"
+   ],
+   "close_ms": "1793390400000",
+   "now_ms": "1793404799000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "3",
+    "nyse_next": "1",
+    "change_ms": "1793629800000",
+    "boundary_ms": "1793404800000"
+   }
+  },
+  {
+   "name": "synthetic: daylight saving ends, a second before the reopen",
+   "values": [
+    "102000000",
+    "100000000",
+    "179362980000000000000"
+   ],
+   "package_ms": [
+    "1793581189000",
+    "1793581189000",
+    "1793581189000"
+   ],
+   "close_ms": "1793390400000",
+   "now_ms": "1793581199000",
+   "expected": {
+    "known": true,
+    "open": false,
+    "nyse": "3",
+    "nyse_next": "1",
+    "change_ms": "1793629800000",
+    "boundary_ms": "1793581200000"
+   }
+  },
+  {
+   "name": "synthetic: daylight saving ends, the reopen",
+   "values": [
+    "102000000",
+    "100000000",
+    "179362980000000000000"
+   ],
+   "package_ms": [
+    "1793581190000",
+    "1793581190000",
+    "1793581190000"
+   ],
+   "close_ms": "1793390400000",
+   "now_ms": "1793581200000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "3",
+    "nyse_next": "1",
+    "change_ms": "1793629800000",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "synthetic: daylight saving starts, post-market",
+   "values": [
+    "102000000",
+    "100000000",
+    "180511740000000000000"
+   ],
+   "package_ms": [
+    "1804899589000",
+    "1804899589000",
+    "1804899589000"
+   ],
+   "close_ms": "1804885200000",
+   "now_ms": "1804899599000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "3",
+    "nyse_next": "1",
+    "change_ms": "1805117400000",
+    "boundary_ms": "1804899600000"
+   }
+  },
+  {
+   "name": "synthetic: daylight saving starts, the 24/5 close",
+   "values": [
+    "102000000",
+    "100000000",
+    "180511740000000000000"
+   ],
+   "package_ms": [
+    "1804899590000",
+    "1804899590000",
+    "1804899590000"
+   ],
+   "close_ms": "1804885200000",
+   "now_ms": "1804899600000",
+   "expected": {
+    "known": true,
+    "open": false,
+    "nyse": "3",
+    "nyse_next": "1",
+    "change_ms": "1805117400000",
+    "boundary_ms": "1805068800000"
+   }
+  },
+  {
+   "name": "synthetic: daylight saving starts, the reopen",
+   "values": [
+    "102000000",
+    "100000000",
+    "180511740000000000000"
+   ],
+   "package_ms": [
+    "1805068790000",
+    "1805068790000",
+    "1805068790000"
+   ],
+   "close_ms": "1804885200000",
+   "now_ms": "1805068800000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "3",
+    "nyse_next": "1",
+    "change_ms": "1805117400000",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "synthetic: Thanksgiving, a second before the reopen",
+   "values": [
+    "102000000",
+    "101000000",
+    "179575560000000000000"
+   ],
+   "package_ms": [
+    "1795741189000",
+    "1795741189000",
+    "1795741189000"
+   ],
+   "close_ms": "1795640400000",
+   "now_ms": "1795741199000",
+   "expected": {
+    "known": true,
+    "open": false,
+    "nyse": "3",
+    "nyse_next": "2",
+    "change_ms": "1795755600000",
+    "boundary_ms": "1795741200000"
+   }
+  },
+  {
+   "name": "synthetic: Thanksgiving, the reopen",
+   "values": [
+    "102000000",
+    "101000000",
+    "179575560000000000000"
+   ],
+   "package_ms": [
+    "1795741190000",
+    "1795741190000",
+    "1795741190000"
+   ],
+   "close_ms": "1795640400000",
+   "now_ms": "1795741200000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "3",
+    "nyse_next": "2",
+    "change_ms": "1795755600000",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "synthetic: early close, end of the late session",
+   "values": [
+    "102000000",
+    "100000000",
+    "179604900000000000000"
+   ],
+   "package_ms": [
+    "1795816789000",
+    "1795816789000",
+    "1795816789000"
+   ],
+   "close_ms": "1795802400000",
+   "now_ms": "1795816799000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "3",
+    "nyse_next": "1",
+    "change_ms": "1796049000000",
+    "boundary_ms": "1795816800000"
+   }
+  },
+  {
+   "name": "synthetic: early close, after the late session",
+   "values": [
+    "102000000",
+    "100000000",
+    "179604900000000000000"
+   ],
+   "package_ms": [
+    "1795816790000",
+    "1795816790000",
+    "1795816790000"
+   ],
+   "close_ms": "1795802400000",
+   "now_ms": "1795816800000",
+   "expected": {
+    "known": true,
+    "open": false,
+    "nyse": "3",
+    "nyse_next": "1",
+    "change_ms": "1796049000000",
+    "boundary_ms": "1796000400000"
+   }
+  },
+  {
+   "name": "synthetic: evening before a holiday signed as a short close, post-market",
+   "values": [
+    "101000000",
+    "102000000",
+    "179566920000000000000"
+   ],
+   "package_ms": [
+    "1795654789000",
+    "1795654789000",
+    "1795654789000"
+   ],
+   "close_ms": "1795640400000",
+   "now_ms": "1795654799000",
+   "expected": {
+    "known": true,
+    "open": true,
+    "nyse": "2",
+    "nyse_next": "3",
+    "change_ms": "1795669200000",
+    "boundary_ms": "1795654800000"
+   }
+  },
+  {
+   "name": "synthetic: evening before a holiday signed as a short close, after post-market",
+   "values": [
+    "101000000",
+    "102000000",
+    "179566920000000000000"
+   ],
+   "package_ms": [
+    "1795654790000",
+    "1795654790000",
+    "1795654790000"
+   ],
+   "close_ms": "1795640400000",
+   "now_ms": "1795654800000",
+   "expected": {
+    "known": true,
+    "open": false,
+    "nyse": "2",
+    "nyse_next": "3",
+    "change_ms": "1795669200000",
+    "boundary_ms": "0"
+   }
+  },
+  {
+   "name": "synthetic: that short close passed into the holiday",
+   "values": [
+    "101000000",
+    "102000000",
+    "179566920000000000000"
+   ],
+   "package_ms": [
+    "1795669190000",
+    "1795669190000",
+    "1795669190000"
+   ],
+   "close_ms": "1795640400000",
+   "now_ms": "1795669200000",
+   "expected": {
+    "known": true,
+    "open": false,
+    "nyse": "3",
+    "nyse_next": "0",
+    "change_ms": "0",
+    "boundary_ms": "0"
+   }
+  }
+ ],
+ "closes": [
+  {
+   "name": "a regular package records its close",
+   "values": [
+    "100000000",
+    "102000000",
+    "178976160000000000000"
+   ],
+   "close_ms": "1789675200000",
+   "expected": "1789761600000"
+  },
+  {
+   "name": "a long close keeps the recorded close",
+   "values": [
+    "102000000",
+    "100000000",
+    "178999740000000000000"
+   ],
+   "close_ms": "1789761600000",
+   "expected": "1789761600000"
+  },
+  {
+   "name": "a short close keeps the recorded close",
+   "values": [
+    "101000000",
+    "100000000",
+    "179017020000000000000"
+   ],
+   "close_ms": "1790107200000",
+   "expected": "1790107200000"
+  }
+ ]
+}

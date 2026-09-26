@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Usage: devnode-deploy.sh RPC_URL PRIVATE_KEY
-# Deploys stub Chainlink aggregators for NVDA and TSLA, writes them to stylus/target/devnode-registry.json,
+# Deploys stub Chainlink aggregators for NVDA, TSLA and SPY, writes them to stylus/target/devnode-registry.json,
 # and deploys the band program configured from that file through StylusDeployer. Writes the program's
 # address to stylus/target/devnode-band.
 set -euo pipefail
@@ -17,12 +17,13 @@ stub() {
 
 now=$(cast block --rpc-url "$rpc" latest -f timestamp)
 jq -n --arg nvda "$(stub 22900000000 "NVDA / USD")" --arg tsla "$(stub 37800000000 "TSLA / USD")" \
-  '{chainId: 412346, chainlink: {NVDA_USD: $nvda, TSLA_USD: $tsla}}' > "$target/devnode-registry.json"
+  --arg spy "$(stub 77232802713 "SPY / USD")" \
+  '{chainId: 412346, chainlink: {NVDA_USD: $nvda, TSLA_USD: $tsla, SPY_USD: $spy}}' > "$target/devnode-registry.json"
 
-args=$(BAND_ASSETS="NVDA TSLA" "$root/stylus/scripts/band-args.sh" "$target/devnode-registry.json")
-read -r symbols feeds feed_ids <<<"$args"
+args=$(BAND_ASSETS="NVDA TSLA SPY" "$root/stylus/scripts/band-args.sh" "$target/devnode-registry.json")
+read -r symbols feeds feed_ids index_ids <<<"$args"
 (cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
-  --constructor-args "$symbols" "$feeds" "$feed_ids") > "$target/devnode-band.log"
+  --constructor-args "$symbols" "$feeds" "$feed_ids" "$index_ids") > "$target/devnode-band.log"
 cast to-check-sum-address "$(grep 'deployed code at address' "$target/devnode-band.log" | grep -o '0x[0-9a-f]\{40\}')" \
   > "$target/devnode-band"
 tx=$(grep 'deployment tx hash' "$target/devnode-band.log" | grep -o '0x[0-9a-f]\{64\}')

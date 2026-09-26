@@ -1,3 +1,7 @@
 [workspace]
 
 [workspace.networks]
+
+[wasm-opt]
+version = "133"
+flags = ["-O3", "--enable-bulk-memory-opt", "--enable-sign-ext", "--enable-mutable-globals", "--enable-nontrapping-float-to-int"]

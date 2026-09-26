@@ -28,17 +28,18 @@ pub const SAMPLE_MIN_GAP_MS: u64 = 50_000;
 
 const SQRT_LATENCY_X100: u128 = (LATENCY_MIN * 10_000).isqrt();
 
-/// What the band reports about its legs.
+/// What the band reports about its legs, from the most to the least restrictive.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum State {
-    /// Chainlink's session is open and both legs are live.
-    Open,
-    /// Chainlink's session is closed and the 24/7 leg is live.
-    Closed,
-    /// Fewer legs are live than the session expects.
-    Degraded,
     /// No leg is live.
-    Halted,
+    Halted = 0,
+    /// Fewer legs are live than the session expects, or the session is not known.
+    Degraded = 1,
+    /// Chainlink's session is closed and the 24/7 leg is live.
+    Closed = 2,
+    /// Chainlink's session is open and both legs are live.
+    Open = 3,
 }
 
 /// Both legs of one asset, the Chainlink session and the variance of the 24/7 leg.
@@ -56,6 +57,9 @@ pub struct Inputs {
     pub cl_session_open: bool,
     /// The variance of the 24/7 leg, below 2^120.
     pub var_cpb2: u128,
+    /// Extra half-width while the 24/7 leg is live, in basis points: non-zero when it is made from an
+    /// index.
+    pub basis_bps: u64,
 }
 
 /// The band: its state, how many legs are live, its centre, half-width and bounds.
@@ -106,7 +110,9 @@ pub fn compute(inputs: &Inputs) -> Quote {
     } else {
         half += SINGLE_SOURCE_BPS;
     }
-    if !live247 {
+    if live247 {
+        half += u128::from(inputs.basis_bps);
+    } else {
         half += u128::from(CL_DEV_BPS);
     }
     let half = half.min(MAX_HALF_BPS);
@@ -216,6 +222,7 @@ mod tests {
                 cl_age_s: int(&input["cl_age_s"]) as u64,
                 cl_session_open: input["cl_session_open"].as_bool().unwrap(),
                 var_cpb2: int(&input["var_cpb2"]),
+                basis_bps: input.get("basis_bps").map_or(0, |v| int(v) as u64),
             };
             let quote = Quote {
                 state: state(expected["state"].as_str().unwrap()),
@@ -329,15 +336,27 @@ mod tests {
             0..200_000u64,
             any::<bool>(),
             any::<u128>(),
+            0..2_000u64,
         )
             .prop_map(
-                |(live247_px, live247_age_s, cl_px, cl_age_s, cl_session_open, var_cpb2)| Inputs {
+                |(
                     live247_px,
                     live247_age_s,
                     cl_px,
                     cl_age_s,
                     cl_session_open,
                     var_cpb2,
+                    basis_bps,
+                )| {
+                    Inputs {
+                        live247_px,
+                        live247_age_s,
+                        cl_px,
+                        cl_age_s,
+                        cl_session_open,
+                        var_cpb2,
+                        basis_bps,
+                    }
                 },
             )
     }
@@ -377,6 +396,14 @@ mod tests {
             prop_assert_eq!(compute(&asleep), compute(&Inputs { cl_px: other_px, ..asleep }));
             let stale = Inputs { cl_age_s: CL_MAX_AGE_S + 1, ..inputs };
             prop_assert_eq!(compute(&stale), compute(&Inputs { cl_px: other_px, ..stale }));
+        }
+
+        #[test]
+        fn extra_width_only_widens(inputs in inputs()) {
+            let plain = compute(&Inputs { basis_bps: 0, ..inputs });
+            let quote = compute(&inputs);
+            prop_assert!(quote.half_bps >= plain.half_bps);
+            prop_assert_eq!((quote.state, quote.live, quote.mid), (plain.state, plain.live, plain.mid));
         }
 
         #[test]

@@ -21,6 +21,7 @@ Portfolio margin for Stock Tokens on Robinhood Chain.
 | Slither | 0.11.6 | `pipx install --force slither-analyzer==0.11.6` |
 | Rust | 1.91.0, from `stylus/rust-toolchain.toml` | [rustup](https://rustup.rs) installs it on first use |
 | cargo-stylus | 0.10.9 | `cargo install --locked --force cargo-stylus@0.10.9` |
+| Binaryen | 133, from `stylus/Stylus.toml` | `make` downloads it on first use into `$XDG_CACHE_HOME/binaryen` (default `~/.cache/binaryen`), checked against a pinned SHA-256 |
 | Docker | any recent | [docker.com](https://www.docker.com) — only for `make devnode` |
 | Python 3 and jq | any recent | preinstalled on macOS — only for the dev-node suite |
 | GNU Make | 3.81 or newer | preinstalled on macOS and most Linux distributions |
@@ -81,10 +82,13 @@ cast wallet import tapehouse-deployer --interactive
 
 `stylus/contracts/band` verifies signed RedStone data packages on-chain with the same rules as `PrimaryProdDataServiceConsumerBase` in `@redstone-finance/evm-connector` 1.0.0: five authorised signers, three unique signers per feed, the median of their values, and a package at most 180 s old and 60 s ahead. Verification errors keep the reference contract's names and selectors.
 
-- `writePrices(bytes32[] feedIds, bytes payload)` verifies the payload and stores each value. Anyone may call it; a package no newer than the stored one reverts with `PackageNotNewer`.
+- `writePrices(bytes32[] feedIds, bytes payload)` verifies the payload and stores each value. Anyone may call it; a package no newer than the stored one reverts with `PackageNotNewer`, and the three market-status feeds must be written together (`IncompleteStatus`).
 - `price(bytes32 feedId)` returns the value, its package timestamp in milliseconds and the block timestamp it was written at, and never reverts.
-- `asset(bytes32 symbol)` returns the asset's Chainlink feed and RedStone feed ID, both zero for an unknown symbol.
-- `legs(bytes32 symbol)` returns the Chainlink answer and its `updatedAt` in seconds, then the stored RedStone 24/7 value and its package timestamp in milliseconds. Zero for a leg that is unset or unreadable; it never reverts and never judges staleness.
+- `asset(bytes32 symbol)` returns the asset's Chainlink feed, RedStone feed ID and index feed ID, all zero for an unknown symbol.
+- `legs(bytes32 symbol)` returns the Chainlink answer and its `updatedAt` in seconds, then the 24/7 price and its package timestamp in milliseconds. Zero for a leg that is unset or unreadable; it never reverts and never judges staleness.
+- `quote(bytes32 symbol)` returns the band: its state (0 halted, 1 degraded, 2 closed, 3 open), how many legs are live, its centre, half-width in basis points, and lower and upper bounds.
+- `session()` returns Chainlink's 24/5 session (0 not known, 1 closed, 2 open), NYSE's state and its next state (0 not known, 1 regular hours, 2 short close, 3 weekend or holiday), when NYSE changes state, and the session's next boundary: when an open session closes or a closed one reopens. Times are in milliseconds, zero when not known.
+- `anchor(bytes32 symbol)` returns the Chainlink print, index price and print time that an asset priced from an index is anchored to. Each new anchor emits `Anchored`.
 - `variance(bytes32 feedId)` returns the EWMA variance of a configured asset's 24/7 feed, in centi-basis-points squared per minute.
   - λ = 0.94 per sample.
   - A feed's first written price is its first sample. After that, a sample is a written price at least 50 s of package time after the previous sample, and its return is normalised to one minute.
@@ -97,23 +101,42 @@ The band itself, in `stylus/contracts/band/src/quote.rs`, is integer arithmetic 
 |---|---|
 | Live legs | The 24/7 leg is live up to 120 s old. Chainlink is live while its session is open and it is at most 86,460 s old (the heartbeat plus 60 s). |
 | Centre | The live 24/7 leg, else Chainlink. Never an average with a sleeping leg. |
-| Half-width | At least 30 bps, and at least z = 3 volatility over a 3-minute latency. It adds the disagreement above Chainlink's 50 bps deviation when both legs are live, 25 bps with one leg, and 50 bps without the 24/7 leg. It is capped at 1,500 bps. |
-| State | Open or closed with Chainlink's session, degraded with fewer live legs than expected, halted with none. |
+| Half-width | At least 30 bps, and at least z = 3 volatility over a 3-minute latency. It adds the disagreement above Chainlink's 50 bps deviation when both legs are live, 25 bps with one leg, 50 bps without the 24/7 leg, and 25 bps while the 24/7 leg is made from an index. It is capped at 1,500 bps. |
+| State | Open or closed with Chainlink's session, degraded with fewer live legs than expected or while the session is not known, halted with none. |
 
-The asset configuration is set once, in the constructor, and cannot change. Each asset has a Chainlink feed, a RedStone feed ID or both. Every configured feed must report 8 decimals. The program is deployed through [StylusDeployer](https://github.com/OffchainLabs/nitro-contracts/blob/main/src/stylus/StylusDeployer.sol) at `0xcEcba2F1DC234f70Dd89F2041029807F8D03A990`, which deploys, activates and runs the constructor in one transaction, so nobody else can call the constructor first:
+### The session
+
+Chainlink's equity feeds on Robinhood Chain follow a 24/5 session, and the band uses the same session on every chain: from 20:00 ET on the evening before each trading day to 20:00 ET on it, closed over weekends and NYSE holidays. The band derives it from RedStone's signed New York market status (`NY_MARKET_CURRENT_STATUS`, `NY_MARKET_NEXT_STATUS` and `NY_MARKET_NEXT_CHANGE_TIME`, one package), never from a calendar in code:
+
+| NYSE, as signed | 24/5 session |
+|---|---|
+| Regular hours, or a short close between trading days | Open |
+| A weekend or holiday close | Open for 4 hours after the regular close (post-market), then closed until 20:00 ET before the next trading day: 13.5 hours before a regular open, or 4 hours before the midnight that ends a holiday |
+
+Each boundary is a fixed distance from a signed time, and none of those distances spans a daylight-saving change, so the rule needs no time zone. The three values must come from one package and be at most an hour old; otherwise the session is not known, Chainlink is treated as asleep, and every band that is not halted is degraded. The regular close is recorded when a status written during regular hours announces it, so a band deployed after a Friday close treats that Friday's post-market as closed.
+
+### SPY
+
+SPY has no RedStone 24/7 feed. Its 24/7 leg is its last Chainlink print moved by the S&P 500 index (`USA500.Y---24_7`) since that print: `print × index / index at the print`. The index price at the print is anchored when an index package signed within 120 s of a new Chainlink round is written, so the leg never assumes a fixed ratio between the fund and the index. The index's variance stands in for SPY's, and the leg carries 25 bps of extra half-width for the gap between the fund and its index. SPY has no 24/7 leg until its first anchor, and none where it has no Chainlink feed. A Chainlink round that repeats the anchored price, such as a heartbeat over a weekend, keeps the anchor.
+
+Two things follow from the anchor. While the session is open SPY's two legs are not independent: the index leg restarts from each new print, so it cross-checks the index's move since that print, not the print itself. And whoever writes the index chooses which package within 120 s of the print becomes the anchor, so the leg can carry up to 240 s of the index's move as a bias.
+
+The asset configuration is set once, in the constructor, and cannot change. Each asset has a Chainlink feed, a 24/7 leg, or both. The 24/7 leg is a RedStone feed ID or an index feed ID, never both; an index needs the Chainlink feed that anchors it and backs one asset. Every configured feed must report 8 decimals. The program is deployed through [StylusDeployer](https://github.com/OffchainLabs/nitro-contracts/blob/main/src/stylus/StylusDeployer.sol) at `0xcEcba2F1DC234f70Dd89F2041029807F8D03A990`, which deploys, activates and runs the constructor in one transaction, so nobody else can call the constructor first:
 
 ```bash
 make initcode-stylus
-args=$(stylus/scripts/band-args.sh deployments/<chainId>.json) && read -r symbols feeds feed_ids <<<"$args"
+args=$(stylus/scripts/band-args.sh deployments/<chainId>.json) && read -r symbols feeds feed_ids index_ids <<<"$args"
 stylus/scripts/deploy-initcode.sh <rpc> stylus/target/reproducible/band.initcode.hex \
-  "0x5585258d$(cast abi-encode 'f(bytes32[],address[],bytes32[])' "$symbols" "$feeds" "$feed_ids" | cut -c3-)" <signer flags>
+  "0x5585258d$(cast abi-encode 'f(bytes32[],address[],bytes32[],bytes32[])' "$symbols" "$feeds" "$feed_ids" "$index_ids" | cut -c3-)" <signer flags>
 stylus/scripts/check-band.sh <rpc> <band address> deployments/<chainId>.json
 make verify-stylus CHAIN=<chainId> TX=<deployment tx>
 ```
 
 `0x5585258d` is the selector of every Stylus constructor. For development, `cargo stylus deploy --no-verify … --constructor-args …` deploys the same way in one command, but a program built that way can never be verified; `--constructor-args` must then be the last flag. `band-args.sh` builds the arguments for the launch assets from the chain's registry file, and `check-band.sh` checks a deployed program against it: every configured asset, each feed's description, and that the launch assets it leaves out are unconfigured. `make devnode` deploys StylusDeployer on the dev node at its canonical address, from `stylus/scripts/stylus-deployer.hex`: the salt and initcode of its deployment on Arbitrum One.
 
-`stylus/scripts/redstone-payload.py` builds a payload from the latest packages, for example `python3 stylus/scripts/redstone-payload.py NVDA---24_7`. It reads the public gateways, or the main gateway when `REDSTONE_API_KEY` is set.
+Every program is optimised after the build by Binaryen's `wasm-opt`, with the version and flags pinned in the `[wasm-opt]` table of `stylus/Stylus.toml`. cargo-stylus folds that recipe into the program's project hash and applies it in reproducible builds, so verification rebuilds the same bytes. `make` puts that `wasm-opt` first on `PATH`; to run `cargo stylus` directly, add `${XDG_CACHE_HOME:-~/.cache}/binaryen/version_133/bin` to `PATH` yourself.
+
+`stylus/scripts/redstone-payload.py` builds a payload from the latest packages, for example `python3 stylus/scripts/redstone-payload.py NVDA---24_7`. Several packages that share a timestamp go in one payload: `python3 stylus/scripts/redstone-payload.py NVDA---24_7 USA500.Y---24_7 NY_MARKET_STATUS`. It reads the public gateways, or the main gateway when `REDSTONE_API_KEY` is set.
 
 ## Verification
 
@@ -135,3 +158,4 @@ Each deployment below verifies from the commit that added its row: `git log --re
 | Chain | Program | Address | Deployment |
 |---|---|---|---|
 | 46630 | band | `0x8571fc20dD9323AF25E0D5c3F4795D8954f95498` | `0x559061ce397294f3e829ba15551fdada499b4f666d503f7f245b527a3102de08` |
+| 46630 | band | `0xB8Ed13E7A695e53376C6f31E93AF44EA44386e8E` | `0x17973e0b59a1ed3069d59294842ad4e08b8551c5b627c978d7589c968b397ad8` |

@@ -493,6 +493,106 @@
     "low": "18391403841488422960",
     "high": "18502084305930680269"
    }
+  },
+  {
+   "name": "SPY: Friday 25 Sep, post-market, index leg and Chainlink live",
+   "input": {
+    "live247_px": "77219960222",
+    "live247_age_s": "13",
+    "cl_px": "77232802713",
+    "cl_age_s": "17853",
+    "cl_session_open": true,
+    "var_cpb2": "19221",
+    "basis_bps": "25"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "77219960222",
+    "half_bps": "55",
+    "low": "76795250440",
+    "high": "77644670003"
+   }
+  },
+  {
+   "name": "SPY: weekend, index leg alone",
+   "input": {
+    "live247_px": "77219960222",
+    "live247_age_s": "13",
+    "cl_px": "77232802713",
+    "cl_age_s": "100000",
+    "cl_session_open": false,
+    "var_cpb2": "19221",
+    "basis_bps": "25"
+   },
+   "expected": {
+    "state": "CLOSED",
+    "live": "1",
+    "mid": "77219960222",
+    "half_bps": "80",
+    "low": "76602200540",
+    "high": "77837719903"
+   }
+  },
+  {
+   "name": "SPY: index leg past the age limit, session open",
+   "input": {
+    "live247_px": "77219960222",
+    "live247_age_s": "121",
+    "cl_px": "77232802713",
+    "cl_age_s": "17853",
+    "cl_session_open": true,
+    "var_cpb2": "19221",
+    "basis_bps": "25"
+   },
+   "expected": {
+    "state": "DEGRADED",
+    "live": "1",
+    "mid": "77232802713",
+    "half_bps": "105",
+    "low": "76421858284",
+    "high": "78043747141"
+   }
+  },
+  {
+   "name": "SPY: index leg without its extra width",
+   "input": {
+    "live247_px": "77219960222",
+    "live247_age_s": "13",
+    "cl_px": "77232802713",
+    "cl_age_s": "17853",
+    "cl_session_open": true,
+    "var_cpb2": "19221",
+    "basis_bps": "0"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "77219960222",
+    "half_bps": "30",
+    "low": "76988300341",
+    "high": "77451620102"
+   }
+  },
+  {
+   "name": "SPY: extra width at the half-width cap",
+   "input": {
+    "live247_px": "77219960222",
+    "live247_age_s": "13",
+    "cl_px": "77232802713",
+    "cl_age_s": "17853",
+    "cl_session_open": true,
+    "var_cpb2": "835325604",
+    "basis_bps": "25"
+   },
+   "expected": {
+    "state": "OPEN",
+    "live": "2",
+    "mid": "77219960222",
+    "half_bps": "1500",
+    "low": "65636966188",
+    "high": "88802954255"
+   }
   }
  ],
  "ewma": [
@@ -583,6 +683,239 @@
    "px": "18446744073709551615",
    "dt_s": "1",
    "expected": "1324243390800722438380417783804293282"
+  }
+ ],
+ "index_legs": [
+  {
+   "name": "SPY: Friday 25 Sep, post-market",
+   "anchor_cl_px": "77232802713",
+   "anchor_index_px": "774263746783",
+   "index_px": "774135000000",
+   "expected": "77219960222"
+  },
+  {
+   "name": "index unchanged gives the print",
+   "anchor_cl_px": "77232802713",
+   "anchor_index_px": "774263746783",
+   "index_px": "774263746783",
+   "expected": "77232802713"
+  },
+  {
+   "name": "rounds down",
+   "anchor_cl_px": "3",
+   "anchor_index_px": "2",
+   "index_px": "1",
+   "expected": "1"
+  },
+  {
+   "name": "no anchor",
+   "anchor_cl_px": "0",
+   "anchor_index_px": "0",
+   "index_px": "774135000000",
+   "expected": "0"
+  },
+  {
+   "name": "beyond u64 is absent",
+   "anchor_cl_px": "18446744073709551615",
+   "anchor_index_px": "1",
+   "index_px": "2",
+   "expected": "0"
+  },
+  {
+   "name": "index at zero",
+   "anchor_cl_px": "77232802713",
+   "anchor_index_px": "774263746783",
+   "index_px": "0",
+   "expected": "0"
+  }
+ ],
+ "anchors": [
+  {
+   "name": "first anchor, from the Friday print",
+   "anchor": {
+    "cl_px": "0",
+    "index_px": "0",
+    "at_s": "0"
+   },
+   "cl_px": "77232802713",
+   "cl_at_s": "1790352180",
+   "index_px": "774263746783",
+   "index_ms": "1790352200000",
+   "expected": {
+    "cl_px": "77232802713",
+    "index_px": "774263746783",
+    "at_s": "1790352180"
+   }
+  },
+  {
+   "name": "the same print keeps the anchor",
+   "anchor": {
+    "cl_px": "77232802713",
+    "index_px": "774263746783",
+    "at_s": "1790352180"
+   },
+   "cl_px": "77232802713",
+   "cl_at_s": "1790352180",
+   "index_px": "774263746784",
+   "index_ms": "1790352260000",
+   "expected": {
+    "cl_px": "77232802713",
+    "index_px": "774263746783",
+    "at_s": "1790352180"
+   }
+  },
+  {
+   "name": "a package 120 s after the print",
+   "anchor": {
+    "cl_px": "0",
+    "index_px": "0",
+    "at_s": "0"
+   },
+   "cl_px": "77232802713",
+   "cl_at_s": "1790352180",
+   "index_px": "774263746783",
+   "index_ms": "1790352300000",
+   "expected": {
+    "cl_px": "77232802713",
+    "index_px": "774263746783",
+    "at_s": "1790352180"
+   }
+  },
+  {
+   "name": "a package 120.001 s after the print",
+   "anchor": {
+    "cl_px": "0",
+    "index_px": "0",
+    "at_s": "0"
+   },
+   "cl_px": "77232802713",
+   "cl_at_s": "1790352180",
+   "index_px": "774263746783",
+   "index_ms": "1790352300001",
+   "expected": {
+    "cl_px": "0",
+    "index_px": "0",
+    "at_s": "0"
+   }
+  },
+  {
+   "name": "a package 10 s before the print",
+   "anchor": {
+    "cl_px": "0",
+    "index_px": "0",
+    "at_s": "0"
+   },
+   "cl_px": "77232802713",
+   "cl_at_s": "1790352180",
+   "index_px": "774263746783",
+   "index_ms": "1790352170000",
+   "expected": {
+    "cl_px": "77232802713",
+    "index_px": "774263746783",
+    "at_s": "1790352180"
+   }
+  },
+  {
+   "name": "a package 120.001 s before the print",
+   "anchor": {
+    "cl_px": "0",
+    "index_px": "0",
+    "at_s": "0"
+   },
+   "cl_px": "77232802713",
+   "cl_at_s": "1790352180",
+   "index_px": "774263746783",
+   "index_ms": "1790352059999",
+   "expected": {
+    "cl_px": "0",
+    "index_px": "0",
+    "at_s": "0"
+   }
+  },
+  {
+   "name": "an older print keeps the anchor",
+   "anchor": {
+    "cl_px": "77232802713",
+    "index_px": "774263746783",
+    "at_s": "1790352180"
+   },
+   "cl_px": "76843289680",
+   "cl_at_s": "1790309069",
+   "index_px": "774263746783",
+   "index_ms": "1790309069000",
+   "expected": {
+    "cl_px": "77232802713",
+    "index_px": "774263746783",
+    "at_s": "1790352180"
+   }
+  },
+  {
+   "name": "a zero print keeps the anchor",
+   "anchor": {
+    "cl_px": "77232802713",
+    "index_px": "774263746783",
+    "at_s": "1790352180"
+   },
+   "cl_px": "0",
+   "cl_at_s": "1790352240",
+   "index_px": "774263746783",
+   "index_ms": "1790352240000",
+   "expected": {
+    "cl_px": "77232802713",
+    "index_px": "774263746783",
+    "at_s": "1790352180"
+   }
+  },
+  {
+   "name": "a zero index keeps the anchor",
+   "anchor": {
+    "cl_px": "77232802713",
+    "index_px": "774263746783",
+    "at_s": "1790352180"
+   },
+   "cl_px": "77232802714",
+   "cl_at_s": "1790352240",
+   "index_px": "0",
+   "index_ms": "1790352240000",
+   "expected": {
+    "cl_px": "77232802713",
+    "index_px": "774263746783",
+    "at_s": "1790352180"
+   }
+  },
+  {
+   "name": "another price at the anchored time keeps the anchor",
+   "anchor": {
+    "cl_px": "77232802713",
+    "index_px": "774263746783",
+    "at_s": "1790352180"
+   },
+   "cl_px": "77232802714",
+   "cl_at_s": "1790352180",
+   "index_px": "774263746783",
+   "index_ms": "1790352180000",
+   "expected": {
+    "cl_px": "77232802713",
+    "index_px": "774263746783",
+    "at_s": "1790352180"
+   }
+  },
+  {
+   "name": "a heartbeat repeating the print keeps the anchor",
+   "anchor": {
+    "cl_px": "77232802713",
+    "index_px": "774263746783",
+    "at_s": "1790352180"
+   },
+   "cl_px": "77232802713",
+   "cl_at_s": "1790438580",
+   "index_px": "775263746783",
+   "index_ms": "1790438580000",
+   "expected": {
+    "cl_px": "77232802713",
+    "index_px": "774263746783",
+    "at_s": "1790352180"
+   }
   }
  ]
 }

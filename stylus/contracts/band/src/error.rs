@@ -38,6 +38,14 @@ sol! {
     error DuplicateAsset(bytes32 symbol);
     #[derive(Debug, PartialEq, Eq)]
     error InvalidFeed(address feed);
+    #[derive(Debug, PartialEq, Eq)]
+    error AmbiguousLeg(bytes32 symbol);
+    #[derive(Debug, PartialEq, Eq)]
+    error IndexWithoutChainlink(bytes32 symbol);
+    #[derive(Debug, PartialEq, Eq)]
+    error IndexInUse(bytes32 feedId);
+    #[derive(Debug, PartialEq, Eq)]
+    error IncompleteStatus();
 }
 
 #[derive(SolidityError, Debug, PartialEq, Eq)]
@@ -59,4 +67,8 @@ pub enum BandError {
     NoLegs(NoLegs),
     DuplicateAsset(DuplicateAsset),
     InvalidFeed(InvalidFeed),
+    AmbiguousLeg(AmbiguousLeg),
+    IndexWithoutChainlink(IndexWithoutChainlink),
+    IndexInUse(IndexInUse),
+    IncompleteStatus(IncompleteStatus),
 }
