@@ -19,7 +19,8 @@ now=$(cast block --rpc-url "$rpc" latest -f timestamp)
 jq -n --arg nvda "$(stub 22900000000 "NVDA / USD")" --arg tsla "$(stub 37800000000 "TSLA / USD")" \
   '{chainId: 412346, chainlink: {NVDA_USD: $nvda, TSLA_USD: $tsla}}' > "$target/devnode-registry.json"
 
-read -r symbols feeds feed_ids <<<"$(BAND_ASSETS="NVDA TSLA" "$root/stylus/scripts/band-args.sh" "$target/devnode-registry.json")"
+args=$(BAND_ASSETS="NVDA TSLA" "$root/stylus/scripts/band-args.sh" "$target/devnode-registry.json")
+read -r symbols feeds feed_ids <<<"$args"
 (cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
   --constructor-args "$symbols" "$feeds" "$feed_ids") > "$target/devnode-band.log"
 cast to-check-sum-address "$(grep 'deployed code at address' "$target/devnode-band.log" | grep -o '0x[0-9a-f]\{40\}')" \

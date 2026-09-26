@@ -5,7 +5,8 @@
 set -euo pipefail
 
 rpc=$1 band=$2 registry=$3
-read -r symbols feeds feed_ids <<<"$("$(dirname "$0")/band-args.sh" "$registry")"
+args=$("$(dirname "$0")/band-args.sh" "$registry")
+read -r symbols feeds feed_ids <<<"$args"
 IFS=, read -r -a symbols <<<"${symbols//[\[\]]/}"
 IFS=, read -r -a feeds <<<"${feeds//[\[\]]/}"
 IFS=, read -r -a feed_ids <<<"${feed_ids//[\[\]]/}"

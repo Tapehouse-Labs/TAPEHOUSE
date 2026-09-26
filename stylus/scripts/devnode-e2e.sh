@@ -61,7 +61,12 @@ if out=$(BAND_ASSETS="NVDA TSLA" "$(dirname "$0")/check-band.sh" "$rpc" "$band" 
   fail "check-band.sh accepted a band that differs from the registry"
 fi
 grep -q 'FAIL: band holds' <<<"$out" || fail "check-band.sh failed for another reason: $out"
-read -r symbols feeds feed_ids <<<"$(BAND_ASSETS="NVDA TSLA" "$(dirname "$0")/band-args.sh" "$registry.swapped")"
+jq 'del(.chainlink.TSLA_USD)' "$registry" > "$registry.missing"
+if out=$(BAND_ASSETS="NVDA TSLA" "$(dirname "$0")/check-band.sh" "$rpc" "$band" "$registry.missing" 2>&1); then
+  fail "check-band.sh accepted a registry that band-args.sh rejects: $out"
+fi
+args=$(BAND_ASSETS="NVDA TSLA" "$(dirname "$0")/band-args.sh" "$registry.swapped")
+read -r symbols feeds feed_ids <<<"$args"
 swapped=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
   --constructor-args "$symbols" "$feeds" "$feed_ids" 2>&1 | grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
 if out=$(BAND_ASSETS="NVDA TSLA" "$(dirname "$0")/check-band.sh" "$rpc" "$swapped" "$registry.swapped"); then
