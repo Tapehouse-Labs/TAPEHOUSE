@@ -7,9 +7,11 @@ extern crate alloc;
 pub mod chainlink;
 pub mod error;
 pub mod index;
+pub mod multiplier;
 pub mod quote;
 pub mod redstone;
 pub mod session;
+pub mod token;
 
 use alloc::vec::Vec;
 
@@ -24,9 +26,10 @@ use stylus_sdk::storage::{
 
 use crate::error::{
     AmbiguousLeg, BandError, DuplicateAsset, IncompleteStatus, IndexInUse, IndexWithoutChainlink,
-    InvalidFeed, LengthMismatch, NoLegs, PackageNotNewer, ZeroSymbol,
+    InvalidFeed, InvalidToken, LengthMismatch, NoLegs, NoToken, PackageNotNewer, ZeroSymbol,
 };
 use crate::index::Anchor;
+use crate::multiplier::{Change, Status as CorporateAction};
 use crate::session::{Session, Status};
 
 const ECRECOVER: Address = address!("0x0000000000000000000000000000000000000001");
@@ -34,6 +37,8 @@ const ECRECOVER: Address = address!("0x0000000000000000000000000000000000000001"
 sol! {
     event PriceWritten(bytes32 indexed feedId, uint256 value, uint64 packageTimestampMs);
     event Anchored(bytes32 indexed symbol, uint64 chainlinkPrice, uint64 indexPrice, uint64 updatedAt);
+    event MultiplierRecorded(bytes32 indexed symbol, uint128 before, uint128 after, uint64 effectiveAt);
+    event MultiplierConfirmed(bytes32 indexed symbol, uint64 effectiveAt);
 }
 
 #[storage]
@@ -50,6 +55,7 @@ pub struct Price {
 pub struct Volatility {
     var_cpb2: StorageU128,
     sample_px: StorageU64,
+    step_at: StorageU64,
 }
 
 #[storage]
@@ -60,6 +66,12 @@ pub struct Asset {
     anchor_cl_px: StorageU64,
     anchor_index_px: StorageU64,
     anchor_at: StorageU64,
+    anchor_started_at: StorageU64,
+    token: StorageAddress,
+    effective_at: StorageU64,
+    confirmed: StorageBool,
+    multiplier_before: StorageU128,
+    multiplier_after: StorageU128,
 }
 
 #[storage]
@@ -76,7 +88,8 @@ pub struct Band {
 impl Band {
     /// Sets the per-asset configuration once. A zero feed or feed ID means the asset has no such leg.
     /// An asset takes its 24/7 leg from its own RedStone feed or from an index feed, never both; an
-    /// index leg needs a Chainlink feed to anchor it, and backs one asset.
+    /// index leg needs a Chainlink feed to anchor it, and backs one asset. A Stock Token turns the
+    /// RedStone share price into the token's price through its ERC-8056 multiplier.
     #[constructor]
     pub fn constructor(
         &mut self,
@@ -84,16 +97,22 @@ impl Band {
         chainlink_feeds: Vec<Address>,
         redstone_feed_ids: Vec<B256>,
         index_feed_ids: Vec<B256>,
+        tokens: Vec<Address>,
     ) -> Result<(), BandError> {
         let n = symbols.len();
-        if chainlink_feeds.len() != n || redstone_feed_ids.len() != n || index_feed_ids.len() != n {
+        if chainlink_feeds.len() != n
+            || redstone_feed_ids.len() != n
+            || index_feed_ids.len() != n
+            || tokens.len() != n
+        {
             return Err(BandError::LengthMismatch(LengthMismatch {}));
         }
-        for (((symbol, feed), feed_id), index_id) in symbols
+        for ((((symbol, feed), feed_id), index_id), token) in symbols
             .into_iter()
             .zip(chainlink_feeds)
             .zip(redstone_feed_ids)
             .zip(index_feed_ids)
+            .zip(tokens)
         {
             if symbol == B256::ZERO {
                 return Err(BandError::ZeroSymbol(ZeroSymbol {}));
@@ -109,13 +128,14 @@ impl Band {
                     symbol,
                 }));
             }
-            if self.asset(symbol) != (Address::ZERO, B256::ZERO, B256::ZERO) {
+            if self.asset(symbol) != (Address::ZERO, B256::ZERO, B256::ZERO, Address::ZERO) {
                 return Err(BandError::DuplicateAsset(DuplicateAsset { symbol }));
             }
             if feed != Address::ZERO && !chainlink::has_expected_decimals(self.vm(), feed) {
                 return Err(BandError::InvalidFeed(InvalidFeed { feed }));
             }
             let mut asset = self.assets.setter(symbol);
+            asset.token.set(token);
             asset.chainlink_feed.set(feed);
             asset.redstone_feed_id.set(feed_id);
             asset.index_feed_id.set(index_id);
@@ -131,19 +151,83 @@ impl Band {
                 price.tracked.set(true);
                 price.index.set(true);
             }
+            if token != Address::ZERO {
+                let (current, new, effective_at) = self
+                    .token_terms(token, Change::default())
+                    .filter(|(current, _, _)| *current != 0)
+                    .ok_or(BandError::InvalidToken(InvalidToken { token }))?;
+                let now = self.vm().block_timestamp();
+                if let Some(change) =
+                    multiplier::record(Change::default(), current, new, effective_at, now)
+                {
+                    self.record_change(symbol, change);
+                }
+            }
         }
         Ok(())
     }
 
-    /// The Chainlink feed, RedStone feed ID and index feed ID of `symbol`. All zero for an unknown
-    /// symbol.
-    pub fn asset(&self, symbol: B256) -> (Address, B256, B256) {
+    /// The Chainlink feed, RedStone feed ID, index feed ID and Stock Token of `symbol`. All zero for an
+    /// unknown symbol.
+    pub fn asset(&self, symbol: B256) -> (Address, B256, B256, Address) {
         let asset = self.assets.getter(symbol);
         (
             asset.chainlink_feed.get(),
             asset.redstone_feed_id.get(),
             asset.index_feed_id.get(),
+            asset.token.get(),
         )
+    }
+
+    /// The token's multiplier change as it affects the band now: its status (0 none, 1 scheduled,
+    /// 2 not yet confirmed by Chainlink), when it takes effect, and the multipliers before and after it.
+    /// The multiplier before is zero when the change's size is not known. A token that cannot be read
+    /// reports status 2 from now. All zero for an asset without a token.
+    pub fn corporate_action(&self, symbol: B256) -> (u8, u64, u128, u128) {
+        let (_, change) = self.terms_of(symbol);
+        (
+            multiplier::status(change, self.vm().block_timestamp()) as u8,
+            change.effective_at,
+            change.before,
+            change.after,
+        )
+    }
+
+    /// Confirms a material change past its step once a Chainlink round that started at or after the
+    /// step falls inside the band of the 24/7 leg alone, then records the token's latest change. A
+    /// change is not replaced before it is confirmed. Anyone may call it; the multiplier before a step
+    /// can only be recorded before the step. Returns the status of the change in force.
+    pub fn sync_multiplier(&mut self, symbol: B256) -> Result<u8, BandError> {
+        let now = self.vm().block_timestamp();
+        let token = self.assets.getter(symbol).token.get();
+        if token == Address::ZERO {
+            return Err(BandError::NoToken(NoToken { symbol }));
+        }
+        let mut change = self.change_of(symbol);
+        let (current, new, effective_at) = self
+            .token_terms(token, change)
+            .ok_or(BandError::InvalidToken(InvalidToken { token }))?;
+        loop {
+            if multiplier::status(change, now) == CorporateAction::Unconfirmed {
+                if !self.confirms(symbol, change) {
+                    break;
+                }
+                change.confirmed = true;
+                self.assets.setter(symbol).confirmed.set(true);
+                self.vm().log(MultiplierConfirmed {
+                    symbol,
+                    effectiveAt: change.effective_at,
+                });
+            }
+            match multiplier::record(change, current, new, effective_at, now) {
+                Some(next) => {
+                    change = next;
+                    self.record_change(symbol, change);
+                }
+                None => break,
+            }
+        }
+        Ok(multiplier::status(change, now) as u8)
     }
 
     /// The anchor of an asset priced from an index: the Chainlink print, the index price at that
@@ -153,64 +237,34 @@ impl Band {
         (anchor.cl_px, anchor.index_px, anchor.at_s)
     }
 
-    /// Both legs of `symbol`: the Chainlink answer and its `updatedAt` in seconds, then the 24/7 price
-    /// and its package timestamp in milliseconds. The 24/7 price is the stored RedStone value, or for
-    /// an asset priced from an index, the anchor's print moved by the index since. Zero for a leg that
-    /// is unset or unreadable, and for an index leg before its first anchor. Never reverts.
+    /// Both legs of `symbol` as the band prices them: the Chainlink answer and its `updatedAt` in
+    /// seconds, then the 24/7 price and its package timestamp in milliseconds. Prices are the token's:
+    /// the RedStone share price times the token's multiplier, a Chainlink round from before a
+    /// multiplier step scaled to the new terms, and for an asset priced from an index, the anchor's
+    /// print moved by the index since. Zero for a leg that is unset, unreadable, above `u64`, or not
+    /// known in the current terms. Never reverts.
     pub fn legs(&self, symbol: B256) -> (U256, u64, U256, u64) {
-        let asset = self.assets.getter(symbol);
-        let (chainlink_price, chainlink_updated_at) =
-            chainlink::latest(self.vm(), asset.chainlink_feed.get());
-        let feed_id = asset.redstone_feed_id.get();
-        let (price_247, package_timestamp_ms) = if feed_id != B256::ZERO {
-            let (value, package_timestamp_ms, _) = self.price(feed_id);
-            (value, package_timestamp_ms)
-        } else {
-            let index_id = asset.index_feed_id.get();
-            if index_id == B256::ZERO {
-                (U256::ZERO, 0)
-            } else {
-                let (value, package_timestamp_ms, _) = self.price(index_id);
-                let px =
-                    u64::try_from(value).map_or(0, |v| index::leg_px(self.anchor_of(symbol), v));
-                if px == 0 {
-                    (U256::ZERO, 0)
-                } else {
-                    (U256::from(px), package_timestamp_ms)
-                }
-            }
-        };
+        let (legs, _) = self.priced_legs(symbol, self.vm().block_timestamp());
         (
-            chainlink_price,
-            chainlink_updated_at,
-            price_247,
-            package_timestamp_ms,
+            U256::from(legs.cl_px),
+            legs.cl_at,
+            U256::from(legs.px_247),
+            legs.ms_247,
         )
     }
 
     /// The band of `symbol`: its state (0 halted, 1 degraded, 2 closed, 3 open), how many legs are
-    /// live, its centre, half-width in basis points and bounds. A leg above `u64` is absent. While the
-    /// session is not known, Chainlink sleeps and a band that is not halted is degraded.
+    /// live, its centre, half-width in basis points and bounds. While the session is not known,
+    /// Chainlink sleeps and a band that is not halted is degraded. After a material multiplier step,
+    /// the band is halted until Chainlink confirms the new terms, because the share price may or may
+    /// not have moved with the step.
     pub fn quote(&self, symbol: B256) -> (u8, u8, u64, u64, u64, u128) {
         let now = self.vm().block_timestamp();
-        let (cl_px, cl_at, px_247, ms_247) = self.legs(symbol);
-        let asset = self.assets.getter(symbol);
-        let feed_id = asset.redstone_feed_id.get();
-        let (var_feed_id, basis_bps) = if feed_id == B256::ZERO {
-            (asset.index_feed_id.get(), index::INDEX_BASIS_BPS)
-        } else {
-            (feed_id, 0)
-        };
-        let session = self.session_at(now);
-        let mut quote = quote::compute(&quote::Inputs {
-            live247_px: u64::try_from(px_247).unwrap_or(0),
-            live247_age_s: quote::package_age_s(now, ms_247),
-            cl_px: u64::try_from(cl_px).unwrap_or(0),
-            cl_age_s: quote::age_s(now, cl_at),
-            cl_session_open: session.is_some_and(|s| s.open),
-            var_cpb2: self.variance(var_feed_id),
-            basis_bps,
-        });
+        let (inputs, change, session) = self.inputs(symbol, now);
+        if multiplier::status(change, now) == CorporateAction::Unconfirmed {
+            return (0, 0, 0, 0, 0, 0);
+        }
+        let mut quote = quote::compute(&inputs);
         if session.is_none() && quote.state != quote::State::Halted {
             quote.state = quote::State::Degraded;
         }
@@ -280,7 +334,165 @@ impl Band {
     }
 }
 
+struct Legs {
+    cl_px: u64,
+    cl_at: u64,
+    px_247: u64,
+    ms_247: u64,
+}
+
 impl Band {
+    fn priced_legs(&self, symbol: B256, now: u64) -> (Legs, Change) {
+        let asset = self.assets.getter(symbol);
+        let (current, change) = self.terms_of(symbol);
+        let (cl, started_at, updated_at) = chainlink::latest(self.vm(), asset.chainlink_feed.get());
+        let cl_px =
+            multiplier::chainlink_px(u64::try_from(cl).unwrap_or(0), started_at, change, now);
+        let feed_id = asset.redstone_feed_id.get();
+        let (px_247, ms_247) = if feed_id != B256::ZERO {
+            let (value, ms, _) = self.price(feed_id);
+            (
+                u64::try_from(value).map_or(0, |v| multiplier::token_px(v, current)),
+                ms,
+            )
+        } else {
+            let index_id = asset.index_feed_id.get();
+            if index_id == B256::ZERO {
+                (0, 0)
+            } else {
+                let (value, ms, _) = self.price(index_id);
+                let anchor = self.anchor_of(symbol);
+                let anchor = Anchor {
+                    cl_px: multiplier::chainlink_px(
+                        anchor.cl_px,
+                        asset.anchor_started_at.get().to::<u64>(),
+                        change,
+                        now,
+                    ),
+                    ..anchor
+                };
+                (
+                    u64::try_from(value).map_or(0, |v| index::leg_px(anchor, v)),
+                    ms,
+                )
+            }
+        };
+        let legs = Legs {
+            cl_px,
+            cl_at: if cl_px == 0 { 0 } else { updated_at },
+            px_247,
+            ms_247: if px_247 == 0 { 0 } else { ms_247 },
+        };
+        (legs, change)
+    }
+
+    fn inputs(&self, symbol: B256, now: u64) -> (quote::Inputs, Change, Option<Session>) {
+        let (legs, change) = self.priced_legs(symbol, now);
+        let asset = self.assets.getter(symbol);
+        let feed_id = asset.redstone_feed_id.get();
+        let (var_feed_id, basis_bps) = if feed_id == B256::ZERO {
+            (asset.index_feed_id.get(), index::INDEX_BASIS_BPS)
+        } else {
+            (feed_id, 0)
+        };
+        let session = self.session_at(now);
+        let inputs = quote::Inputs {
+            live247_px: legs.px_247,
+            live247_age_s: quote::package_age_s(now, legs.ms_247),
+            cl_px: legs.cl_px,
+            cl_age_s: quote::age_s(now, legs.cl_at),
+            cl_session_open: session.is_some_and(|s| s.open),
+            var_cpb2: self.variance(var_feed_id),
+            basis_bps,
+        };
+        (inputs, change, session)
+    }
+
+    fn change_of(&self, symbol: B256) -> Change {
+        let asset = self.assets.getter(symbol);
+        Change {
+            before: asset.multiplier_before.get().to::<u128>(),
+            after: asset.multiplier_after.get().to::<u128>(),
+            effective_at: asset.effective_at.get().to::<u64>(),
+            confirmed: asset.confirmed.get(),
+        }
+    }
+
+    fn token_terms(&self, token: Address, recorded: Change) -> Option<(u128, u128, u64)> {
+        let (new, effective_at) = token::schedule(self.vm(), token)?;
+        let now = self.vm().block_timestamp();
+        let current = match multiplier::current(recorded, new, effective_at, now) {
+            Some(current) => current,
+            None => token::multiplier(self.vm(), token)?,
+        };
+        Some((current, new, effective_at))
+    }
+
+    fn terms_of(&self, symbol: B256) -> (u128, Change) {
+        let token = self.assets.getter(symbol).token.get();
+        if token == Address::ZERO {
+            return (multiplier::SCALE, Change::default());
+        }
+        let recorded = self.change_of(symbol);
+        let now = self.vm().block_timestamp();
+        match self.token_terms(token, recorded) {
+            Some((current, new, effective_at)) => (
+                current,
+                multiplier::observe(recorded, current, new, effective_at, now),
+            ),
+            None => (
+                0,
+                Change {
+                    effective_at: now,
+                    ..Change::default()
+                },
+            ),
+        }
+    }
+
+    fn record_change(&mut self, symbol: B256, change: Change) {
+        let mut asset = self.assets.setter(symbol);
+        asset.multiplier_before.set(U128::from(change.before));
+        asset.multiplier_after.set(U128::from(change.after));
+        asset.effective_at.set(U64::from(change.effective_at));
+        asset.confirmed.set(change.confirmed);
+        let feed_id = asset.redstone_feed_id.get();
+        if feed_id != B256::ZERO {
+            self.volatility
+                .setter(feed_id)
+                .step_at
+                .set(U64::from(change.effective_at));
+        }
+        self.vm().log(MultiplierRecorded {
+            symbol,
+            before: change.before,
+            after: change.after,
+            effectiveAt: change.effective_at,
+        });
+    }
+
+    fn confirms(&self, symbol: B256, change: Change) -> bool {
+        let feed = self.assets.getter(symbol).chainlink_feed.get();
+        if feed == Address::ZERO {
+            return true;
+        }
+        let (_, started_at, _) = chainlink::latest(self.vm(), feed);
+        let (inputs, _, _) = self.inputs(symbol, self.vm().block_timestamp());
+        let alone = quote::compute(&quote::Inputs {
+            cl_px: 0,
+            cl_session_open: false,
+            ..inputs
+        });
+        multiplier::confirms(
+            change,
+            started_at,
+            inputs.cl_px,
+            alone.mid,
+            alone.low,
+            alone.high,
+        )
+    }
+
     fn store(&mut self, feed_ids: &[B256], verified: &redstone::Verified) -> Result<(), BandError> {
         let now = self.vm().block_timestamp();
         for (feed_id, value) in feed_ids.iter().zip(&verified.values) {
@@ -352,7 +564,7 @@ impl Band {
     fn record_anchor(&mut self, index_id: B256, value: U256, package_timestamp_ms: u64) {
         let symbol = self.index_assets.getter(index_id).get();
         let feed = self.assets.getter(symbol).chainlink_feed.get();
-        let (cl_px, cl_at) = chainlink::latest(self.vm(), feed);
+        let (cl_px, cl_started_at, cl_at) = chainlink::latest(self.vm(), feed);
         let (Ok(cl_px), Ok(index_px)) = (u64::try_from(cl_px), u64::try_from(value)) else {
             return;
         };
@@ -363,6 +575,7 @@ impl Band {
             asset.anchor_cl_px.set(U64::from(next.cl_px));
             asset.anchor_index_px.set(U64::from(next.index_px));
             asset.anchor_at.set(U64::from(next.at_s));
+            asset.anchor_started_at.set(U64::from(cl_started_at));
             self.vm().log(Anchored {
                 symbol,
                 chainlinkPrice: next.cl_px,
@@ -382,10 +595,16 @@ impl Band {
             return;
         }
         let volatility = self.volatility.getter(feed_id);
+        let step_ms = volatility.step_at.get().to::<u64>().saturating_mul(1000);
+        let restart = sample_ms < step_ms && step_ms <= package_timestamp_ms;
         let last = quote::Sample {
             var_cpb2: volatility.var_cpb2.get().to::<u128>(),
-            px: volatility.sample_px.get().to::<u64>(),
-            ms: sample_ms,
+            px: if restart {
+                0
+            } else {
+                volatility.sample_px.get().to::<u64>()
+            },
+            ms: if restart { 0 } else { sample_ms },
         };
         if let Some(next) = quote::next_sample(last, px, package_timestamp_ms) {
             let mut volatility = self.volatility.setter(feed_id);
@@ -495,6 +714,7 @@ mod tests {
             vec![],
             vec![symbol("NVDA---24_7")],
             vec![B256::ZERO],
+            vec![Address::ZERO],
         );
         assert_eq!(result, Err(BandError::LengthMismatch(LengthMismatch {})));
         let result = band.constructor(
@@ -502,6 +722,7 @@ mod tests {
             vec![Address::ZERO],
             vec![],
             vec![B256::ZERO],
+            vec![Address::ZERO],
         );
         assert_eq!(result, Err(BandError::LengthMismatch(LengthMismatch {})));
         let result = band.constructor(
@@ -509,6 +730,7 @@ mod tests {
             vec![Address::ZERO],
             vec![symbol("NVDA---24_7")],
             vec![],
+            vec![Address::ZERO],
         );
         assert_eq!(result, Err(BandError::LengthMismatch(LengthMismatch {})));
     }
@@ -522,6 +744,7 @@ mod tests {
             vec![Address::ZERO],
             vec![symbol("NVDA---24_7")],
             vec![B256::ZERO],
+            vec![Address::ZERO],
         );
         assert_eq!(result, Err(BandError::ZeroSymbol(ZeroSymbol {})));
     }
@@ -535,6 +758,7 @@ mod tests {
             vec![Address::ZERO],
             vec![B256::ZERO],
             vec![B256::ZERO],
+            vec![Address::ZERO],
         );
         assert_eq!(
             result,
@@ -553,6 +777,7 @@ mod tests {
             vec![Address::ZERO, Address::ZERO],
             vec![symbol("NVDA---24_7"), symbol("TSLA---24_7")],
             vec![B256::ZERO, B256::ZERO],
+            vec![Address::ZERO; 2],
         );
         assert_eq!(
             result,
@@ -576,6 +801,7 @@ mod tests {
             vec![FEED],
             vec![B256::ZERO],
             vec![B256::ZERO],
+            vec![Address::ZERO],
         );
         assert_eq!(
             result,
@@ -592,6 +818,7 @@ mod tests {
             vec![FEED],
             vec![B256::ZERO],
             vec![B256::ZERO],
+            vec![Address::ZERO],
         );
         assert_eq!(
             result,
@@ -613,23 +840,29 @@ mod tests {
             vec![FEED, Address::ZERO, FEED],
             vec![symbol("NVDA---24_7"), symbol("TSLA---24_7"), B256::ZERO],
             vec![B256::ZERO, B256::ZERO, symbol("USA500.Y---24_7")],
+            vec![Address::ZERO; 3],
         )
         .unwrap();
         assert_eq!(
             band.asset(symbol("NVDA")),
-            (FEED, symbol("NVDA---24_7"), B256::ZERO)
+            (FEED, symbol("NVDA---24_7"), B256::ZERO, Address::ZERO)
         );
         assert_eq!(
             band.asset(symbol("TSLA")),
-            (Address::ZERO, symbol("TSLA---24_7"), B256::ZERO)
+            (
+                Address::ZERO,
+                symbol("TSLA---24_7"),
+                B256::ZERO,
+                Address::ZERO
+            )
         );
         assert_eq!(
             band.asset(symbol("SPY")),
-            (FEED, B256::ZERO, symbol("USA500.Y---24_7"))
+            (FEED, B256::ZERO, symbol("USA500.Y---24_7"), Address::ZERO)
         );
         assert_eq!(
             band.asset(symbol("AAPL")),
-            (Address::ZERO, B256::ZERO, B256::ZERO)
+            (Address::ZERO, B256::ZERO, B256::ZERO, Address::ZERO)
         );
     }
 
@@ -686,26 +919,26 @@ mod tests {
             LATEST_ROUND_DATA_CALL.to_vec(),
             Ok(round(0, 1_790_089_676)),
         );
-        assert_eq!(chainlink::latest(&vm, FEED), (U256::ZERO, 0));
+        assert_eq!(chainlink::latest(&vm, FEED), (U256::ZERO, 0, 0));
         vm.mock_static_call(
             FEED,
             LATEST_ROUND_DATA_CALL.to_vec(),
             Ok(round(-1, 1_790_089_676)),
         );
-        assert_eq!(chainlink::latest(&vm, FEED), (U256::ZERO, 0));
+        assert_eq!(chainlink::latest(&vm, FEED), (U256::ZERO, 0, 0));
     }
 
     #[test]
     fn a_reverting_feed_is_no_reading() {
         let vm = TestVM::default();
         vm.mock_static_call(FEED, LATEST_ROUND_DATA_CALL.to_vec(), Err(vec![]));
-        assert_eq!(chainlink::latest(&vm, FEED), (U256::ZERO, 0));
+        assert_eq!(chainlink::latest(&vm, FEED), (U256::ZERO, 0, 0));
     }
 
     #[test]
     fn a_feed_without_code_is_no_reading() {
         let vm = TestVM::default();
-        assert_eq!(chainlink::latest(&vm, FEED), (U256::ZERO, 0));
+        assert_eq!(chainlink::latest(&vm, FEED), (U256::ZERO, 0, 0));
     }
 
     #[test]
@@ -722,6 +955,7 @@ mod tests {
             vec![Address::ZERO, FEED],
             vec![symbol("NVDA---24_7"), B256::ZERO],
             vec![B256::ZERO, symbol("USA500.Y---24_7")],
+            vec![Address::ZERO; 2],
         )
         .unwrap();
         assert!(band.prices.getter(symbol("NVDA---24_7")).tracked.get());
@@ -808,6 +1042,7 @@ mod tests {
             vec![FEED],
             vec![symbol("SPY---24_7")],
             vec![symbol("USA500.Y---24_7")],
+            vec![Address::ZERO],
         );
         assert_eq!(
             result,
@@ -826,6 +1061,7 @@ mod tests {
             vec![Address::ZERO],
             vec![B256::ZERO],
             vec![symbol("USA500.Y---24_7")],
+            vec![Address::ZERO],
         );
         assert_eq!(
             result,
@@ -849,6 +1085,7 @@ mod tests {
             vec![FEED, FEED],
             vec![B256::ZERO, B256::ZERO],
             vec![symbol("USA500.Y---24_7"), symbol("USA500.Y---24_7")],
+            vec![Address::ZERO; 2],
         );
         assert_eq!(
             result,
@@ -1175,6 +1412,10 @@ mod tests {
             band.anchor(symbol("SPY")),
             (77_232_802_713, 774_263_746_783, 1_790_352_180)
         );
+        assert_eq!(
+            band.assets.getter(symbol("SPY")).anchor_started_at.get(),
+            U64::from(1_790_352_168u64)
+        );
     }
 
     #[test]
@@ -1282,6 +1523,97 @@ mod tests {
             Err(BandError::CalldataMustHaveValidPayload(
                 CalldataMustHaveValidPayload {}
             ))
+        );
+    }
+    const TOKEN: Address = address!("0x5555555555555555555555555555555555555555");
+
+    #[test]
+    fn constructor_rejects_a_token_without_a_multiplier() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        vm.mock_static_call(TOKEN, vec![0xa6, 0x0b, 0xf1, 0x3d], Err(vec![]));
+        let result = band.constructor(
+            vec![symbol("NVDA")],
+            vec![Address::ZERO],
+            vec![symbol("NVDA---24_7")],
+            vec![B256::ZERO],
+            vec![TOKEN],
+        );
+        assert_eq!(
+            result,
+            Err(BandError::InvalidToken(InvalidToken { token: TOKEN }))
+        );
+    }
+
+    #[test]
+    fn constructor_rejects_a_token_whose_multiplier_is_zero() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        vm.mock_static_call(
+            TOKEN,
+            vec![0xdc, 0x76, 0x70, 0x07],
+            Ok(U256::ZERO.to_be_bytes::<32>().to_vec()),
+        );
+        let result = band.constructor(
+            vec![symbol("NVDA")],
+            vec![Address::ZERO],
+            vec![symbol("NVDA---24_7")],
+            vec![B256::ZERO],
+            vec![TOKEN],
+        );
+        assert_eq!(
+            result,
+            Err(BandError::InvalidToken(InvalidToken { token: TOKEN }))
+        );
+    }
+
+    #[test]
+    fn a_token_that_cannot_be_read_halts_its_asset() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        band.assets.setter(symbol("NVDA")).token.set(TOKEN);
+        vm.mock_static_call(TOKEN, vec![0xdc, 0x76, 0x70, 0x07], Err(vec![]));
+        vm.set_block_timestamp(WED_3AM_S);
+        assert_eq!(band.corporate_action(symbol("NVDA")), (2, WED_3AM_S, 0, 0));
+        assert_eq!(band.quote(symbol("NVDA")), (0, 0, 0, 0, 0, 0));
+    }
+
+    #[test]
+    fn syncing_an_asset_without_a_token_reverts() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        assert_eq!(
+            band.sync_multiplier(symbol("NVDA")),
+            Err(BandError::NoToken(NoToken {
+                symbol: symbol("NVDA")
+            }))
+        );
+    }
+
+    #[test]
+    fn a_sample_across_a_multiplier_step_restarts() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        let feed_id = symbol("NVDA---24_7");
+        band.prices.setter(feed_id).tracked.set(true);
+        band.record_sample(feed_id, U256::from(22_000_000_000u64), 1_790_000_000_000);
+        band.record_sample(feed_id, U256::from(22_300_000_000u64), 1_790_000_060_000);
+        let variance = band.variance(feed_id);
+        assert!(variance > 0);
+        band.volatility
+            .setter(feed_id)
+            .step_at
+            .set(U64::from(1_790_000_100u64));
+        band.record_sample(feed_id, U256::from(5_575_000_000u64), 1_790_000_120_000);
+        assert_eq!(band.variance(feed_id), variance);
+        assert_eq!(
+            band.volatility.getter(feed_id).sample_px.get().to::<u64>(),
+            5_575_000_000
+        );
+        band.record_sample(feed_id, U256::from(5_575_000_000u64), 1_790_000_180_000);
+        assert_eq!(
+            band.variance(feed_id),
+            quote::ewma_update(variance, 5_575_000_000, 5_575_000_000, 60)
         );
     }
 }

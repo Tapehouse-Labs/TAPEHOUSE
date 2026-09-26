@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
-# Usage: reproducible.sh initcode
+# Usage: reproducible.sh deploy RPC_URL CONTRACT SIGNER -- CONSTRUCTOR_ARGS...
 #        reproducible.sh verify RPC_URL DEPLOYMENT_TX CONTRACT
 # Runs cargo-stylus in the image that `cargo stylus deploy` and `cargo stylus verify` build for
 # reproducible builds, on the staged content of stylus/, mounted at /source as they mount the
-# workspace. `initcode` writes stylus/target/reproducible/<contract>.initcode.hex for every program;
+# workspace. `deploy` deploys, activates and constructs the program through StylusDeployer, in as
+# many code fragments as it needs, and prints the deployment transaction and the program's address.
+# SIGNER is `--private-key-path FILE`, or `--account NAME --password-file FILE` for a Foundry keystore;
+# the files are mounted read-only.
 # `verify` succeeds only when cargo-stylus prints "Verification successful".
 set -euo pipefail
 
+usage="Usage: reproducible.sh deploy RPC_URL CONTRACT SIGNER -- CONSTRUCTOR_ARGS... | verify RPC_URL DEPLOYMENT_TX CONTRACT"
 case ${1:-} in
-  initcode) [ $# -eq 1 ] ;;
+  deploy) [ $# -ge 5 ] ;;
   verify) [ $# -eq 4 ] ;;
   *) false ;;
-esac || { echo "Usage: reproducible.sh initcode | verify RPC_URL DEPLOYMENT_TX CONTRACT" >&2; exit 2; }
+esac || { echo "$usage" >&2; exit 2; }
 
 stylus=$(cd "$(dirname "$0")/.." && pwd)
 version=${CARGO_STYLUS_VERSION:?Set CARGO_STYLUS_VERSION, as the Makefile does}
@@ -40,20 +44,37 @@ RUN rustup component add rust-src --toolchain $toolchain-x86_64-unknown-linux-gn
 $layer
 DOCKERFILE
 
+signer=() keys=()
+if [ "$1" = deploy ]; then
+  case $4 in
+    --private-key-path)
+      keys=(--volume "$(cd "$(dirname "$5")" && pwd)/$(basename "$5"):/keys/key:ro")
+      signer=(--private-key-path /keys/key) next=6 ;;
+    --account)
+      [ "${6:-}" = --password-file ] || { echo "$usage" >&2; exit 2; }
+      keys=(--volume "$(cd "${FOUNDRY_KEYSTORES:-$HOME/.foundry/keystores}" && pwd)/$5:/keys/keystore:ro" --volume "$(cd "$(dirname "$7")" && pwd)/$(basename "$7"):/keys/password:ro")
+      signer=(--keystore-path /keys/keystore --keystore-password-path /keys/password) next=8 ;;
+    *) echo "$usage" >&2; exit 2 ;;
+  esac
+  [ "${!next:-}" = -- ] || { echo "$usage" >&2; exit 2; }
+fi
+
 source=$(mktemp -d)
-run() { docker run --rm --network host --workdir /source --volume "$source:/source" "$image" "$@"; }
+run() {
+  docker run --rm --network host --workdir /source --volume "$source:/source" ${keys[@]+"${keys[@]}"} "$image" "$@"
+}
 trap 'run rm -rf /source/target > /dev/null 2>&1 || true; rm -rf "$source"' EXIT
 git -C "$stylus/.." archive "$(git -C "$stylus/.." write-tree)" stylus | tar -xf - -C "$source" --strip-components 1
 
-if [ "$1" = initcode ]; then
-  mkdir -p "$stylus/target/reproducible"
-  for dir in "$source"/contracts/*/; do
-    contract=$(basename "$dir")
-    run sh -c "mkdir -p target && cargo stylus get-initcode --contract $contract --output target/$contract.initcode.hex"
-    tr -d '\n' < "$source/target/$contract.initcode.hex" > "$stylus/target/reproducible/$contract.initcode.hex"
-    hash=$(cast keccak "0x$(cat "$stylus/target/reproducible/$contract.initcode.hex")")
-    echo "$contract: $hash"
-  done
+if [ "$1" = deploy ]; then
+  rpc=$2 contract=$3
+  shift "$next"
+  run cargo stylus deploy --no-verify --contract "$contract" -e "$rpc" "${signer[@]}" --constructor-args "$@" |
+    perl -pe 's/\e\[[0-9;]*m//g' | tee "$source/deploy.log" >&2
+  tx=$(grep -o 'deployment tx hash: 0x[0-9a-f]\{64\}' "$source/deploy.log" | grep -o '0x.*')
+  address=$(grep -o 'deployed code at address: 0x[0-9a-f]\{40\}' "$source/deploy.log" | grep -o '0x.*')
+  address=$(cast to-check-sum-address "$address")
+  echo "$tx $address"
 else
   run cargo stylus verify --no-verify --contract "$4" -e "$2" --deployment-tx "$3" | tee "$source/verify.log"
   grep -q '^Verification successful$' "$source/verify.log"

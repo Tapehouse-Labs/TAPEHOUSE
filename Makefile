@@ -13,7 +13,7 @@ DEVNODE_RPC_URL := http://127.0.0.1:8547
 DEVNODE_KEY := 0xb6b15c8cb491557369f3c7d2c287b053eb229daa9c22138887752191c9520659
 DEVNODE_ACCOUNT := 0x3f1Eae7D46d88F08fc2F8ed27FCb2AB183EB2d0E
 COVERAGE_MIN := 95
-STYLUS_MAX_COMPRESSED_BYTES := 24576
+STYLUS_MAX_FRAGMENTS := 4
 STYLUS_SIZE_RUSTFLAGS := --remap-path-prefix=$(or $(CARGO_HOME),$(HOME)/.cargo)/registry/src=/cargo
 CONTRACT ?= band
 RPC_URL_4663 = $(ROBINHOOD_RPC_URL)
@@ -39,7 +39,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	check-toolchains check-node check-foundry check-slither check-stylus check-docker submodules \
 	build-apps test-apps lint-apps \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
-	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation initcode-stylus verify-stylus \
+	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode
 
 all: build
@@ -156,10 +156,12 @@ snapshot-stylus: check-stylus
 
 gas-stylus: snapshot-stylus
 	@for dir in stylus/contracts/*/; do \
-		(cd $$dir && cargo stylus get-initcode --output ../../target/initcode.hex >/dev/null) || exit 1; \
-		size=$$(($$(tr -d '\n' < stylus/target/initcode.hex | wc -c) / 2 - 43)); \
-		echo "$$(basename $$dir): $$size bytes compressed, limit $(STYLUS_MAX_COMPRESSED_BYTES)"; \
-		[ $$size -le $(STYLUS_MAX_COMPRESSED_BYTES) ] || exit 1; done
+		set -- $$(cd $$dir && cargo stylus check -e $(ROBINHOOD_RPC_URL) 2>&1 | \
+			perl -ne 's/\e\[[0-9;]*m//g; /contract size: .*\((\d+) bytes\)(?: \((\d+) fragments\))?/ and print "$$1 ", $$2 // 1, "\n"'); \
+		[ $$# -eq 2 ] || { echo "cargo stylus check on ROBINHOOD_RPC_URL did not report the size of $$dir"; exit 1; }; \
+		size=$$1 fragments=$$2; \
+		echo "$$(basename $$dir): $$size bytes compressed in $$fragments fragments, limit $(STYLUS_MAX_FRAGMENTS)"; \
+		[ $$fragments -le $(STYLUS_MAX_FRAGMENTS) ] || exit 1; done
 	@test -z "$$(git ls-files --others --exclude-standard -- stylus/.wasm-size)" || \
 		{ echo "Untracked stylus/.wasm-size. Run: make snapshot-stylus, then git add it."; exit 1; }
 	@git diff --quiet -- stylus/.wasm-size || \
@@ -170,13 +172,17 @@ check-activation: check-stylus
 		for dir in stylus/contracts/*/; do \
 			(cd $$dir && cargo stylus check -e $$rpc) || exit 1; done; done
 
-initcode-stylus: check-docker check-foundry
-	CARGO_STYLUS_VERSION=$(CARGO_STYLUS_VERSION) stylus/scripts/reproducible.sh initcode
+deploy-stylus: check-docker check-foundry
+	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
+		{ echo "Usage: make deploy-stylus CHAIN=<4663|46630|42161|412346> SIGNER='<signer flags>' [REGISTRY=<file>]"; exit 1; }
+	@args=$$(stylus/scripts/band-args.sh $(or $(REGISTRY),deployments/$(CHAIN).json)) && \
+		CARGO_STYLUS_VERSION=$(CARGO_STYLUS_VERSION) stylus/scripts/reproducible.sh deploy $(RPC_URL_$(CHAIN)) $(CONTRACT) \
+		$(SIGNER) -- $$args
 
 verify-stylus: check-docker
 	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(TX)" || \
 		{ echo "Usage: make verify-stylus CHAIN=<4663|46630|42161|412346> TX=<deployment tx> [CONTRACT=band]"; exit 1; }
-	CARGO_STYLUS_VERSION=$(CARGO_STYLUS_VERSION) stylus/scripts/reproducible.sh verify $(RPC_URL_$(CHAIN)) $(TX) $(CONTRACT)
+	@CARGO_STYLUS_VERSION=$(CARGO_STYLUS_VERSION) stylus/scripts/reproducible.sh verify $(RPC_URL_$(CHAIN)) $(TX) $(CONTRACT)
 
 devnode: check-docker check-foundry
 	@docker rm -f tapehouse-devnode >/dev/null 2>&1 || true

@@ -1,0 +1,915 @@
+{
+ "mul_div": [
+  {
+   "name": "NVDA: the 42161 share price times NVDA's multiplier is the 4663 answer",
+   "a": "22227499999",
+   "b": "1000775159164630595",
+   "c": "1000000000000000000",
+   "expected": "22244729849"
+  },
+  {
+   "name": "SPY: the share price times the new multiplier is the first round after the step",
+   "a": "76024470000",
+   "b": "1001717991187472003",
+   "c": "1000000000000000000",
+   "expected": "76155079369"
+  },
+  {
+   "name": "rounds down",
+   "a": "3",
+   "b": "2",
+   "c": "4",
+   "expected": "1"
+  },
+  {
+   "name": "zero divisor",
+   "a": "1",
+   "b": "1",
+   "c": "0",
+   "expected": null
+  },
+  {
+   "name": "exactly u64",
+   "a": "18446744073709551615",
+   "b": "1000000000000000000",
+   "c": "1000000000000000000",
+   "expected": "18446744073709551615"
+  },
+  {
+   "name": "one above u64",
+   "a": "18446744073709551615",
+   "b": "1000000000000000001",
+   "c": "1000000000000000000",
+   "expected": null
+  },
+  {
+   "name": "product above 2^128",
+   "a": "18446744073709551615",
+   "b": "340282366920938463463374607431768211455",
+   "c": "340282366920938463463374607431768211455",
+   "expected": "18446744073709551615"
+  },
+  {
+   "name": "product above 2^128, result above u64",
+   "a": "18446744073709551615",
+   "b": "340282366920938463463374607431768211455",
+   "c": "170141183460469231731687303715884105727",
+   "expected": null
+  },
+  {
+   "name": "large multiplier, split of 50",
+   "a": "13000000000",
+   "b": "50000000000000000000",
+   "c": "1000000000000000000",
+   "expected": "650000000000"
+  },
+  {
+   "name": "divisor above 2^127",
+   "a": "18446744073709551615",
+   "b": "340282366920938463463374607431768211454",
+   "c": "340282366920938463463374607431768211455",
+   "expected": "18446744073709551614"
+  },
+  {
+   "name": "a quotient of exactly 2^128",
+   "a": "9223372036854775808",
+   "b": "73786976294838206464",
+   "c": "2",
+   "expected": null
+  }
+ ],
+ "material": [
+  {
+   "name": "SPY's dividend, 17 bps",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "expected": false
+  },
+  {
+   "name": "a 4:1 split",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "expected": true
+  },
+  {
+   "name": "a 2.15% dividend",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1021486445000000000",
+    "effective_at": "1788189000",
+    "confirmed": false
+   },
+   "expected": true
+  },
+  {
+   "name": "size not known",
+   "change": {
+    "before": "0",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "expected": true
+  },
+  {
+   "name": "exactly 50 bps",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1005000000000000000",
+    "effective_at": "1",
+    "confirmed": false
+   },
+   "expected": true
+  },
+  {
+   "name": "just under 50 bps",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1004999999999999999",
+    "effective_at": "1",
+    "confirmed": false
+   },
+   "expected": false
+  },
+  {
+   "name": "a 50 bps cut",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "995000000000000000",
+    "effective_at": "1",
+    "confirmed": false
+   },
+   "expected": true
+  },
+  {
+   "name": "no change",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1000000000000000000",
+    "effective_at": "1",
+    "confirmed": false
+   },
+   "expected": false
+  }
+ ],
+ "chainlink": [
+  {
+   "name": "SPY: the last round before the step, read after it",
+   "answer": "76285845000",
+   "started_at": "1789590103",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "now": "1789690234",
+   "expected": "76416903409"
+  },
+  {
+   "name": "SPY: the same round read before the step",
+   "answer": "76285845000",
+   "started_at": "1789590103",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "now": "1789690232",
+   "expected": "76285845000"
+  },
+  {
+   "name": "SPY: the first round after the step",
+   "answer": "76155079369",
+   "started_at": "1789734121",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "now": "1789734130",
+   "expected": "76155079369"
+  },
+  {
+   "name": "a round that started at the step",
+   "answer": "76155079369",
+   "started_at": "1789690233",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "now": "1789690293",
+   "expected": "76155079369"
+  },
+  {
+   "name": "a 4:1 split: a round from before the step is not used",
+   "answer": "22000000000",
+   "started_at": "1782998000",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "now": "1782999100",
+   "expected": "0"
+  },
+  {
+   "name": "size not known",
+   "answer": "22000000000",
+   "started_at": "1782998000",
+   "change": {
+    "before": "0",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "now": "1782999100",
+   "expected": "0"
+  },
+  {
+   "name": "no change recorded",
+   "answer": "22000000000",
+   "started_at": "1782998000",
+   "change": {
+    "before": "0",
+    "after": "0",
+    "effective_at": "0",
+    "confirmed": false
+   },
+   "now": "1782999100",
+   "expected": "22000000000"
+  },
+  {
+   "name": "a 2.15% dividend: a round from before the step is not used",
+   "answer": "22000000000",
+   "started_at": "1788188000",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1021486445000000000",
+    "effective_at": "1788189000",
+    "confirmed": false
+   },
+   "now": "1788189100",
+   "expected": "0"
+  },
+  {
+   "name": "a 49 bps dividend: scaled",
+   "answer": "22000000000",
+   "started_at": "1",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1004900000000000000",
+    "effective_at": "2",
+    "confirmed": false
+   },
+   "now": "3",
+   "expected": "22107800000"
+  },
+  {
+   "name": "scaled above u64",
+   "answer": "18446744073709551615",
+   "started_at": "1",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1001000000000000000",
+    "effective_at": "2",
+    "confirmed": false
+   },
+   "now": "3",
+   "expected": "0"
+  }
+ ],
+ "status": [
+  {
+   "name": "SPY's dividend is never a window",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "now": "1789690173",
+   "expected": "0"
+  },
+  {
+   "name": "a split ten minutes ahead",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "now": "1782998400",
+   "expected": "1"
+  },
+  {
+   "name": "a split at its step",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "now": "1782999000",
+   "expected": "2"
+  },
+  {
+   "name": "a confirmed split",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": true
+   },
+   "now": "1782999060",
+   "expected": "0"
+  },
+  {
+   "name": "a change of unknown size after its step",
+   "change": {
+    "before": "0",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "now": "1782999001",
+   "expected": "2"
+  },
+  {
+   "name": "no change",
+   "change": {
+    "before": "0",
+    "after": "0",
+    "effective_at": "0",
+    "confirmed": false
+   },
+   "now": "5",
+   "expected": "0"
+  }
+ ],
+ "observe": [
+  {
+   "name": "a token never updated",
+   "recorded": {
+    "before": "1000000000000000000",
+    "after": "1000000000000000000",
+    "effective_at": "0",
+    "confirmed": false
+   },
+   "current": "1000000000000000000",
+   "new": "1000000000000000000",
+   "effective_at": "0",
+   "now": "5",
+   "expected": {
+    "before": "1000000000000000000",
+    "after": "1000000000000000000",
+    "effective_at": "0",
+    "confirmed": false
+   }
+  },
+  {
+   "name": "the recorded change",
+   "recorded": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "current": "1001717991187472003",
+   "new": "1001717991187472003",
+   "effective_at": "1789690233",
+   "now": "1789690293",
+   "expected": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   }
+  },
+  {
+   "name": "a change replaced with the same time",
+   "recorded": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "current": "1000000000000000000",
+   "new": "2000000000000000000",
+   "effective_at": "1789690233",
+   "now": "1789690173",
+   "expected": {
+    "before": "1000000000000000000",
+    "after": "2000000000000000000",
+    "effective_at": "1789690233",
+    "confirmed": false
+   }
+  },
+  {
+   "name": "a change moved in time",
+   "recorded": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "current": "1000000000000000000",
+   "new": "1001717991187472003",
+   "effective_at": "1789690293",
+   "now": "1789690173",
+   "expected": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690293",
+    "confirmed": false
+   }
+  },
+  {
+   "name": "an immediate update seen after it",
+   "recorded": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "current": "1002000000000000000",
+   "new": "1002000000000000000",
+   "effective_at": "1790380652",
+   "now": "1790380700",
+   "expected": {
+    "before": "0",
+    "after": "1002000000000000000",
+    "effective_at": "1790380652",
+    "confirmed": false
+   }
+  },
+  {
+   "name": "a first change, scheduled",
+   "recorded": {
+    "before": "1000000000000000000",
+    "after": "1000000000000000000",
+    "effective_at": "0",
+    "confirmed": false
+   },
+   "current": "1000000000000000000",
+   "new": "1001717991187472003",
+   "effective_at": "1789690233",
+   "now": "1789690173",
+   "expected": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   }
+  },
+  {
+   "name": "an unconfirmed split holds when a dividend is scheduled",
+   "recorded": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "current": "4000000000000000000",
+   "new": "4004000000000000000",
+   "effective_at": "1783002600",
+   "now": "1782999060",
+   "expected": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   }
+  },
+  {
+   "name": "an unconfirmed split holds after the dividend's step",
+   "recorded": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "current": "4004000000000000000",
+   "new": "4004000000000000000",
+   "effective_at": "1783002600",
+   "now": "1783002660",
+   "expected": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   }
+  },
+  {
+   "name": "a step nobody recorded, then a new schedule",
+   "recorded": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "current": "4006871964749888012",
+   "new": "5000000000000000000",
+   "effective_at": "1790999000",
+   "now": "1790380700",
+   "expected": {
+    "before": "0",
+    "after": "4006871964749888012",
+    "effective_at": "1790380700",
+    "confirmed": false
+   }
+  },
+  {
+   "name": "a confirmed split, then a dividend scheduled",
+   "recorded": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": true
+   },
+   "current": "4000000000000000000",
+   "new": "4004000000000000000",
+   "effective_at": "1783002600",
+   "now": "1782999060",
+   "expected": {
+    "before": "4000000000000000000",
+    "after": "4004000000000000000",
+    "effective_at": "1783002600",
+    "confirmed": false
+   }
+  },
+  {
+   "name": "a dividend at its step, then a new schedule",
+   "recorded": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "current": "1001717991187472003",
+   "new": "2000000000000000000",
+   "effective_at": "1789690833",
+   "now": "1789690233",
+   "expected": {
+    "before": "1001717991187472003",
+    "after": "2000000000000000000",
+    "effective_at": "1789690833",
+    "confirmed": false
+   }
+  }
+ ],
+ "record": [
+  {
+   "name": "a split seen ten minutes ahead records its multiplier before",
+   "recorded": {
+    "before": "0",
+    "after": "0",
+    "effective_at": "0",
+    "confirmed": false
+   },
+   "current": "1000000000000000000",
+   "new": "4000000000000000000",
+   "effective_at": "1782999000",
+   "now": "1782998400",
+   "expected": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   }
+  },
+  {
+   "name": "a split seen only after its step",
+   "recorded": {
+    "before": "0",
+    "after": "0",
+    "effective_at": "0",
+    "confirmed": false
+   },
+   "current": "4000000000000000000",
+   "new": "4000000000000000000",
+   "effective_at": "1782999000",
+   "now": "1782999100",
+   "expected": {
+    "before": "0",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   }
+  },
+  {
+   "name": "the recorded change is not recorded again",
+   "recorded": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "current": "1001717991187472003",
+   "new": "1001717991187472003",
+   "effective_at": "1789690233",
+   "now": "1789690293",
+   "expected": null
+  },
+  {
+   "name": "a silent replacement is recorded",
+   "recorded": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "current": "1000000000000000000",
+   "new": "2000000000000000000",
+   "effective_at": "1789690233",
+   "now": "1789690173",
+   "expected": {
+    "before": "1000000000000000000",
+    "after": "2000000000000000000",
+    "effective_at": "1789690233",
+    "confirmed": false
+   }
+  },
+  {
+   "name": "a token never updated records its multiplier",
+   "recorded": {
+    "before": "0",
+    "after": "0",
+    "effective_at": "0",
+    "confirmed": false
+   },
+   "current": "1000000000000000000",
+   "new": "1000000000000000000",
+   "effective_at": "0",
+   "now": "5",
+   "expected": {
+    "before": "1000000000000000000",
+    "after": "1000000000000000000",
+    "effective_at": "0",
+    "confirmed": false
+   }
+  },
+  {
+   "name": "a token never updated, recorded, records nothing",
+   "recorded": {
+    "before": "1000000000000000000",
+    "after": "1000000000000000000",
+    "effective_at": "0",
+    "confirmed": false
+   },
+   "current": "1000000000000000000",
+   "new": "1000000000000000000",
+   "effective_at": "0",
+   "now": "5",
+   "expected": null
+  },
+  {
+   "name": "nothing new is recorded while a split is unconfirmed",
+   "recorded": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "current": "4000000000000000000",
+   "new": "4004000000000000000",
+   "effective_at": "1783002600",
+   "now": "1782999060",
+   "expected": null
+  },
+  {
+   "name": "a first change seen at its step",
+   "recorded": {
+    "before": "0",
+    "after": "0",
+    "effective_at": "0",
+    "confirmed": false
+   },
+   "current": "1001717991187472003",
+   "new": "1001717991187472003",
+   "effective_at": "1789690233",
+   "now": "1789690233",
+   "expected": {
+    "before": "0",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   }
+  }
+ ],
+ "confirms": [
+  {
+   "name": "a round after the step inside the 24/7 band",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "started_at": "1782999500",
+   "cl_px": "22000000000",
+   "px_247": "22000000000",
+   "low": "21879000000",
+   "high": "22121000000",
+   "expected": true
+  },
+  {
+   "name": "a round after the step outside it",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "started_at": "1782999500",
+   "cl_px": "88000000000",
+   "px_247": "22000000000",
+   "low": "21879000000",
+   "high": "22121000000",
+   "expected": false
+  },
+  {
+   "name": "a round from before the step",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "started_at": "1782998000",
+   "cl_px": "22000000000",
+   "px_247": "22000000000",
+   "low": "21879000000",
+   "high": "22121000000",
+   "expected": false
+  },
+  {
+   "name": "a round that started at the step",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "started_at": "1782999000",
+   "cl_px": "21879000000",
+   "px_247": "22000000000",
+   "low": "21879000000",
+   "high": "22121000000",
+   "expected": true
+  },
+  {
+   "name": "no 24/7 band",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "started_at": "1782999500",
+   "cl_px": "22000000000",
+   "px_247": "0",
+   "low": "0",
+   "high": "0",
+   "expected": false
+  },
+  {
+   "name": "a 2% special dividend: a round in the new terms",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1020000000000000000",
+    "effective_at": "1788189000",
+    "confirmed": false
+   },
+   "started_at": "1788189500",
+   "cl_px": "22010000000",
+   "px_247": "22000000000",
+   "low": "21000000000",
+   "high": "23000000000",
+   "expected": true
+  },
+  {
+   "name": "a 2% special dividend: a round still in the old terms",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1020000000000000000",
+    "effective_at": "1788189000",
+    "confirmed": false
+   },
+   "started_at": "1788189500",
+   "cl_px": "21580000000",
+   "px_247": "22000000000",
+   "low": "21000000000",
+   "high": "23000000000",
+   "expected": false
+  },
+  {
+   "name": "a change of unknown size inside the band",
+   "change": {
+    "before": "0",
+    "after": "4000000000000000000",
+    "effective_at": "1782999000",
+    "confirmed": false
+   },
+   "started_at": "1782999500",
+   "cl_px": "21580000000",
+   "px_247": "22000000000",
+   "low": "21000000000",
+   "high": "23000000000",
+   "expected": true
+  }
+ ],
+ "current": [
+  {
+   "name": "a token never updated",
+   "change": {
+    "before": "0",
+    "after": "0",
+    "effective_at": "0",
+    "confirmed": false
+   },
+   "new": "1000000000000000000",
+   "effective_at": "0",
+   "now": "5",
+   "expected": "1000000000000000000"
+  },
+  {
+   "name": "SPY after its step",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "new": "1001717991187472003",
+   "effective_at": "1789690233",
+   "now": "1789690233",
+   "expected": "1001717991187472003"
+  },
+  {
+   "name": "SPY before its step",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "new": "1001717991187472003",
+   "effective_at": "1789690233",
+   "now": "1789690232",
+   "expected": "1000000000000000000"
+  },
+  {
+   "name": "recorded after the step, read before it",
+   "change": {
+    "before": "0",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "new": "1001717991187472003",
+   "effective_at": "1789690233",
+   "now": "1789690232",
+   "expected": null
+  },
+  {
+   "name": "a change not recorded",
+   "change": {
+    "before": "0",
+    "after": "0",
+    "effective_at": "0",
+    "confirmed": false
+   },
+   "new": "1001717991187472003",
+   "effective_at": "1789690233",
+   "now": "1789690233",
+   "expected": null
+  },
+  {
+   "name": "a silent replacement",
+   "change": {
+    "before": "1000000000000000000",
+    "after": "1001717991187472003",
+    "effective_at": "1789690233",
+    "confirmed": false
+   },
+   "new": "2000000000000000000",
+   "effective_at": "1789690233",
+   "now": "1789690232",
+   "expected": null
+  }
+ ]
+}

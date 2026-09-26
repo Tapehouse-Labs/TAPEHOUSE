@@ -46,6 +46,10 @@ sol! {
     error IndexInUse(bytes32 feedId);
     #[derive(Debug, PartialEq, Eq)]
     error IncompleteStatus();
+    #[derive(Debug, PartialEq, Eq)]
+    error InvalidToken(address token);
+    #[derive(Debug, PartialEq, Eq)]
+    error NoToken(bytes32 symbol);
 }
 
 #[derive(SolidityError, Debug, PartialEq, Eq)]
@@ -71,4 +75,6 @@ pub enum BandError {
     IndexWithoutChainlink(IndexWithoutChainlink),
     IndexInUse(IndexInUse),
     IncompleteStatus(IncompleteStatus),
+    InvalidToken(InvalidToken),
+    NoToken(NoToken),
 }

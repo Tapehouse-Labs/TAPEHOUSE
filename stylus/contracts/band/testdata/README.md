@@ -24,3 +24,5 @@ The expected values are what `PrimaryProdDataServiceConsumerBase` from `@redston
 Over 30 days of the signed status (27 Aug–25 Sep 2026, four weekends including Labor Day), the same rule places all 7,826 Chainlink rounds of the 35 equity feeds on Robinhood Chain inside the session or within 2 minutes after its close, and the first round after each reopen lands within 25 s.
 
 Every expected value was computed in unbounded integer arithmetic, independently of this crate.
+
+`multiplier-vectors.json` holds the ERC-8056 multiplier rules. Real cases come from Robinhood Chain: NVDA's multiplier applied to the Arbitrum One share price reproduces the Robinhood Chain answer exactly, and SPY's step of 18 Sep 2026 (`effectiveAt` 1789690233, multiplier 1.001717991187472003) turns the share price 760.2447 into the first round after it, 761.55079369. Synthetic cases, labelled as such by their names, cover a 4:1 split, a split followed by a dividend before Chainlink confirms it, a step nobody recorded, a 2.15% dividend, a 2% special dividend, and the edges of the arithmetic.

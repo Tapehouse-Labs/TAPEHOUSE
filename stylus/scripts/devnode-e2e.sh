@@ -13,6 +13,9 @@ node_interface=0x00000000000000000000000000000000000000C8
 nvda=$(cast format-bytes32-string NVDA---24_7)
 usa500=$(cast format-bytes32-string USA500.Y---24_7)
 zero_id=0x0000000000000000000000000000000000000000000000000000000000000000
+zero_address=0x0000000000000000000000000000000000000000
+token=$(jq -r .tokens.NVDA "$registry")
+token_px() { python3 -c "import sys; print(int(sys.argv[1]) * int(sys.argv[2]) // 10**18)" "$1" "$(cast call --rpc-url "$rpc" "$token" "uiMultiplier()(uint256)" | cut -d' ' -f1)"; }
 status_feeds="[$(cast format-bytes32-string NY_MARKET_CURRENT_STATUS),$(cast format-bytes32-string NY_MARKET_NEXT_STATUS),$(cast format-bytes32-string NY_MARKET_NEXT_CHANGE_TIME)]"
 price_written=$(cast keccak "PriceWritten(bytes32,uint256,uint64)")
 
@@ -85,16 +88,16 @@ if out=$(BAND_ASSETS="NVDA TSLA" "$(dirname "$0")/check-band.sh" "$rpc" "$band" 
   fail "check-band.sh accepted a registry that band-args.sh rejects: $out"
 fi
 args=$(BAND_ASSETS="NVDA TSLA" "$(dirname "$0")/band-args.sh" "$registry.swapped")
-read -r symbols feeds feed_ids index_ids <<<"$args"
+read -r symbols feeds feed_ids index_ids tokens <<<"$args"
 swapped=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
-  --constructor-args "$symbols" "$feeds" "$feed_ids" "$index_ids" 2>&1 | grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
+  --constructor-args "$symbols" "$feeds" "$feed_ids" "$index_ids" "$tokens" 2>&1 | grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
 if out=$(BAND_ASSETS="NVDA TSLA" "$(dirname "$0")/check-band.sh" "$rpc" "$swapped" "$registry.swapped"); then
   fail "check-band.sh accepted feeds that describe other assets"
 fi
 grep -q 'describes itself as' <<<"$out" || fail "check-band.sh failed for another reason: $out"
 read -r cl_price cl_updated_at price_247 price_247_ms <<<"$(legs "$symbol_nvda")"
-[ "$cl_price" = 22900000000 ] && [ "$cl_updated_at" -gt 0 ] && [ "$price_247" = "$value" ] && [ "$price_247_ms" = "$package_ms" ] ||
-  fail "legs(NVDA) = $cl_price $cl_updated_at $price_247 $price_247_ms"
+[ "$cl_price" = 22900000000 ] && [ "$cl_updated_at" -gt 0 ] && [ "$price_247" = "$(token_px "$value")" ] &&
+  [ "$price_247_ms" = "$package_ms" ] || fail "legs(NVDA) = $cl_price $cl_updated_at $price_247 $price_247_ms, not the token's price"
 read -r cl_price cl_updated_at price_247 price_247_ms <<<"$(legs "$symbol_tsla")"
 [ "$cl_price" = 37800000000 ] && [ "$cl_updated_at" -gt 0 ] && [ "$price_247" = 0 ] && [ "$price_247_ms" = 0 ] ||
   fail "legs(TSLA) = $cl_price $cl_updated_at $price_247 $price_247_ms before any TSLA write"
@@ -103,24 +106,18 @@ read -r cl_price cl_updated_at price_247 price_247_ms <<<"$(legs "$symbol_spy")"
 [ "$cl_price" = 77232802713 ] && [ "$price_247" = 0 ] || fail "legs(SPY) = $cl_price $cl_updated_at $price_247 $price_247_ms before its first anchor"
 echo "legs L2 gas: NVDA $(l2_gas "$(cast calldata "legs(bytes32)" "$symbol_nvda")"), unknown symbol $(l2_gas "$(cast calldata "legs(bytes32)" "$symbol_aapl")")"
 
-again=0x5585258d$(cast abi-encode "f(bytes32[],address[],bytes32[],bytes32[])" "[$symbol_aapl,$symbol_spy]" \
-  "[0x0000000000000000000000000000000000000000,0x0000000000000000000000000000000000000000]" \
-  "[$(cast format-bytes32-string AAPL---24_7),$usa500]" "[$zero_id,$zero_id]" | cut -c3-)
-(cd "$root/stylus/contracts/band" && cargo stylus get-initcode --output "$root/stylus/target/initcode.hex" > /dev/null 2>&1)
-plain=$(cast send --rpc-url "$rpc" --private-key "$key" --create "0x$(tr -d '\n' < "$root/stylus/target/initcode.hex")" --json |
-  jq -r .contractAddress)
-[ "$(cast send --rpc-url "$rpc" --private-key "$key" "$plain" "$again" --json | jq -r .status)" = 0x1 ] ||
-  fail "the first constructor call on a plain deploy failed"
-[ "$(cast call --rpc-url "$rpc" "$plain" "asset(bytes32)(address,bytes32,bytes32)" "$symbol_aapl" | sed -n 2p)" = \
-  "$(cast format-bytes32-string AAPL---24_7)" ] || fail "the first constructor call did not configure AAPL"
-for program in "$plain" "$band"; do
-  if out=$(cast call --rpc-url "$rpc" "$program" "$again" 2>&1); then
-    fail "the constructor of $program ran a second time: $out"
-  fi
-  grep -q 'data: "0x"$' <<<"$out" || fail "the second constructor call of $program reverted for another reason: $out"
-done
+again=0x5585258d$(cast abi-encode "f(bytes32[],address[],bytes32[],bytes32[],address[])" "[$symbol_aapl]" \
+  "[$zero_address]" "[$(cast format-bytes32-string AAPL---24_7)]" "[$zero_id]" "[$zero_address]" | cut -c3-)
+if out=$(cast call --rpc-url "$rpc" "$band" "$again" 2>&1); then
+  fail "the constructor ran a second time: $out"
+fi
+grep -q 'data: "0x"$' <<<"$out" || fail "the second constructor call reverted for another reason: $out"
+extra=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
+  --constructor-args "[$symbol_aapl,$symbol_spy]" "[$zero_address,$zero_address]" \
+  "[$(cast format-bytes32-string AAPL---24_7),$usa500]" "[$zero_id,$zero_id]" "[$zero_address,$zero_address]" 2>&1 |
+  grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
 jq -n '{chainId: 412346}' > "$registry.redstone"
-if out=$(BAND_ASSETS="AAPL SPY" "$(dirname "$0")/check-band.sh" "$rpc" "$plain" "$registry.redstone"); then
+if out=$(BAND_ASSETS="AAPL SPY" "$(dirname "$0")/check-band.sh" "$rpc" "$extra" "$registry.redstone"); then
   fail "check-band.sh accepted a band that configures an asset band-args.sh leaves out"
 fi
 grep -q 'FAIL: band configures SPY' <<<"$out" || fail "check-band.sh failed for another reason: $out"
@@ -128,7 +125,7 @@ grep -q 'FAIL: band configures SPY' <<<"$out" || fail "check-band.sh failed for 
 stub_18=$(forge create --root "$root/contracts" test/devnode/StubAggregator.sol:StubAggregator \
   --rpc-url "$rpc" --private-key "$key" --broadcast --json --constructor-args 18 1 1 "NVDA / USD" | jq -r .deployedTo)
 if out=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
-  --constructor-args "[$symbol_nvda]" "[$stub_18]" "[$nvda]" "[$zero_id]" 2>&1); then
+  --constructor-args "[$symbol_nvda]" "[$stub_18]" "[$nvda]" "[$zero_id]" "[$zero_address]" 2>&1); then
   fail "a feed with 18 decimals was accepted"
 fi
 if ! grep -q 0x88d8f57d <<<"$out" || ! grep -q 6787b555 <<<"$out"; then
@@ -213,7 +210,8 @@ esac
 quote() {
   cast call --rpc-url "$rpc" "$band" "quote(bytes32)(uint8,uint8,uint64,uint64,uint64,uint128)" "$1" | cut -d' ' -f1 | tr '\n' ' '
 }
-read -r nvda_px _ <<<"$(cast call --rpc-url "$rpc" "$band" "price(bytes32)(uint256,uint64,uint64)" "$nvda" | cut -d' ' -f1 | tr '\n' ' ')"
+read -r nvda_share _ <<<"$(cast call --rpc-url "$rpc" "$band" "price(bytes32)(uint256,uint64,uint64)" "$nvda" | cut -d' ' -f1 | tr '\n' ' ')"
+nvda_px=$(token_px "$nvda_share")
 read -r state live mid _ <<<"$(quote "$symbol_nvda")"
 [ "$state $live" = "$expected" ] && [ "$mid" = "$nvda_px" ] || fail "quote(NVDA) = $(quote "$symbol_nvda") with session $session"
 if [ "$session" = 2 ]; then
@@ -238,6 +236,120 @@ done
 read -r status gas l1 _ <<<"$(write "$keeper_feeds" "$keeper_payload")"
 [ "$status" = 0x1 ] || fail "the second keeper write reverted"
 echo "keeper update of the same five feeds: L2 gas $((gas - l1))"
+
+nvda_feed=$(jq -r .chainlink.NVDA_USD "$registry")
+math() { python3 -c "print($1)"; }
+mine() { cast send --rpc-url "$rpc" --private-key "$key" --value 0 "$(cast wallet address "$key")" > /dev/null; }
+action() {
+  cast call --rpc-url "$rpc" "${2:-$band}" "corporateAction(bytes32)(uint8,uint64,uint128,uint128)" "${1:-$symbol_nvda}" |
+    cut -d' ' -f1 | tr '\n' ' '
+}
+sync_multiplier() {
+  local hash
+  hash=$(cast send --rpc-url "$rpc" --private-key "$key" "${2:-$band}" "syncMultiplier(bytes32)" "${1:-$symbol_nvda}" --json |
+    jq -r .transactionHash)
+  cast rpc --rpc-url "$rpc" eth_getTransactionReceipt "$hash" | jq -r '"\(.status) \(.gasUsed) \(.gasUsedForL1) \(.logs | length)"' |
+    { read -r status gas l1 logs; echo "$status $((gas - l1)) $logs"; }
+}
+schedule() {
+  local at=$(($(date +%s) + 20))
+  cast send --rpc-url "$rpc" --private-key "$key" "${2:-$token}" "updateMultiplier(uint256,uint256)" "$1" "$at" > /dev/null
+  echo "$at"
+}
+after() {
+  local s=$(($1 + 1 - $(date +%s)))
+  [ "$s" -le 0 ] || sleep "$s"
+  mine
+}
+fresh_nvda() {
+  local attempts=0 nvda_payload
+  until nvda_payload=$(python3 "$payload" NVDA---24_7) &&
+    cast call --rpc-url "$rpc" "$1" "writePrices(bytes32[],bytes)" "[$nvda]" "$nvda_payload" > /dev/null 2>&1; do
+    attempts=$((attempts + 1))
+    [ "$attempts" -le 20 ] || fail "no newer NVDA---24_7 package within 200 s"
+    sleep 10
+  done
+  cast send --rpc-url "$rpc" --private-key "$key" "$1" "writePrices(bytes32[],bytes)" "[$nvda]" "$nvda_payload" > /dev/null
+  cast call --rpc-url "$rpc" "$1" "price(bytes32)(uint256,uint64,uint64)" "$nvda" | head -n 1 | cut -d' ' -f1
+}
+halted="0 0 0 0 0 0 "
+
+m0=$(cast call --rpc-url "$rpc" "$token" "uiMultiplier()(uint256)" | cut -d' ' -f1)
+m1=$(math "$m0 * 10017 // 10000")
+at=$(schedule "$m1")
+read -r status sync_gas logs <<<"$(sync_multiplier)"
+[ "$status $logs" = "0x1 1" ] && [ "$(action)" = "0 $at $m0 $m1 " ] || fail "a 17 bps dividend was not recorded, or needs a window: $(action)"
+after "$at"
+read -r nvda_share _ <<<"$(cast call --rpc-url "$rpc" "$band" "price(bytes32)(uint256,uint64,uint64)" "$nvda" | cut -d' ' -f1 | tr '\n' ' ')"
+read -r cl_price _ price_247 _ <<<"$(legs "$symbol_nvda")"
+[ "$cl_price" = "$(math "22900000000 * $m1 // $m0")" ] && [ "$price_247" = "$(token_px "$nvda_share")" ] ||
+  fail "after a dividend, legs(NVDA) = $cl_price $price_247"
+[ "$(quote "$symbol_nvda" | cut -d' ' -f1)" != 0 ] || fail "a dividend halted the band"
+echo "dividend of 17 bps: recorded with L2 gas $sync_gas, Chainlink scaled to $cl_price"
+
+m2=$(math "$m1 * 4")
+at=$(schedule "$m2")
+[ "$(action)" = "1 $at $m1 $m2 " ] && [ "$(quote "$symbol_nvda")" != "$halted" ] || fail "a split scheduled and not synced is not status 1: $(action)"
+after "$at"
+[ "$(action)" = "2 $at 0 $m2 " ] && [ "$(quote "$symbol_nvda")" = "$halted" ] || fail "a split past its step and not synced did not halt NVDA: $(action)"
+read -r status _ logs <<<"$(sync_multiplier)"
+[ "$logs $(action | cut -d' ' -f1)" = "1 2" ] || fail "a split was confirmed without a Chainlink round after it"
+split_at=$at
+m3=$(math "$m2 * 10010 // 10000")
+at=$(schedule "$m3")
+read -r status _ logs <<<"$(sync_multiplier)"
+[ "$logs $(action)" = "0 2 $split_at 0 $m2 " ] && [ "$(quote "$symbol_nvda")" = "$halted" ] || fail "a dividend scheduled over an unconfirmed split ended its halt: $(action)"
+after "$at"
+[ "$(action)" = "2 $split_at 0 $m2 " ] && [ "$(quote "$symbol_nvda")" = "$halted" ] || fail "a dividend's step ended an unconfirmed split's halt: $(action)"
+nvda_share=$(fresh_nvda "$band")
+cast send --rpc-url "$rpc" --private-key "$key" "$nvda_feed" "setRound(int256,uint256)" "$(math "$(token_px "$nvda_share") * 2")" "$(date +%s)" > /dev/null
+read -r status _ logs <<<"$(sync_multiplier)"
+[ "$logs" = 0 ] && [ "$(quote "$symbol_nvda")" = "$halted" ] || fail "a Chainlink round outside the 24/7 band confirmed the split: $(action)"
+cast send --rpc-url "$rpc" --private-key "$key" "$nvda_feed" "setRound(int256,uint256)" "$(token_px "$nvda_share")" "$(date +%s)" > /dev/null
+read -r status confirm_gas logs <<<"$(sync_multiplier)"
+[ "$logs $(action)" = "3 0 $at 0 $m3 " ] && [ "$(quote "$symbol_nvda")" != "$halted" ] ||
+  fail "a Chainlink round inside the 24/7 band did not confirm the split and the dividend after it: $(action)"
+echo "4:1 split, then a dividend: halted until confirmed; confirming both, L2 gas $confirm_gas"
+
+m4=$(math "$m3 * 2")
+at=$(schedule "$m4")
+after "$at"
+m5=$(math "$m4 * 10010 // 10000")
+m5_at=$(schedule "$m5")
+now=$(cast block --rpc-url "$rpc" latest -f timestamp)
+[ "$(action)" = "2 $now 0 $m4 " ] && [ "$(quote "$symbol_nvda")" = "$halted" ] || fail "a step nobody recorded did not halt NVDA: $(action)"
+read -r status _ logs <<<"$(sync_multiplier)"
+[ "$status $logs $(action | cut -d' ' -f1)" = "0x1 1 2" ] || fail "a step nobody recorded was not recorded as unconfirmed: $(action)"
+echo "a 2:1 split nobody recorded: halted from the first read"
+
+spy_token=$(jq -r .tokens.SPY "$registry")
+s0=$(cast call --rpc-url "$rpc" "$spy_token" "uiMultiplier()(uint256)" | cut -d' ' -f1)
+s1=$(math "$s0 * 10017 // 10000")
+read -r spy_cl _ <<<"$(legs "$symbol_spy")"
+at=$(schedule "$s1" "$spy_token")
+read -r status _ logs <<<"$(sync_multiplier "$symbol_spy")"
+[ "$status $logs" = "0x1 1" ] || fail "SPY's dividend was not recorded: $(action "$symbol_spy")"
+after "$at"
+read -r anchor_cl anchor_index _ <<<"$(cast call --rpc-url "$rpc" "$band" "anchor(bytes32)(uint64,uint64,uint64)" "$symbol_spy" | cut -d' ' -f1 | tr '\n' ' ')"
+read -r index_px _ <<<"$(cast call --rpc-url "$rpc" "$band" "price(bytes32)(uint256,uint64,uint64)" "$usa500" | head -n 1)"
+read -r cl_price _ price_247 _ <<<"$(legs "$symbol_spy")"
+[ "$cl_price" = "$(math "$spy_cl * $s1 // $s0")" ] &&
+  [ "$price_247" = "$(math "($anchor_cl * $s1 // $s0) * $index_px // $anchor_index")" ] ||
+  fail "after SPY's dividend, legs(SPY) = $cl_price $price_247 with anchor $anchor_cl $anchor_index"
+echo "SPY's dividend: Chainlink and the index leg's anchor scaled to $cl_price and $price_247"
+
+after "$m5_at"
+args=$(BAND_ASSETS="NVDA" "$(dirname "$0")/band-args.sh" "$registry")
+read -r symbols feeds feed_ids index_ids tokens <<<"$args"
+fresh=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
+  --constructor-args "$symbols" "$feeds" "$feed_ids" "$index_ids" "$tokens" 2>&1 | grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
+[ "$(action "$symbol_nvda" "$fresh")" = "2 $m5_at 0 $m5 " ] || fail "a band deployed after a step does not start halted: $(action "$symbol_nvda" "$fresh")"
+nvda_share=$(fresh_nvda "$fresh")
+cast send --rpc-url "$rpc" --private-key "$key" "$nvda_feed" "setRound(int256,uint256)" "$(token_px "$nvda_share")" "$(date +%s)" > /dev/null
+read -r status _ logs <<<"$(sync_multiplier "$symbol_nvda" "$fresh")"
+[ "$logs $(action "$symbol_nvda" "$fresh")" = "1 0 $m5_at 0 $m5 " ] || fail "a fresh band's first sync did not confirm: $(action "$symbol_nvda" "$fresh")"
+echo "a band deployed after a step: halted until its first sync confirms"
+echo "L2 gas: quote(NVDA) with its Stock Token $(l2_gas "$(cast calldata "quote(bytes32)" "$symbol_nvda")")"
 
 tsla=$(cast format-bytes32-string TSLA---24_7)
 read -r status _ <<<"$(write "[$tsla]" "$(python3 "$payload" TSLA---24_7)")"

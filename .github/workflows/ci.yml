@@ -138,7 +138,7 @@ jobs:
           ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL }}
           ROBINHOOD_TESTNET_RPC_URL: ${{ secrets.ROBINHOOD_TESTNET_RPC_URL }}
           ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL }}
-      - run: /usr/bin/make -n test gas lint snapshot devnode devnode-stop deploy-stylus-devnode test-stylus-devnode check-activation initcode-stylus
+      - run: /usr/bin/make -n test gas lint snapshot devnode devnode-stop deploy-stylus-devnode test-stylus-devnode check-activation
 
   workflows:
     name: Workflows

@@ -28,19 +28,19 @@ pub fn has_expected_decimals(host: &impl Host, feed: Address) -> bool {
     AggregatorV3Interface::new(feed).decimals(host, Call::new()) == Ok(DECIMALS)
 }
 
-/// The latest answer of `feed` and its `updatedAt` in seconds, or `(0, 0)` when the feed is unset,
-/// the call fails, or the answer is not positive. Never reverts and never judges staleness.
-pub fn latest(host: &impl Host, feed: Address) -> (U256, u64) {
+/// The latest answer of `feed`, its `startedAt` and its `updatedAt` in seconds, or zeros when the feed
+/// is unset, the call fails, or the answer is not positive. Never reverts and never judges staleness.
+pub fn latest(host: &impl Host, feed: Address) -> (U256, u64, u64) {
     if feed == Address::ZERO {
-        return (U256::ZERO, 0);
+        return (U256::ZERO, 0, 0);
     }
     match AggregatorV3Interface::new(feed).latest_round_data(host, Call::new()) {
-        Ok((_, answer, _, updated_at, _)) if answer.is_positive() => {
-            match u64::try_from(updated_at) {
-                Ok(updated_at) => (answer.into_raw(), updated_at),
-                Err(_) => (U256::ZERO, 0),
+        Ok((_, answer, started_at, updated_at, _)) if answer.is_positive() => {
+            match (u64::try_from(started_at), u64::try_from(updated_at)) {
+                (Ok(started_at), Ok(updated_at)) => (answer.into_raw(), started_at, updated_at),
+                _ => (U256::ZERO, 0, 0),
             }
         }
-        _ => (U256::ZERO, 0),
+        _ => (U256::ZERO, 0, 0),
     }
 }
