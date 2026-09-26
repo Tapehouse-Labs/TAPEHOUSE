@@ -12,6 +12,11 @@ DEVNODE_ACCOUNT := 0x3f1Eae7D46d88F08fc2F8ed27FCb2AB183EB2d0E
 COVERAGE_MIN := 95
 STYLUS_MAX_COMPRESSED_BYTES := 24576
 STYLUS_SIZE_RUSTFLAGS := --remap-path-prefix=$(or $(CARGO_HOME),$(HOME)/.cargo)/registry/src=/cargo
+CONTRACT ?= band
+RPC_URL_4663 = $(ROBINHOOD_RPC_URL)
+RPC_URL_46630 = $(ROBINHOOD_TESTNET_RPC_URL)
+RPC_URL_42161 = $(ARBITRUM_RPC_URL)
+RPC_URL_412346 = $(DEVNODE_RPC_URL)
 SNAPSHOT_FILTER := --no-match-test '^(testFuzz|invariant|statefulFuzz)'
 ifeq ($(strip $(ROBINHOOD_RPC_URL)),)
 ROBINHOOD_RPC_URL := https://robinhood.drpc.org
@@ -31,7 +36,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	check-toolchains check-node check-foundry check-slither check-stylus check-docker submodules \
 	build-apps test-apps lint-apps \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
-	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation \
+	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation initcode-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode
 
 all: build
@@ -75,7 +80,7 @@ check-stylus:
 
 check-docker:
 	@docker info >/dev/null 2>&1 || \
-		{ echo "Docker is required for the dev node. Start Docker and retry."; exit 1; }
+		{ echo "Docker is required for the dev node and reproducible builds. Start Docker and retry."; exit 1; }
 
 node_modules/.modules.yaml: package.json pnpm-workspace.yaml pnpm-lock.yaml $(wildcard apps/*/package.json)
 	pnpm install --frozen-lockfile
@@ -160,6 +165,14 @@ check-activation: check-stylus
 	@for rpc in $(ROBINHOOD_RPC_URL) $(ROBINHOOD_TESTNET_RPC_URL) $(ARBITRUM_RPC_URL); do \
 		for dir in stylus/contracts/*/; do \
 			(cd $$dir && cargo stylus check -e $$rpc) || exit 1; done; done
+
+initcode-stylus: check-docker check-foundry
+	CARGO_STYLUS_VERSION=$(CARGO_STYLUS_VERSION) stylus/scripts/reproducible.sh initcode
+
+verify-stylus: check-docker
+	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(TX)" || \
+		{ echo "Usage: make verify-stylus CHAIN=<4663|46630|42161|412346> TX=<deployment tx> [CONTRACT=band]"; exit 1; }
+	CARGO_STYLUS_VERSION=$(CARGO_STYLUS_VERSION) stylus/scripts/reproducible.sh verify $(RPC_URL_$(CHAIN)) $(TX) $(CONTRACT)
 
 devnode: check-docker check-foundry
 	@docker rm -f tapehouse-devnode >/dev/null 2>&1 || true

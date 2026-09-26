@@ -49,6 +49,8 @@ make test
 | `make check-activation` | `cargo stylus check` of every program against Robinhood Chain, its testnet and Arbitrum One |
 | `make build-apps` · `test-apps` · `lint-apps` | Apps only |
 | `make devnode deploy-stylus-devnode test-stylus-devnode` | Deploys `band` to a local dev node and writes live RedStone prices through it |
+| `make initcode-stylus` | Builds every program's initcode reproducibly, in the image `cargo stylus verify` uses |
+| `make verify-stylus CHAIN=<id> TX=<hash>` | Verifies a deployment against the checked-out source |
 
 ## Networks
 
@@ -87,11 +89,35 @@ cast wallet import tapehouse-deployer --interactive
 The asset configuration is set once, in the constructor, and cannot change. Each asset has a Chainlink feed, a RedStone feed ID or both. Every configured feed must report 8 decimals. The program is deployed through [StylusDeployer](https://github.com/OffchainLabs/nitro-contracts/blob/main/src/stylus/StylusDeployer.sol) at `0xcEcba2F1DC234f70Dd89F2041029807F8D03A990`, which deploys, activates and runs the constructor in one transaction, so nobody else can call the constructor first:
 
 ```bash
-(cd stylus/contracts/band && cargo stylus deploy --no-verify -e <rpc> <signer flags> \
-  --constructor-args $(../../scripts/band-args.sh ../../../deployments/<chainId>.json))
+make initcode-stylus
+args=$(stylus/scripts/band-args.sh deployments/<chainId>.json) && read -r symbols feeds feed_ids <<<"$args"
+stylus/scripts/deploy-initcode.sh <rpc> stylus/target/reproducible/band.initcode.hex \
+  "0x5585258d$(cast abi-encode 'f(bytes32[],address[],bytes32[])' "$symbols" "$feeds" "$feed_ids" | cut -c3-)" <signer flags>
 stylus/scripts/check-band.sh <rpc> <band address> deployments/<chainId>.json
+make verify-stylus CHAIN=<chainId> TX=<deployment tx>
 ```
 
-`--constructor-args` must be the last flag. `band-args.sh` builds the arguments for the launch assets from the chain's registry file, and `check-band.sh` checks a deployed program against it: every configured asset, each feed's description, and that the launch assets it leaves out are unconfigured. A program deployed with `--no-verify` can never pass `cargo stylus verify`, so this route is for development only. `make devnode` deploys StylusDeployer on the dev node at its canonical address, from `stylus/scripts/stylus-deployer.hex`: the salt and initcode of its deployment on Arbitrum One.
+`0x5585258d` is the selector of every Stylus constructor. For development, `cargo stylus deploy --no-verify … --constructor-args …` deploys the same way in one command, but a program built that way can never be verified; `--constructor-args` must then be the last flag. `band-args.sh` builds the arguments for the launch assets from the chain's registry file, and `check-band.sh` checks a deployed program against it: every configured asset, each feed's description, and that the launch assets it leaves out are unconfigured. `make devnode` deploys StylusDeployer on the dev node at its canonical address, from `stylus/scripts/stylus-deployer.hex`: the salt and initcode of its deployment on Arbitrum One.
 
 `stylus/scripts/redstone-payload.py` builds a payload from the latest packages, for example `python3 stylus/scripts/redstone-payload.py NVDA---24_7`. It reads the public gateways, or the main gateway when `REDSTONE_API_KEY` is set.
+
+## Verification
+
+Every deployed Stylus program can be rebuilt from this repository and compared byte for byte with the code on chain. `make initcode-stylus` and `make verify-stylus` run `cargo-stylus` in the Docker image that `cargo stylus deploy` and `cargo stylus verify` use for reproducible builds (`offchainlabs/cargo-stylus-base` plus the toolchain in `stylus/rust-toolchain.toml`, linux/amd64), on the staged content of `stylus/`, so untracked files and unstaged edits never enter the build.
+
+To verify a deployment yourself you need only Docker, make and git (`make initcode-stylus` also needs Foundry's `cast`):
+
+```bash
+git checkout <commit>
+make verify-stylus CHAIN=<chainId> TX=<deployment tx>
+```
+
+It passes only when `cargo-stylus` prints `Verification successful`. Running `cargo stylus verify` directly also works, from `stylus/contracts/band`, but it exits 0 even when verification fails: read its last line. The *Stylus verification* workflow runs the same check on GitHub for any commit and deployment.
+
+Verification covers the program's code. The configuration it was constructed with is checked by `stylus/scripts/check-band.sh`, which only reads the chain.
+
+Each deployment below verifies from the commit that added its row: `git log -1 --format=%H -S <address> -- README.md`.
+
+| Chain | Program | Address | Deployment |
+|---|---|---|---|
+| 46630 | band | `0x8571fc20dD9323AF25E0D5c3F4795D8954f95498` | `0x559061ce397294f3e829ba15551fdada499b4f666d503f7f245b527a3102de08` |

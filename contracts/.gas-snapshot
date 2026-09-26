@@ -10,7 +10,7 @@ ChainlinkRobinhoodForkTest:test_PriceIsTheRawSharePriceTimesTheUiMultiplier() (g
 ChainlinkRobinhoodForkTest:test_RoundsAreEitherHeartbeatsOrDeviations() (gas: 856174)
 RegistryForkTest:test_ArbitrumEntriesAreTheContractsTheyClaimToBe() (gas: 311745)
 RegistryForkTest:test_RobinhoodEntriesAreTheContractsTheyClaimToBe() (gas: 567895)
-RegistryForkTest:test_RobinhoodTestnetEntriesAreTheContractsTheyClaimToBe() (gas: 45801)
+RegistryForkTest:test_RobinhoodTestnetEntriesAreTheContractsTheyClaimToBe() (gas: 47058)
 RegistryTest:test_EveryEntryIsChecksummedAndFilesAreNamedAfterTheirChain() (gas: 3003)
 StockTokenForkTest:test_AdminBurnTakesFromAnyAddressWithoutApproval() (gas: 650720)
 StockTokenForkTest:test_BlocklistCoversSenderRecipientAndCaller() (gas: 979674)

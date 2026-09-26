@@ -1,0 +1,88 @@
+name: Stylus verification
+
+permissions: {}
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Commit to build (40 hexadecimal characters)
+        type: string
+        required: true
+      chain:
+        description: Chain of the deployment to verify
+        type: choice
+        options: ["46630", "4663", "42161"]
+        default: "46630"
+      tx:
+        description: Deployment transaction to verify (empty to build the initcode only)
+        type: string
+        required: false
+      contract:
+        description: Program the deployment transaction deployed
+        type: choice
+        options: ["band"]
+        default: band
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.commit }}-${{ inputs.tx }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  initcode:
+    name: Reproducible initcode
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      COMMIT: ${{ inputs.commit }}
+    steps:
+      - run: '[[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "commit must be 40 hexadecimal characters"; exit 1; }'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: v1.8.3
+      - run: make initcode-stylus | tee "$RUNNER_TEMP/initcode.txt"
+      - run: |
+          {
+            echo "Commit \`$COMMIT\`"
+            echo '```'
+            grep -E '^[a-z0-9_-]+: 0x[0-9a-f]{64}$' "$RUNNER_TEMP/initcode.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: stylus-initcode
+          path: stylus/target/reproducible/
+          if-no-files-found: error
+
+  verify:
+    name: Verify deployment
+    if: inputs.tx != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      COMMIT: ${{ inputs.commit }}
+      CHAIN: ${{ inputs.chain }}
+      TX: ${{ inputs.tx }}
+      CONTRACT: ${{ inputs.contract }}
+    steps:
+      - run: |
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "commit must be 40 hexadecimal characters"; exit 1; }
+          [[ "$TX" =~ ^0x[0-9a-fA-F]{64}$ ]] || { echo "tx must be a 32-byte transaction hash"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - run: make verify-stylus CHAIN="$CHAIN" TX="$TX" CONTRACT="$CONTRACT"
+      - run: echo "Verified $CONTRACT at \`$TX\` on chain $CHAIN against commit \`$COMMIT\`." >> "$GITHUB_STEP_SUMMARY"
