@@ -174,19 +174,15 @@ devnode: check-docker check-foundry
 	@cast send --rpc-url $(DEVNODE_RPC_URL) --private-key $(DEVNODE_KEY) --value 0 $(DEVNODE_ACCOUNT) >/dev/null
 	@test "$$(cast call --rpc-url $(DEVNODE_RPC_URL) 0x0000000000000000000000000000000000000064 'arbOSVersion()(uint256)')" = 116 || \
 		{ echo "The dev node did not reach ArbOS 61."; exit 1; }
+	@stylus/scripts/deploy-stylus-deployer.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY)
 	@echo "Dev node ready on $(DEVNODE_RPC_URL): chain $$(cast chain-id --rpc-url $(DEVNODE_RPC_URL)), ArbOS 61."
 
 devnode-stop:
 	docker rm -f tapehouse-devnode
 
-deploy-stylus-devnode: check-stylus check-foundry
-	@mkdir -p stylus/target
-	cd stylus/contracts/band && cargo stylus deploy --no-verify -e $(DEVNODE_RPC_URL) \
-		--private-key $(DEVNODE_KEY) > ../../target/devnode-band.log
-	@cast receipt --rpc-url $(DEVNODE_RPC_URL) \
-		$$(grep 'deployment tx hash' stylus/target/devnode-band.log | grep -o '0x[0-9a-f]\{64\}') \
-		contractAddress > stylus/target/devnode-band
-	@echo "band deployed on the dev node at $$(cat stylus/target/devnode-band)."
+deploy-stylus-devnode: check-stylus check-foundry submodules
+	stylus/scripts/devnode-deploy.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY)
 
-test-stylus-devnode: check-foundry
-	stylus/scripts/devnode-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) $$(cat stylus/target/devnode-band)
+test-stylus-devnode: check-stylus check-foundry submodules
+	stylus/scripts/devnode-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) \
+		$$(cat stylus/target/devnode-band) stylus/target/devnode-registry.json

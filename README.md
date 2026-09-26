@@ -81,5 +81,17 @@ cast wallet import tapehouse-deployer --interactive
 
 - `writePrices(bytes32[] feedIds, bytes payload)` verifies the payload and stores each value. Anyone may call it; a package no newer than the stored one reverts with `PackageNotNewer`.
 - `price(bytes32 feedId)` returns the value, its package timestamp in milliseconds and the block timestamp it was written at, and never reverts.
+- `asset(bytes32 symbol)` returns the asset's Chainlink feed and RedStone feed ID, both zero for an unknown symbol.
+- `legs(bytes32 symbol)` returns the Chainlink answer and its `updatedAt` in seconds, then the stored RedStone 24/7 value and its package timestamp in milliseconds. Zero for a leg that is unset or unreadable; it never reverts and never judges staleness.
+
+The asset configuration is set once, in the constructor, and cannot change. Each asset has a Chainlink feed, a RedStone feed ID or both. Every configured feed must report 8 decimals. The program is deployed through [StylusDeployer](https://github.com/OffchainLabs/nitro-contracts/blob/main/src/stylus/StylusDeployer.sol) at `0xcEcba2F1DC234f70Dd89F2041029807F8D03A990`, which deploys, activates and runs the constructor in one transaction, so nobody else can call the constructor first:
+
+```bash
+(cd stylus/contracts/band && cargo stylus deploy --no-verify -e <rpc> <signer flags> \
+  --constructor-args $(../../scripts/band-args.sh ../../../deployments/<chainId>.json))
+stylus/scripts/check-band.sh <rpc> <band address> deployments/<chainId>.json
+```
+
+`--constructor-args` must be the last flag. `band-args.sh` builds the arguments for the launch assets from the chain's registry file, and `check-band.sh` checks a deployed program against it. `make devnode` deploys StylusDeployer on the dev node at its canonical address, from `stylus/scripts/stylus-deployer.hex`: the salt and initcode of its deployment on Arbitrum One.
 
 `stylus/scripts/redstone-payload.py` builds a payload from the latest packages, for example `python3 stylus/scripts/redstone-payload.py NVDA---24_7`. It reads the public gateways, or the main gateway when `REDSTONE_API_KEY` is set.

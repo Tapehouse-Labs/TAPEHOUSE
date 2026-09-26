@@ -26,6 +26,16 @@ sol! {
     error TimestampIsTooOld(uint256 receivedTimestampSeconds, uint256 blockTimestamp);
     #[derive(Debug, PartialEq, Eq)]
     error PackageNotNewer(bytes32 feedId, uint64 storedTimestampMs, uint64 packageTimestampMs);
+    #[derive(Debug, PartialEq, Eq)]
+    error LengthMismatch();
+    #[derive(Debug, PartialEq, Eq)]
+    error ZeroSymbol();
+    #[derive(Debug, PartialEq, Eq)]
+    error NoLegs(bytes32 symbol);
+    #[derive(Debug, PartialEq, Eq)]
+    error DuplicateAsset(bytes32 symbol);
+    #[derive(Debug, PartialEq, Eq)]
+    error InvalidFeed(address feed);
 }
 
 #[derive(SolidityError, Debug, PartialEq, Eq)]
@@ -41,4 +51,9 @@ pub enum BandError {
     TimestampFromTooLongFuture(TimestampFromTooLongFuture),
     TimestampIsTooOld(TimestampIsTooOld),
     PackageNotNewer(PackageNotNewer),
+    LengthMismatch(LengthMismatch),
+    ZeroSymbol(ZeroSymbol),
+    NoLegs(NoLegs),
+    DuplicateAsset(DuplicateAsset),
+    InvalidFeed(InvalidFeed),
 }
