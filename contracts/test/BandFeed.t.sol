@@ -234,13 +234,14 @@ contract BandFeedTest is Test {
         assertEq(sealedAt, vm.getBlockTimestamp());
     }
 
-    function testFuzz_ASealStandsOnlyInsideTheWindow(uint64 aheadMs) public {
+    function testFuzz_ASealStandsOnlyInsideTheWindow(int256 aheadMs) public {
         BandFeed feed = _feed(BandFeed.Side.Low);
-        uint64 nowMs = uint64(vm.getBlockTimestamp()) * 1000;
-        aheadMs = uint64(bound(aheadMs, 0, 2 * feed.SEAL_WINDOW_MS()));
-        band.setSession(BandDouble.Session(1, 3, 1, nowMs + aheadMs, nowMs + aheadMs));
-        if (aheadMs == 0 || aheadMs > feed.SEAL_WINDOW_MS()) {
-            vm.expectRevert(abi.encodeWithSelector(BandFeed.NotSealWindow.selector, uint8(1), nowMs + aheadMs));
+        int256 window = int256(uint256(feed.SEAL_WINDOW_MS()));
+        aheadMs = bound(aheadMs, -2 * window, 2 * window);
+        uint64 reopenMs = uint64(uint256(int256(vm.getBlockTimestamp() * 1000) + aheadMs));
+        band.setSession(BandDouble.Session(1, 3, 1, reopenMs, reopenMs));
+        if (aheadMs <= 0 || aheadMs > window) {
+            vm.expectRevert(abi.encodeWithSelector(BandFeed.NotSealWindow.selector, uint8(1), reopenMs));
         }
         feed.seal();
     }

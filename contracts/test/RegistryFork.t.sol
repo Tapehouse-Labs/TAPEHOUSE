@@ -4,6 +4,7 @@ pragma solidity 0.8.37;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {AggregatorV3Interface, IUniswapV3Factory} from "./conformance/Interfaces.sol";
+import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {BandFeed} from "../src/BandFeed.sol";
 
 contract RegistryForkTest is Test {
@@ -80,6 +81,12 @@ contract RegistryForkTest is Test {
             assertEq(address(feed.band()), band, assets[i]);
             assertEq(feed.symbol(), bytes32(bytes(assets[i])), assets[i]);
             assertEq(feed.decimals(), 8, assets[i]);
+            assertEq(uint8(feed.side()), uint8(BandFeed.Side.Low), assets[i]);
+            IUniswapV3Pool pool = feed.pool();
+            if (address(pool) != address(0)) {
+                address token = vm.parseJsonAddress(json, string.concat(".tokens.", assets[i]));
+                assertTrue(pool.token0() == token || pool.token1() == token, assets[i]);
+            }
         }
     }
 

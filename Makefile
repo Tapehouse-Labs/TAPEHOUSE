@@ -102,7 +102,7 @@ lint-apps: check-node node_modules/.modules.yaml
 	pnpm -r run --if-present lint
 
 submodules:
-	git submodule update --init --recursive
+	@git submodule update --init --recursive
 
 lint-scripts:
 	@shellcheck contracts/script/*.sh stylus/scripts/*.sh
@@ -205,7 +205,8 @@ deploy-band-feeds: check-foundry submodules
 	@contracts/script/deploy-band-feeds.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
 
 verify-band-feeds: check-foundry submodules
-	@case "$(CHAIN)" in 4663|46630|42161) ;; *) echo "Usage: make verify-band-feeds CHAIN=<4663|46630|42161>"; exit 1;; esac
+	@case "$(CHAIN)" in 4663|46630|42161) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
+		{ echo "Usage: make verify-band-feeds CHAIN=<4663|46630|42161>, with the chain's RPC URL set"; exit 1; }
 	@contracts/script/verify-band-feeds.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
 
 verify-stylus: check-docker

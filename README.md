@@ -54,7 +54,7 @@ make test
 | `make gas-stylus-devnode` · `snapshot-stylus-devnode` | Compares the dev-node suite's L2 gas with `stylus/.gas-devnode`, failing on a move over 0.5%, or regenerates it |
 | `make deploy-stylus CHAIN=<id> SIGNER='<flags>'` | Deploys `band` reproducibly, configured from `deployments/<id>.json`, and prints the transaction and address |
 | `make verify-stylus CHAIN=<id> TX=<hash>` | Verifies a deployment against the checked-out source |
-| `make deploy-band-feeds CHAIN=<id> SIGNER='<flags>'` | Deploys a `BandFeed` for every asset the chain's band configures and prints each address |
+| `make deploy-band-feeds CHAIN=<id> SIGNER='<flags>'` | Deploys a `BandFeed` for every launch asset the chain's band configures and prints each address |
 | `make verify-band-feeds CHAIN=<id>` | Verifies every feed in the registry's `.bandFeeds` on Sourcify |
 
 ## Networks
@@ -220,7 +220,7 @@ make deploy-band-feeds CHAIN=<chainId> SIGNER='--account <name> --password-file 
 make verify-band-feeds CHAIN=<chainId>
 ```
 
-`make deploy-band-feeds` deploys a low-side feed for every launch asset the registry's band configures, with the asset's `<ASSET>_USDG_*` pool from `.uniswapV3` when it has a Stock Token. Record each address in the registry's `.bandFeeds` group; fork tests check every entry against its band. `make verify-band-feeds` rebuilds each feed's constructor arguments from the chain and verifies the feed on [Sourcify](https://sourcify.dev), which supports all three chains and the compiler this repository pins.
+`make deploy-band-feeds` deploys a low-side feed for every launch asset the registry's band configures, with the asset's `<ASSET>_USDG_*` pool from `.uniswapV3` when it has a Stock Token (it stops if the registry names two), and names each launch asset it skips. `BAND_ASSETS='<ASSET> …'` limits it to the assets named, for example to finish a deployment that stopped partway. Record each address in the registry's `.bandFeeds` group; fork tests check every entry against its band. `make verify-band-feeds` rebuilds each feed's constructor arguments from the chain and verifies the feed on [Sourcify](https://sourcify.dev), which supports all three chains and the compiler this repository pins.
 
 ## Verification
 

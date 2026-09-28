@@ -18,14 +18,17 @@ for asset in ${BAND_ASSETS:-NVDA TSLA AAPL MSFT GOOGL SPY}; do
   symbol=$(cast format-bytes32-string "$asset")
   info=$(cast call --rpc-url "$rpc" "$band" "asset(bytes32)(address,bytes32,bytes32,address)" "$symbol")
   read -r feed feed_id index_id token <<<"$(tr '\n' ' ' <<<"$info")"
-  [ "$feed" != $zero_address ] || [ "$feed_id" != $zero_id ] || [ "$index_id" != $zero_id ] || continue
+  [ "$feed" != $zero_address ] || [ "$feed_id" != $zero_id ] || [ "$index_id" != $zero_id ] ||
+    { echo "$asset: not configured by $band, skipped" >&2; continue; }
   pool=$zero_address priced="$asset share"
   if [ "$token" != $zero_address ]; then
     priced="Robinhood $asset Stock Token"
     pool=$(jq -r --arg prefix "${asset}_USDG_" --arg zero $zero_address \
-      '[.uniswapV3 // {} | to_entries[] | select(.key | startswith($prefix)) | .value][0] // $zero' "$registry")
+      '[.uniswapV3 // {} | to_entries[] | select(.key | startswith($prefix)) | .value]
+       | if length > 1 then error("more than one \($prefix) pool") else .[0] // $zero end' "$registry")
   fi
   address=$(forge create --root "$root/contracts" src/BandFeed.sol:BandFeed --rpc-url "$rpc" --broadcast --json "$@" \
-    --constructor-args "$band" "$symbol" 0 "$pool" "$asset / USD Tapehouse band, low side ($priced)" | jq -r .deployedTo)
+    --constructor-args "$band" "$symbol" 0 "$pool" "$asset / USD Tapehouse band, low side ($priced)" | jq -er .deployedTo) ||
+    { echo "forge create deployed no $asset feed" >&2; exit 1; }
   echo "$asset $address"
 done

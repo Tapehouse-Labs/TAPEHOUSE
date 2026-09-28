@@ -563,7 +563,10 @@ expect_feed_revert "$arbitrum_feed" 0xc6b5066d
 fresh_nvda "$arbitrum" > /dev/null
 cast send --rpc-url "$rpc" --private-key "$key" "$sequencer" "setRound(int256,uint256)" 0 $(($(block_time) - 3700)) > /dev/null
 [ "$(settled_view) $(arbitrum_state)" = "true $settled" ] || fail "a sequencer back for over an hour did not restore the band"
-round_of "$arbitrum_feed" > /dev/null || fail "the feed did not answer once the sequencer settled"
+round=$(round_of "$arbitrum_feed") || fail "the feed did not answer once the sequencer settled"
+read -r _ answer _ <<<"$round"
+arbitrum_low=$(cast call --rpc-url "$rpc" "$arbitrum" "quote(bytes32)(uint8,uint8,uint64,uint64,uint64,uint128)" "$symbol_nvda" | sed -n 5p | cut -d' ' -f1)
+[ "$answer" = "$arbitrum_low" ] || fail "the feed answered $answer once the sequencer settled, quote's low is $arbitrum_low"
 echo "Arbitrum One configuration: a down or recent sequencer degrades the band, and the feed refuses to answer"
 
 tsla=$(cast format-bytes32-string TSLA---24_7)
