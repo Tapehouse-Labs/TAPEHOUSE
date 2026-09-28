@@ -41,22 +41,16 @@ contract RegistryForkTest is Test {
         assertEq(block.chainid, 46630);
         _assertTokens(json);
         assertEq(bytes4(vm.parseJsonAddress(json, ".tapehouse.Band").code), STYLUS_ROOT_PREFIX, "tapehouse.Band");
-        bytes memory haltSigner = vm.rpc(
-            "eth_call",
-            string.concat(
-                '[{"to":"',
-                vm.toString(vm.parseJsonAddress(json, ".tapehouse.Band")),
-                '","data":"',
-                vm.toString(abi.encodeWithSignature("haltSigner()")),
-                '"},"',
-                _quantity(ROBINHOOD_TESTNET_BLOCK),
-                '"]'
-            )
-        );
+        address band = vm.parseJsonAddress(json, ".tapehouse.Band");
         assertEq(
-            abi.decode(haltSigner, (address)),
+            _bandAddress(band, "haltSigner()", ROBINHOOD_TESTNET_BLOCK),
             vm.parseJsonAddress(json, ".tapehouse.HaltSigner"),
             "tapehouse.HaltSigner"
+        );
+        assertEq(
+            _bandAddress(band, "owner()", ROBINHOOD_TESTNET_BLOCK),
+            vm.parseJsonAddress(json, ".tapehouse.Owner"),
+            "tapehouse.Owner"
         );
     }
 
@@ -94,6 +88,22 @@ contract RegistryForkTest is Test {
             assertTrue(ok, symbols[i]);
             assertEq(abi.decode(symbol, (string)), symbols[i], symbols[i]);
         }
+    }
+
+    function _bandAddress(address band, string memory signature, uint256 blockNumber) internal returns (address) {
+        bytes memory result = vm.rpc(
+            "eth_call",
+            string.concat(
+                '[{"to":"',
+                vm.toString(band),
+                '","data":"',
+                vm.toString(abi.encodeWithSignature(signature)),
+                '"},"',
+                _quantity(blockNumber),
+                '"]'
+            )
+        );
+        return abi.decode(result, (address));
     }
 
     function _quantity(uint256 value) internal pure returns (string memory) {

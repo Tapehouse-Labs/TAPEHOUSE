@@ -176,8 +176,9 @@ check-activation: check-stylus
 gas-stylus-devnode:
 	@test -s stylus/target/devnode-gas.txt || { echo "No dev-node gas report. Run: make test-stylus-devnode"; exit 1; }
 	@awk -v tol=$(DEVNODE_GAS_TOLERANCE_BPS) 'NR == FNR { now[$$1] = $$2; next } \
-		{ seen[$$1] = 1; d = now[$$1] - $$2; if (!($$1 in now) || (d < 0 ? -d : d) * 10000 > $$2 * tol) { bad = 1; \
-			printf "%s: %s L2 gas, snapshot %s\n", $$1, ($$1 in now) ? now[$$1] : "not measured", $$2 } } \
+		{ seen[$$1] = 1; if (!($$1 in now)) { bad = 1; printf "%s: not measured, snapshot %s\n", $$1, $$2; next } \
+			d = now[$$1] - $$2; if ((d < 0 ? -d : d) * 10000 > $$2 * tol) { bad = 1; \
+			printf "%s: %s L2 gas, snapshot %s\n", $$1, now[$$1], $$2 } } \
 		END { for (k in now) if (!(k in seen)) { bad = 1; printf "%s: %s L2 gas, not in the snapshot\n", k, now[k] } \
 			if (bad) { print "Dev-node gas moved more than " tol / 100 "%. Run: make snapshot-stylus-devnode"; exit 1 } \
 			print "Dev-node gas within " tol / 100 "% of stylus/.gas-devnode." }' \

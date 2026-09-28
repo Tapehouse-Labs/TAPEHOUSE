@@ -282,7 +282,8 @@ impl Band {
     /// the RedStone share price times the token's multiplier, a Chainlink round from before a
     /// multiplier step scaled to the new terms, and for an asset priced from an index, the anchor's
     /// print moved by the index since. Zero for a leg that is unset, unreadable, above `u64`, or not
-    /// known in the current terms. Never reverts.
+    /// known in the current terms. Never reverts. On a chain whose Chainlink feeds follow NYSE regular
+    /// hours, the Chainlink leg is reported as read, and `quote` ignores it outside regular hours.
     pub fn legs(&self, symbol: B256) -> (U256, u64, U256, u64) {
         let (legs, _) = self.priced_legs(symbol, self.vm().block_timestamp());
         (
