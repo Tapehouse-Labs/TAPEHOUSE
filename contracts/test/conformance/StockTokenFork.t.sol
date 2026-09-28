@@ -19,7 +19,6 @@ contract StockTokenForkTest is Test {
     }
 
     uint256 internal constant ROBINHOOD_BLOCK = 69_922_505;
-    string internal constant ROBINHOOD_BLOCK_HEX = "0x42aeec9";
     bytes32 internal constant BEACON_SLOT = 0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50;
     address internal constant STOCK_IMPLEMENTATION = 0xb35490d6f9163DE4F80d88dc75c3516eb64C5aE2;
 
@@ -107,10 +106,11 @@ contract StockTokenForkTest is Test {
     }
 
     function test_RoleHistoryHasNoOtherHolder() public {
-        assertEq(vm.parseUint(ROBINHOOD_BLOCK_HEX), ROBINHOOD_BLOCK);
         bytes32 granted = keccak256("RoleGranted(bytes32,address,address)");
         bytes32 revoked = keccak256("RoleRevoked(bytes32,address,address)");
+        vm.pauseGasMetering();
         RpcLog[] memory logs = _inChainOrder(_registryLogs(granted), _registryLogs(revoked));
+        vm.resumeGasMetering();
 
         bytes32[] memory roles = new bytes32[](logs.length);
         address[] memory accounts = new address[](logs.length);
@@ -141,17 +141,40 @@ contract StockTokenForkTest is Test {
         }
     }
 
-    function _registryLogs(bytes32 topic) internal returns (RpcLog[] memory) {
-        string memory filter = string.concat(
-            '[{"fromBlock":"0x0","toBlock":"',
-            ROBINHOOD_BLOCK_HEX,
-            '","address":"',
-            vm.toString(address(registry)),
-            '","topics":["',
-            vm.toString(topic),
-            '"]}]'
-        );
-        return abi.decode(vm.rpc("robinhood-logs", "eth_getLogs", filter), (RpcLog[]));
+    /// Every `topic` log of the registry up to the pinned block. The RPC caps the block range of a log query,
+    /// and the cap has changed with the query's shape and over time, so a refused range is split tenfold.
+    function _registryLogs(bytes32 topic) internal returns (RpcLog[] memory logs) {
+        uint256 window = ROBINHOOD_BLOCK + 1;
+        uint256 from;
+        while (from <= ROBINHOOD_BLOCK) {
+            uint256 to = from + window - 1 < ROBINHOOD_BLOCK ? from + window - 1 : ROBINHOOD_BLOCK;
+            string memory filter = string.concat(
+                '[{"fromBlock":"',
+                _hex(from),
+                '","toBlock":"',
+                _hex(to),
+                '","address":"',
+                vm.toString(address(registry)),
+                '","topics":["',
+                vm.toString(topic),
+                '"]}]'
+            );
+            try vm.rpc("robinhood-logs", "eth_getLogs", filter) returns (bytes memory result) {
+                RpcLog[] memory found = abi.decode(result, (RpcLog[]));
+                RpcLog[] memory joined = new RpcLog[](logs.length + found.length);
+                for (uint256 k; k < logs.length; ++k) {
+                    joined[k] = logs[k];
+                }
+                for (uint256 k; k < found.length; ++k) {
+                    joined[logs.length + k] = found[k];
+                }
+                logs = joined;
+                from = to + 1;
+            } catch {
+                assertGt(window, 1_000_000, "ROBINHOOD_LOGS_RPC_URL refuses log ranges of a million blocks");
+                window /= 10;
+            }
+        }
     }
 
     function _inChainOrder(RpcLog[] memory a, RpcLog[] memory b) internal pure returns (RpcLog[] memory logs) {
@@ -171,6 +194,23 @@ contract StockTokenForkTest is Test {
         for (uint256 i; i < value.length; ++i) {
             n = n << 8 | uint8(value[i]);
         }
+    }
+
+    function _hex(uint256 value) internal pure returns (string memory) {
+        bytes memory digits = "0123456789abcdef";
+        bytes memory out = new bytes(64);
+        uint256 length;
+        do {
+            out[63 - length++] = digits[value & 15];
+            value >>= 4;
+        } while (value != 0);
+        bytes memory quantity = new bytes(length + 2);
+        quantity[0] = "0";
+        quantity[1] = "x";
+        for (uint256 i; i < length; ++i) {
+            quantity[i + 2] = out[64 - length + i];
+        }
+        return string(quantity);
     }
 
     function test_TransferToAContractNeedsNoAllowlist() public {
