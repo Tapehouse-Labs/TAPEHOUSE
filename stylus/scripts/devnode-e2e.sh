@@ -31,8 +31,13 @@ write() {
 
 l2_gas() {
   cast call --rpc-url "$rpc" $node_interface "gasEstimateComponents(address,bool,bytes)(uint64,uint64,uint256,uint256)" \
-    "$band" false "$1" | head -n 2 | cut -d' ' -f1 | { read -r total; read -r l1; echo $((total - l1)); }
+    "${2:-$band}" false "$1" | head -n 2 | cut -d' ' -f1 | { read -r total; read -r l1; echo $((total - l1)); }
 }
+
+gas_log=$root/stylus/target/devnode-gas.txt
+: > "$gas_log"
+record() { echo "$1 $2" >> "$gas_log"; echo "$2"; }
+measure() { record "$1" "$(l2_gas "$(cast calldata "$2" "${@:3}")")"; }
 
 legs() {
   cast call --rpc-url "$rpc" "$band" "legs(bytes32)(uint256,uint64,uint256,uint64)" "$1" | cut -d' ' -f1 | tr '\n' ' '
@@ -92,10 +97,10 @@ if out=$(BAND_ASSETS="NVDA TSLA SPY" "$(dirname "$0")/check-band.sh" "$rpc" "$ba
   fail "check-band.sh accepted another halt signer"
 fi
 grep -q "halt signer" <<<"$out" || fail "check-band.sh failed for another reason: $out"
-args=$(BAND_ASSETS="NVDA TSLA" "$(dirname "$0")/band-args.sh" "$registry.swapped")
-read -r symbols feeds feed_ids index_ids tokens halt_signer <<<"$args"
+words=$(BAND_ASSETS="NVDA TSLA" "$(dirname "$0")/band-args.sh" "$registry.swapped")
+read -r -a args <<<"$words"
 swapped=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
-  --constructor-args "$symbols" "$feeds" "$feed_ids" "$index_ids" "$tokens" "$halt_signer" 2>&1 | grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
+  --constructor-args "${args[@]}" 2>&1 | grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
 if out=$(BAND_ASSETS="NVDA TSLA" "$(dirname "$0")/check-band.sh" "$rpc" "$swapped" "$registry.swapped"); then
   fail "check-band.sh accepted feeds that describe other assets"
 fi
@@ -109,7 +114,7 @@ read -r cl_price cl_updated_at price_247 price_247_ms <<<"$(legs "$symbol_tsla")
 [ "$(legs "$symbol_aapl")" = "0 0 0 0 " ] || fail "legs(AAPL) is not empty for an unknown symbol"
 read -r cl_price cl_updated_at price_247 price_247_ms <<<"$(legs "$symbol_spy")"
 [ "$cl_price" = 77232802713 ] && [ "$price_247" = 0 ] || fail "legs(SPY) = $cl_price $cl_updated_at $price_247 $price_247_ms before its first anchor"
-echo "legs L2 gas: NVDA $(l2_gas "$(cast calldata "legs(bytes32)" "$symbol_nvda")"), unknown symbol $(l2_gas "$(cast calldata "legs(bytes32)" "$symbol_aapl")")"
+echo "legs L2 gas: NVDA $(measure "legs(NVDA)" "legs(bytes32)" "$symbol_nvda"), unknown symbol $(measure "legs(unknown)" "legs(bytes32)" "$symbol_aapl")"
 
 again=0x5585258d$(cast abi-encode "f(bytes32[],address[],bytes32[],bytes32[],address[])" "[$symbol_aapl]" \
   "[$zero_address]" "[$(cast format-bytes32-string AAPL---24_7)]" "[$zero_id]" "[$zero_address]" | cut -c3-)
@@ -119,9 +124,11 @@ fi
 grep -q 'data: "0x"$' <<<"$out" || fail "the second constructor call reverted for another reason: $out"
 extra=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
   --constructor-args "[$symbol_aapl,$symbol_spy]" "[$zero_address,$zero_address]" \
-  "[$(cast format-bytes32-string AAPL---24_7),$usa500]" "[$zero_id,$zero_id]" "[$zero_address,$zero_address]" "$halt_signer" 2>&1 |
+  "[$(cast format-bytes32-string AAPL---24_7),$usa500]" "[$zero_id,$zero_id]" "[$zero_address,$zero_address]" "${args[5]}" "${args[6]}" \
+  "$zero_address" false 2>&1 |
   grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
-jq -n --arg signer "$halt_signer" '{chainId: 412346, tapehouse: {HaltSigner: $signer}}' > "$registry.redstone"
+jq -n --arg signer "${args[5]}" --arg owner "${args[6]}" '{chainId: 412346, tapehouse: {HaltSigner: $signer, Owner: $owner}}' \
+  > "$registry.redstone"
 if out=$(BAND_ASSETS="AAPL SPY" "$(dirname "$0")/check-band.sh" "$rpc" "$extra" "$registry.redstone"); then
   fail "check-band.sh accepted a band that configures an asset band-args.sh leaves out"
 fi
@@ -130,14 +137,16 @@ grep -q 'FAIL: band configures SPY' <<<"$out" || fail "check-band.sh failed for 
 stub_18=$(forge create --root "$root/contracts" test/devnode/StubAggregator.sol:StubAggregator \
   --rpc-url "$rpc" --private-key "$key" --broadcast --json --constructor-args 18 1 1 "NVDA / USD" | jq -r .deployedTo)
 if out=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
-  --constructor-args "[$symbol_nvda]" "[$stub_18]" "[$nvda]" "[$zero_id]" "[$zero_address]" "$halt_signer" 2>&1); then
+  --constructor-args "[$symbol_nvda]" "[$stub_18]" "[$nvda]" "[$zero_id]" "[$zero_address]" "${args[5]}" "${args[6]}" \
+  "$zero_address" false 2>&1); then
   fail "a feed with 18 decimals was accepted"
 fi
 if ! grep -q 0x88d8f57d <<<"$out" || ! grep -q 6787b555 <<<"$out"; then
   fail "expected InvalidFeed inside ContractInitializationError, got: $(tail -n 1 <<<"$out")"
 fi
 if out=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
-  --constructor-args "[$symbol_nvda]" "[$zero_address]" "[$nvda]" "[$zero_id]" "[$zero_address]" "$zero_address" 2>&1); then
+  --constructor-args "[$symbol_nvda]" "[$zero_address]" "[$nvda]" "[$zero_id]" "[$zero_address]" "$zero_address" "${args[6]}" \
+  "$zero_address" false 2>&1); then
   fail "a zero halt signer was accepted"
 fi
 if ! grep -q 0x88d8f57d <<<"$out" || ! grep -q 126917ee <<<"$out"; then
@@ -236,7 +245,8 @@ read -r state live mid half _ <<<"$(quote "$symbol_spy")"
 [ "$state $live" = "$expected" ] && [ "$mid" = 77232802713 ] && [ "$half" -ge "$spy_half" ] ||
   fail "quote(SPY) = $(quote "$symbol_spy") with session $session"
 echo "session $session, NYSE $nyse; quote(NVDA) $(quote "$symbol_nvda")"
-echo "L2 gas: quote(NVDA) $(l2_gas "$(cast calldata "quote(bytes32)" "$symbol_nvda")"), quote(SPY) $(l2_gas "$(cast calldata "quote(bytes32)" "$symbol_spy")"), session() $(l2_gas "$(cast calldata "session()")")"
+echo "L2 gas: quote(NVDA) $(measure "quote(NVDA)" "quote(bytes32)" "$symbol_nvda"), quote(SPY) $(measure "quote(SPY)" "quote(bytes32)" "$symbol_spy"), session() $(measure "session()" "session()")"
+echo "L2 gas: price(NVDA---24_7) $(measure "price(NVDA---24_7)" "price(bytes32)" "$nvda"), anchor(SPY) $(measure "anchor(SPY)" "anchor(bytes32)" "$symbol_spy"), halt(NVDA) $(measure "halt(NVDA)" "halt(bytes32)" "$symbol_nvda")"
 
 attempts=0
 until keeper_payload=$(python3 "$payload" NVDA---24_7 USA500.Y---24_7 NY_MARKET_STATUS) &&
@@ -346,7 +356,7 @@ read -r status halt_gas <<<"$(write_halt true "$issued" $((issued + 30)))"
 [ "$status" = 0x1 ] && [ "$(halt_view)" = "true $((issued + 30)) $issued false " ] &&
   [ "$(quote "$symbol_nvda")" = "0 0 0 0 0 0 " ] || fail "a signed halt did not halt NVDA: $(halt_view)"
 expect_halt_revert true "$issued" $((issued + 30)) 0xedd6aa50
-signed_quote_gas=$(l2_gas "$(cast calldata "quote(bytes32)" "$symbol_nvda")")
+signed_quote_gas=$(record "quote(NVDA,signedHalt)" "$(l2_gas "$(cast calldata "quote(bytes32)" "$symbol_nvda")")")
 lifted=$(next_second "$issued")
 write_halt false "$lifted" $((lifted + 30)) > /dev/null
 [ "$(halt_view)" = "false 0 $lifted false " ] && [ "$(quote "$symbol_nvda" | cut -d' ' -f1)" != 0 ] ||
@@ -363,10 +373,10 @@ write_halt false "$lifted" $((lifted + 30)) > /dev/null
 cast send --rpc-url "$rpc" --private-key "$key" "$token" "pauseOracle()" > /dev/null
 [ "$(halt_view | cut -d' ' -f4)" = true ] && [ "$(quote "$symbol_nvda")" = "0 0 0 0 0 0 " ] ||
   fail "the issuer's oracle pause did not halt NVDA: $(halt_view)"
-halted_quote_gas=$(l2_gas "$(cast calldata "quote(bytes32)" "$symbol_nvda")")
+halted_quote_gas=$(record "quote(NVDA,oraclePaused)" "$(l2_gas "$(cast calldata "quote(bytes32)" "$symbol_nvda")")")
 cast send --rpc-url "$rpc" --private-key "$key" "$token" "unpauseOracle()" > /dev/null
 [ "$(quote "$symbol_nvda" | cut -d' ' -f1)" != 0 ] || fail "NVDA stayed halted after the oracle pause ended"
-echo "signed halt: written with L2 gas $halt_gas; replay, other key, band and chain rejected; lifted; lapsed to degraded"
+echo "signed halt: written with L2 gas $(record "writeHalt(NVDA)" "$halt_gas"); replay, other key, band and chain rejected; lifted; lapsed to degraded"
 echo "L2 gas: quote(NVDA) under a signed halt $signed_quote_gas, while its oracle is paused $halted_quote_gas"
 
 m0=$(cast call --rpc-url "$rpc" "$token" "uiMultiplier()(uint256)" | cut -d' ' -f1)
@@ -438,10 +448,10 @@ read -r cl_price _ price_247 _ <<<"$(legs "$symbol_spy")"
 echo "SPY's dividend: Chainlink and the index leg's anchor scaled to $cl_price and $price_247"
 
 after "$m5_at"
-args=$(BAND_ASSETS="NVDA" "$(dirname "$0")/band-args.sh" "$registry")
-read -r symbols feeds feed_ids index_ids tokens halt_signer <<<"$args"
+words=$(BAND_ASSETS="NVDA" "$(dirname "$0")/band-args.sh" "$registry")
+read -r -a args <<<"$words"
 fresh=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
-  --constructor-args "$symbols" "$feeds" "$feed_ids" "$index_ids" "$tokens" "$halt_signer" 2>&1 | grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
+  --constructor-args "${args[@]}" 2>&1 | grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
 [ "$(action "$symbol_nvda" "$fresh")" = "2 $m5_at 0 $m5 " ] || fail "a band deployed after a step does not start halted: $(action "$symbol_nvda" "$fresh")"
 nvda_share=$(fresh_nvda "$fresh")
 cast send --rpc-url "$rpc" --private-key "$key" "$nvda_feed" "setRound(int256,uint256)" "$(token_px "$nvda_share")" "$(date +%s)" > /dev/null
@@ -449,6 +459,70 @@ read -r status _ logs <<<"$(sync_multiplier "$symbol_nvda" "$fresh")"
 [ "$logs $(action "$symbol_nvda" "$fresh")" = "1 0 $m5_at 0 $m5 " ] || fail "a fresh band's first sync did not confirm: $(action "$symbol_nvda" "$fresh")"
 echo "a band deployed after a step: halted until its first sync confirms"
 echo "L2 gas: quote(NVDA) with its Stock Token $(l2_gas "$(cast calldata "quote(bytes32)" "$symbol_nvda")")"
+
+owner=$(jq -r .tapehouse.Owner "$registry")
+next_key=0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a
+next=$(cast wallet address --private-key "$next_key")
+[ "$(cast call --rpc-url "$rpc" "$band" "owner()(address)")" = "$owner" ] &&
+  [ "$(cast call --rpc-url "$rpc" "$band" "chainConfig()(address,bool)" | tr '\n' ' ')" = "$zero_address false " ] ||
+  fail "the band's owner or chain configuration is not the registry's"
+cast send --rpc-url "$rpc" --private-key "$key" --value 1ether "$next" > /dev/null
+if out=$(cast call --rpc-url "$rpc" --from "$next" "$band" "transferOwnership(address)" "$next" 2>&1); then
+  fail "a stranger started an ownership transfer"
+fi
+grep -q 0x118cdaa7 <<<"$out" || fail "expected OwnableUnauthorizedAccount, got $out"
+cast send --rpc-url "$rpc" --private-key "$key" "$band" "transferOwnership(address)" "$next" > /dev/null
+[ "$(cast call --rpc-url "$rpc" "$band" "owner()(address)") $(cast call --rpc-url "$rpc" "$band" "pendingOwner()(address)")" = "$owner $next" ] ||
+  fail "a started transfer moved ownership before it was accepted"
+cast send --rpc-url "$rpc" --private-key "$next_key" "$band" "acceptOwnership()" > /dev/null
+[ "$(cast call --rpc-url "$rpc" "$band" "owner()(address)")" = "$next" ] || fail "an accepted transfer did not move ownership"
+if out=$(cast call --rpc-url "$rpc" --from "$owner" "$band" "setHaltSigner(address)" "$owner" 2>&1); then
+  fail "the previous owner rotated the halt signer"
+fi
+grep -q 0x118cdaa7 <<<"$out" || fail "expected OwnableUnauthorizedAccount, got $out"
+if out=$(BAND_ASSETS="NVDA TSLA SPY" "$(dirname "$0")/check-band.sh" "$rpc" "$band" "$registry"); then
+  fail "check-band.sh accepted a band whose owner is not the registry's"
+fi
+grep -q "FAIL: band's owner" <<<"$out" || fail "check-band.sh failed for another reason: $out"
+hash=$(cast send --rpc-url "$rpc" --private-key "$next_key" "$band" "setHaltSigner(address)" "$next" --json | jq -r .transactionHash)
+rotate_gas=$(cast rpc --rpc-url "$rpc" eth_getTransactionReceipt "$hash" | jq -r '"\(.gasUsed) \(.gasUsedForL1)"' | { read -r gas l1; echo $((gas - l1)); })
+[ "$(cast call --rpc-url "$rpc" "$band" "haltSigner()(address)")" = "$next" ] || fail "the owner did not rotate the halt signer"
+issued=$(next_second "$(block_time)")
+halt_key=$next_key
+write_halt true "$issued" $((issued + 30)) > /dev/null
+[ "$(halt_view | cut -d' ' -f1)" = true ] || fail "the rotated signer's halt was not accepted"
+echo "ownership: transferred in two steps; halt signer rotated with L2 gas $(record "setHaltSigner(address)" "$rotate_gas")"
+
+sequencer=$(forge create --root "$root/contracts" test/devnode/StubAggregator.sol:StubAggregator --rpc-url "$rpc" \
+  --private-key "$key" --broadcast --json --constructor-args 0 0 $(($(block_time) - 7200)) "L2 Sequencer Uptime Status Feed" |
+  jq -r .deployedTo)
+words=$(BAND_ASSETS="NVDA" "$(dirname "$0")/band-args.sh" "$registry")
+read -r -a args <<<"$words"
+args[4]="[$zero_address]" args[7]=$sequencer args[8]=true
+arbitrum=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
+  --constructor-args "${args[@]}" 2>&1 | grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
+[ "$(cast call --rpc-url "$rpc" "$arbitrum" "chainConfig()(address,bool)" | tr '\n' ' ')" = "$(cast to-check-sum-address "$sequencer") true " ] ||
+  fail "a band deployed for Arbitrum One does not hold its chain configuration"
+fresh_nvda "$arbitrum" > /dev/null
+cast send --rpc-url "$rpc" --private-key "$key" "$arbitrum" "writePrices(bytes32[],bytes)" "$status_feeds" \
+  "$(python3 "$payload" NY_MARKET_STATUS)" > /dev/null
+arbitrum_state() { cast call --rpc-url "$rpc" "$arbitrum" "quote(bytes32)(uint8,uint8,uint64,uint64,uint64,uint128)" "$symbol_nvda" | head -n 1; }
+settled_view() { cast call --rpc-url "$rpc" "$arbitrum" "sequencerSettled()(bool)"; }
+if out=$(BAND_ASSETS="NVDA" "$(dirname "$0")/check-band.sh" "$rpc" "$arbitrum" "$registry" 2>&1); then
+  fail "check-band.sh accepted a band whose chain configuration is not the registry's"
+fi
+grep -q "FAIL: band's chain configuration" <<<"$out" || fail "check-band.sh failed for another reason: $out"
+settled=$(arbitrum_state)
+[ "$(settled_view)" = true ] && [ "$settled" != 0 ] || fail "NVDA's band on a settled sequencer is $settled"
+record "quote(NVDA,sequencer)" "$(l2_gas "$(cast calldata "quote(bytes32)" "$symbol_nvda")" "$arbitrum")" > /dev/null
+cast send --rpc-url "$rpc" --private-key "$key" "$sequencer" "setRound(int256,uint256)" 1 "$(block_time)" > /dev/null
+[ "$(settled_view) $(arbitrum_state)" = "false 1" ] || fail "a down sequencer did not degrade the band"
+cast send --rpc-url "$rpc" --private-key "$key" "$sequencer" "setRound(int256,uint256)" 0 $(($(block_time) - 3500)) > /dev/null
+[ "$(settled_view) $(arbitrum_state)" = "false 1" ] || fail "a sequencer back for less than an hour did not keep the band degraded"
+fresh_nvda "$arbitrum" > /dev/null
+cast send --rpc-url "$rpc" --private-key "$key" "$sequencer" "setRound(int256,uint256)" 0 $(($(block_time) - 3700)) > /dev/null
+[ "$(settled_view) $(arbitrum_state)" = "true $settled" ] || fail "a sequencer back for over an hour did not restore the band"
+echo "Arbitrum One configuration: a down or recent sequencer degrades the band"
 
 tsla=$(cast format-bytes32-string TSLA---24_7)
 read -r status _ <<<"$(write "[$tsla]" "$(python3 "$payload" TSLA---24_7)")"

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Usage: devnode-deploy.sh RPC_URL PRIVATE_KEY
 # Deploys stub Chainlink aggregators for NVDA, TSLA and SPY and stub Stock Tokens for NVDA and SPY, writes
-# them to stylus/target/devnode-registry.json with Anvil's second test account as the halt signer, and
-# deploys the band program configured from that file through StylusDeployer. Writes the program's address
-# to stylus/target/devnode-band.
+# them to stylus/target/devnode-registry.json with Anvil's second test account as the halt signer and the
+# deploying account as the owner, and deploys the band program configured from that file through
+# StylusDeployer. Writes the program's address to stylus/target/devnode-band.
 set -euo pipefail
 
 rpc=$1 key=$2
@@ -24,15 +24,15 @@ token() {
 now=$(cast block --rpc-url "$rpc" latest -f timestamp)
 jq -n --arg nvda "$(stub 22900000000 "NVDA / USD")" --arg tsla "$(stub 37800000000 "TSLA / USD")" \
   --arg spy "$(stub 77232802713 "SPY / USD")" --arg nvda_token "$(token 1000775159164630595)" \
-  --arg spy_token "$(token 1001717991187472003)" \
+  --arg spy_token "$(token 1001717991187472003)" --arg owner "$(cast wallet address --private-key "$key")" \
   '{chainId: 412346, chainlink: {NVDA_USD: $nvda, TSLA_USD: $tsla, SPY_USD: $spy}, tokens: {NVDA: $nvda_token, SPY: $spy_token},
-    tapehouse: {HaltSigner: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"}}' \
+    tapehouse: {HaltSigner: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8", Owner: $owner}}' \
   > "$target/devnode-registry.json"
 
-args=$(BAND_ASSETS="NVDA TSLA SPY" "$root/stylus/scripts/band-args.sh" "$target/devnode-registry.json")
-read -r symbols feeds feed_ids index_ids tokens halt_signer <<<"$args"
+words=$(BAND_ASSETS="NVDA TSLA SPY" "$root/stylus/scripts/band-args.sh" "$target/devnode-registry.json")
+read -r -a args <<<"$words"
 (cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
-  --constructor-args "$symbols" "$feeds" "$feed_ids" "$index_ids" "$tokens" "$halt_signer") > "$target/devnode-band.log"
+  --constructor-args "${args[@]}") > "$target/devnode-band.log"
 cast to-check-sum-address "$(grep 'deployed code at address' "$target/devnode-band.log" | grep -o '0x[0-9a-f]\{40\}')" \
   > "$target/devnode-band"
 tx=$(grep 'deployment tx hash' "$target/devnode-band.log" | grep -o '0x[0-9a-f]\{64\}')

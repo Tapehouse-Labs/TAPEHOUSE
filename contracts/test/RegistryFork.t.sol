@@ -7,7 +7,7 @@ import {AggregatorV3Interface, IUniswapV3Factory} from "./conformance/Interfaces
 
 contract RegistryForkTest is Test {
     uint256 internal constant ROBINHOOD_BLOCK = 69_922_505;
-    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 125_531_171;
+    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 125_546_289;
     uint256 internal constant ARBITRUM_BLOCK = 507_888_520;
     bytes32 internal constant BEACON_SLOT = 0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50;
     bytes4 internal constant STYLUS_ROOT_PREFIX = 0xeff00200;
@@ -65,6 +65,12 @@ contract RegistryForkTest is Test {
         vm.createSelectFork("arbitrum", ARBITRUM_BLOCK);
         assertEq(block.chainid, 42161);
         _assertFeeds(json);
+        AggregatorV3Interface sequencer = AggregatorV3Interface(vm.parseJsonAddress(json, ".chainlinkSequencer.Uptime"));
+        assertEq(sequencer.description(), "L2 Sequencer Uptime Status Feed");
+        assertEq(sequencer.decimals(), 0);
+        (, int256 status, uint256 startedAt,,) = sequencer.latestRoundData();
+        assertEq(status, 0);
+        assertGt(startedAt, 0);
     }
 
     function _assertFeeds(string memory json) internal view {

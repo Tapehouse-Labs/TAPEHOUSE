@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 # Usage: check-band.sh RPC_URL BAND_ADDRESS DEPLOYMENTS_JSON
-# Checks that a deployed band holds the configuration and halt signer band-args.sh builds from
-# DEPLOYMENTS_JSON, that each configured Chainlink feed describes its own asset, and that every asset
-# band-args.sh leaves out is unconfigured.
+# Checks that a deployed band holds the configuration, halt signer, owner and chain configuration
+# band-args.sh builds from DEPLOYMENTS_JSON, that each configured Chainlink feed describes its own asset,
+# and that every asset band-args.sh leaves out is unconfigured.
 set -euo pipefail
 
 rpc=$1 band=$2 registry=$3
 args=$("$(dirname "$0")/band-args.sh" "$registry")
-read -r symbols feeds feed_ids index_ids tokens halt_signer <<<"$args"
+read -r symbols feeds feed_ids index_ids tokens halt_signer owner sequencer regular_hours <<<"$args"
 held=$(cast call --rpc-url "$rpc" "$band" "haltSigner()(address)")
 [ "$held" = "$(cast to-check-sum-address "$halt_signer")" ] ||
   { echo "FAIL: band's halt signer is $held, $registry gives $halt_signer"; exit 1; }
+held=$(cast call --rpc-url "$rpc" "$band" "owner()(address)")
+[ "$held" = "$(cast to-check-sum-address "$owner")" ] || { echo "FAIL: band's owner is $held, $registry gives $owner"; exit 1; }
+held=$(cast call --rpc-url "$rpc" "$band" "chainConfig()(address,bool)" | tr '\n' ' ')
+[ "$held" = "$(cast to-check-sum-address "$sequencer") $regular_hours " ] ||
+  { echo "FAIL: band's chain configuration is $held, $registry gives $sequencer $regular_hours"; exit 1; }
 IFS=, read -r -a symbols <<<"${symbols//[\[\]]/}"
 IFS=, read -r -a feeds <<<"${feeds//[\[\]]/}"
 IFS=, read -r -a feed_ids <<<"${feed_ids//[\[\]]/}"

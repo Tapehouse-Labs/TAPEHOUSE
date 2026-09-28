@@ -58,6 +58,10 @@ sol! {
     error HaltOutsideWindow(uint64 issuedAt, uint64 expiresAt, uint64 blockTimestamp);
     #[derive(Debug, PartialEq, Eq)]
     error HaltNotNewer(bytes32 symbol, uint64 storedIssuedAt, uint64 issuedAt);
+    #[derive(Debug, PartialEq, Eq)]
+    error OwnableUnauthorizedAccount(address account);
+    #[derive(Debug, PartialEq, Eq)]
+    error OwnableInvalidOwner(address owner);
 }
 
 #[derive(SolidityError, Debug, PartialEq, Eq)]
@@ -89,4 +93,6 @@ pub enum BandError {
     UnknownAsset(UnknownAsset),
     HaltOutsideWindow(HaltOutsideWindow),
     HaltNotNewer(HaltNotNewer),
+    OwnableUnauthorizedAccount(OwnableUnauthorizedAccount),
+    OwnableInvalidOwner(OwnableInvalidOwner),
 }

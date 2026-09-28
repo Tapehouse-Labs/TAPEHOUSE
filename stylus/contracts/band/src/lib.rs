@@ -27,8 +27,9 @@ use stylus_sdk::storage::{
 
 use crate::error::{
     AmbiguousLeg, BandError, DuplicateAsset, IncompleteStatus, IndexInUse, IndexWithoutChainlink,
-    InvalidFeed, InvalidHaltSigner, InvalidToken, LengthMismatch, NoLegs, NoToken, PackageNotNewer,
-    SignerNotAuthorised, UnknownAsset, ZeroSymbol,
+    InvalidFeed, InvalidHaltSigner, InvalidToken, LengthMismatch, NoLegs, NoToken,
+    OwnableInvalidOwner, OwnableUnauthorizedAccount, PackageNotNewer, SignerNotAuthorised,
+    UnknownAsset, ZeroSymbol,
 };
 use crate::halt::Halt;
 use crate::index::Anchor;
@@ -43,6 +44,9 @@ sol! {
     event MultiplierRecorded(bytes32 indexed symbol, uint128 before, uint128 after, uint64 effectiveAt);
     event MultiplierConfirmed(bytes32 indexed symbol, uint64 effectiveAt);
     event HaltWritten(bytes32 indexed symbol, bool halted, uint64 issuedAt, uint64 expiresAt);
+    event HaltSignerUpdated(address indexed previousSigner, address indexed newSigner);
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 }
 
 #[storage]
@@ -89,7 +93,11 @@ pub struct Band {
     volatility: StorageMap<B256, Volatility>,
     index_assets: StorageMap<B256, StorageB256>,
     close_ms: StorageU64,
+    sequencer_uptime_feed: StorageAddress,
+    chainlink_regular_hours: StorageBool,
     halt_signer: StorageAddress,
+    owner: StorageAddress,
+    pending_owner: StorageAddress,
 }
 
 #[public]
@@ -98,8 +106,12 @@ impl Band {
     /// An asset takes its 24/7 leg from its own RedStone feed or from an index feed, never both; an
     /// index leg needs a Chainlink feed to anchor it, and backs one asset. A Stock Token turns the
     /// RedStone share price into the token's price through its ERC-8056 multiplier. `halt_signer` signs
-    /// trading halts.
+    /// trading halts, and `initial_owner` may rotate it. On a chain with an L2 sequencer-uptime feed,
+    /// `sequencer_uptime_feed` degrades every band while the sequencer is down and for an hour after;
+    /// zero where there is none. `chainlink_regular_hours` is set where the Chainlink feeds follow NYSE
+    /// regular hours rather than the 24/5 session.
     #[constructor]
+    #[allow(clippy::too_many_arguments)]
     pub fn constructor(
         &mut self,
         symbols: Vec<B256>,
@@ -108,11 +120,22 @@ impl Band {
         index_feed_ids: Vec<B256>,
         tokens: Vec<Address>,
         halt_signer: Address,
+        initial_owner: Address,
+        sequencer_uptime_feed: Address,
+        chainlink_regular_hours: bool,
     ) -> Result<(), BandError> {
         if halt_signer == Address::ZERO {
             return Err(BandError::InvalidHaltSigner(InvalidHaltSigner {}));
         }
+        if initial_owner == Address::ZERO {
+            return Err(BandError::OwnableInvalidOwner(OwnableInvalidOwner {
+                owner: Address::ZERO,
+            }));
+        }
         self.halt_signer.set(halt_signer);
+        self.transfer_ownership_to(initial_owner);
+        self.sequencer_uptime_feed.set(sequencer_uptime_feed);
+        self.chainlink_regular_hours.set(chainlink_regular_hours);
         let n = symbols.len();
         if chainlink_feeds.len() != n
             || redstone_feed_ids.len() != n
@@ -289,7 +312,12 @@ impl Band {
             return (0, 0, 0, 0, 0, 0);
         }
         let mut quote = quote::compute(&inputs);
-        if (session.is_none() || halt::lapsed(halt, now)) && quote.state != quote::State::Halted {
+        let sequencer = self.sequencer_uptime_feed.get();
+        if quote.state != quote::State::Halted
+            && (session.is_none()
+                || halt::lapsed(halt, now)
+                || !chainlink::sequencer_up(self.vm(), sequencer, now))
+        {
             quote.state = quote::State::Degraded;
         }
         (
@@ -369,6 +397,81 @@ impl Band {
             expiresAt: expires_at,
         });
         Ok(())
+    }
+
+    /// The address that may rotate the halt signer.
+    pub fn owner(&self) -> Address {
+        self.owner.get()
+    }
+
+    /// The address that may accept ownership; zero when no transfer is pending.
+    pub fn pending_owner(&self) -> Address {
+        self.pending_owner.get()
+    }
+
+    /// Starts transferring ownership to `new_owner`, who must accept it. Zero cancels a pending
+    /// transfer. Owner only.
+    pub fn transfer_ownership(&mut self, new_owner: Address) -> Result<(), BandError> {
+        self.only_owner()?;
+        self.pending_owner.set(new_owner);
+        self.vm().log(OwnershipTransferStarted {
+            previousOwner: self.owner.get(),
+            newOwner: new_owner,
+        });
+        Ok(())
+    }
+
+    /// Accepts a pending ownership transfer. Pending owner only.
+    pub fn accept_ownership(&mut self) -> Result<(), BandError> {
+        let sender = self.vm().msg_sender();
+        if sender != self.pending_owner.get() {
+            return Err(BandError::OwnableUnauthorizedAccount(
+                OwnableUnauthorizedAccount { account: sender },
+            ));
+        }
+        self.transfer_ownership_to(sender);
+        Ok(())
+    }
+
+    /// Leaves the band without an owner, so the halt signer can never be rotated again. Owner only.
+    pub fn renounce_ownership(&mut self) -> Result<(), BandError> {
+        self.only_owner()?;
+        self.transfer_ownership_to(Address::ZERO);
+        Ok(())
+    }
+
+    /// Replaces the halt signer. Owner only; never zero.
+    pub fn set_halt_signer(&mut self, new_signer: Address) -> Result<(), BandError> {
+        self.only_owner()?;
+        if new_signer == Address::ZERO {
+            return Err(BandError::InvalidHaltSigner(InvalidHaltSigner {}));
+        }
+        let previous = self.halt_signer.get();
+        self.halt_signer.set(new_signer);
+        self.vm().log(HaltSignerUpdated {
+            previousSigner: previous,
+            newSigner: new_signer,
+        });
+        Ok(())
+    }
+
+    /// The L2 sequencer-uptime feed the band follows, and whether its Chainlink feeds follow NYSE
+    /// regular hours rather than the 24/5 session.
+    pub fn chain_config(&self) -> (Address, bool) {
+        (
+            self.sequencer_uptime_feed.get(),
+            self.chainlink_regular_hours.get(),
+        )
+    }
+
+    /// Whether the band's L2 sequencer is up and has been for over an hour, as Chainlink's L2 guidance
+    /// asks before prices are used. True where the band follows no sequencer-uptime feed.
+    pub fn sequencer_settled(&self) -> bool {
+        chainlink::sequencer_up(
+            self.vm(),
+            self.sequencer_uptime_feed.get(),
+            self.vm().block_timestamp(),
+        )
     }
 
     /// Chainlink's 24/5 session from the signed New York market status: 0 not known, 1 closed,
@@ -492,13 +595,37 @@ impl Band {
         let inputs = quote::Inputs {
             live247_px: legs.px_247,
             live247_age_s: quote::package_age_s(now, legs.ms_247),
-            cl_px: legs.cl_px,
+            cl_px: if self.chainlink_regular_hours.get() && !session::in_regular_hours(session) {
+                0
+            } else {
+                legs.cl_px
+            },
             cl_age_s: quote::age_s(now, legs.cl_at),
             cl_session_open: session.is_some_and(|s| s.open),
             var_cpb2: self.variance(var_feed_id),
             basis_bps,
         };
         (inputs, change, session)
+    }
+
+    fn only_owner(&self) -> Result<(), BandError> {
+        let sender = self.vm().msg_sender();
+        if sender != self.owner.get() {
+            return Err(BandError::OwnableUnauthorizedAccount(
+                OwnableUnauthorizedAccount { account: sender },
+            ));
+        }
+        Ok(())
+    }
+
+    fn transfer_ownership_to(&mut self, new_owner: Address) {
+        let previous = self.owner.get();
+        self.owner.set(new_owner);
+        self.pending_owner.set(Address::ZERO);
+        self.vm().log(OwnershipTransferred {
+            previousOwner: previous,
+            newOwner: new_owner,
+        });
     }
 
     fn halt_of(&self, symbol: B256) -> Halt {
@@ -679,6 +806,10 @@ impl Band {
     }
 
     fn record_anchor(&mut self, index_id: B256, value: U256, package_timestamp_ms: u64) {
+        let now = self.vm().block_timestamp();
+        if self.chainlink_regular_hours.get() && !session::in_regular_hours(self.session_at(now)) {
+            return;
+        }
         let symbol = self.index_assets.getter(index_id).get();
         let feed = self.assets.getter(symbol).chainlink_feed.get();
         let (cl_px, cl_started_at, cl_at) = chainlink::latest(self.vm(), feed);
@@ -809,6 +940,8 @@ mod tests {
 
     const FEED: Address = address!("0x4444444444444444444444444444444444444444");
     const HALT_SIGNER: Address = address!("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
+    const OWNER: Address = address!("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
+    const SEQUENCER: Address = address!("0x6666666666666666666666666666666666666666");
     const DECIMALS_CALL: [u8; 4] = [0x31, 0x3c, 0xe5, 0x67];
     const LATEST_ROUND_DATA_CALL: [u8; 4] = [0xfe, 0xaf, 0x96, 0x8c];
 
@@ -840,6 +973,9 @@ mod tests {
             vec![B256::ZERO],
             vec![Address::ZERO],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         );
         assert_eq!(result, Err(BandError::LengthMismatch(LengthMismatch {})));
         let result = band.constructor(
@@ -849,6 +985,9 @@ mod tests {
             vec![B256::ZERO],
             vec![Address::ZERO],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         );
         assert_eq!(result, Err(BandError::LengthMismatch(LengthMismatch {})));
         let result = band.constructor(
@@ -858,6 +997,9 @@ mod tests {
             vec![],
             vec![Address::ZERO],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         );
         assert_eq!(result, Err(BandError::LengthMismatch(LengthMismatch {})));
     }
@@ -873,6 +1015,9 @@ mod tests {
             vec![B256::ZERO],
             vec![Address::ZERO],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         );
         assert_eq!(result, Err(BandError::ZeroSymbol(ZeroSymbol {})));
     }
@@ -888,6 +1033,9 @@ mod tests {
             vec![B256::ZERO],
             vec![Address::ZERO],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         );
         assert_eq!(
             result,
@@ -908,6 +1056,9 @@ mod tests {
             vec![B256::ZERO, B256::ZERO],
             vec![Address::ZERO; 2],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         );
         assert_eq!(
             result,
@@ -933,6 +1084,9 @@ mod tests {
             vec![B256::ZERO],
             vec![Address::ZERO],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         );
         assert_eq!(
             result,
@@ -951,6 +1105,9 @@ mod tests {
             vec![B256::ZERO],
             vec![Address::ZERO],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         );
         assert_eq!(
             result,
@@ -974,6 +1131,9 @@ mod tests {
             vec![B256::ZERO, B256::ZERO, symbol("USA500.Y---24_7")],
             vec![Address::ZERO; 3],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         )
         .unwrap();
         assert_eq!(
@@ -1090,6 +1250,9 @@ mod tests {
             vec![B256::ZERO, symbol("USA500.Y---24_7")],
             vec![Address::ZERO; 2],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         )
         .unwrap();
         assert!(band.prices.getter(symbol("NVDA---24_7")).tracked.get());
@@ -1178,6 +1341,9 @@ mod tests {
             vec![symbol("USA500.Y---24_7")],
             vec![Address::ZERO],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         );
         assert_eq!(
             result,
@@ -1198,6 +1364,9 @@ mod tests {
             vec![symbol("USA500.Y---24_7")],
             vec![Address::ZERO],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         );
         assert_eq!(
             result,
@@ -1223,6 +1392,9 @@ mod tests {
             vec![symbol("USA500.Y---24_7"), symbol("USA500.Y---24_7")],
             vec![Address::ZERO; 2],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         );
         assert_eq!(
             result,
@@ -1533,6 +1705,52 @@ mod tests {
     }
 
     #[test]
+    fn a_regular_hours_chain_anchors_only_in_regular_hours() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        let index = symbol("USA500.Y---24_7");
+        band.chainlink_regular_hours.set(true);
+        vm.set_block_timestamp(1_790_352_205);
+        spy(&vm, &mut band, 77_232_802_713, 1_790_352_180);
+        band.record_anchor(index, U256::from(774_263_746_783u64), 1_790_352_200_000);
+        assert_eq!(band.anchor(symbol("SPY")), (0, 0, 0));
+        sign_status(
+            &mut band,
+            CLOSED_SHORT,
+            REGULAR,
+            1_790_372_000,
+            1_790_352_200,
+        );
+        band.record_anchor(index, U256::from(774_263_746_783u64), 1_790_352_200_000);
+        assert_eq!(band.anchor(symbol("SPY")), (0, 0, 0));
+        sign_status(
+            &mut band,
+            CLOSED_LONG,
+            REGULAR,
+            1_790_602_200,
+            1_790_352_201,
+        );
+        band.record_anchor(index, U256::from(774_263_746_783u64), 1_790_352_200_000);
+        assert_eq!(band.anchor(symbol("SPY")), (0, 0, 0));
+        sign_status(
+            &mut band,
+            REGULAR,
+            CLOSED_SHORT,
+            1_790_366_400,
+            1_790_352_202,
+        );
+        band.record_anchor(index, U256::from(774_263_746_783u64), 1_790_352_200_000);
+        let anchored = (77_232_802_713, 774_263_746_783, 1_790_352_180);
+        assert_eq!(band.anchor(symbol("SPY")), anchored);
+
+        let later = 1_790_352_202 + 3_601;
+        vm.set_block_timestamp(later);
+        spy(&vm, &mut band, 77_300_000_000, later - 20);
+        band.record_anchor(index, U256::from(774_900_000_000u64), (later - 20) * 1000);
+        assert_eq!(band.anchor(symbol("SPY")), anchored);
+    }
+
+    #[test]
     fn writing_the_index_anchors_its_asset() {
         let vm = TestVM::default();
         let mut band = Band::from(&vm);
@@ -1676,6 +1894,9 @@ mod tests {
             vec![B256::ZERO],
             vec![TOKEN],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         );
         assert_eq!(
             result,
@@ -1701,6 +1922,9 @@ mod tests {
             vec![B256::ZERO],
             vec![TOKEN],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         );
         assert_eq!(
             result,
@@ -1724,6 +1948,9 @@ mod tests {
             vec![B256::ZERO],
             vec![TOKEN],
             HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
         );
         assert_eq!(
             result,
@@ -1754,6 +1981,9 @@ mod tests {
             vec![B256::ZERO],
             vec![Address::ZERO],
             Address::ZERO,
+            OWNER,
+            Address::ZERO,
+            false,
         );
         assert_eq!(
             result,
@@ -1886,6 +2116,265 @@ mod tests {
                 symbol: symbol("NVDA")
             }))
         );
+    }
+
+    fn configured(vm: &TestVM) -> Band {
+        let mut band = Band::from(vm);
+        band.constructor(
+            vec![symbol("NVDA")],
+            vec![Address::ZERO],
+            vec![symbol("NVDA---24_7")],
+            vec![B256::ZERO],
+            vec![Address::ZERO],
+            HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
+        )
+        .unwrap();
+        band
+    }
+
+    #[test]
+    fn constructor_rejects_a_zero_owner() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        let result = band.constructor(
+            vec![symbol("NVDA")],
+            vec![Address::ZERO],
+            vec![symbol("NVDA---24_7")],
+            vec![B256::ZERO],
+            vec![Address::ZERO],
+            HALT_SIGNER,
+            Address::ZERO,
+            Address::ZERO,
+            false,
+        );
+        assert_eq!(
+            result,
+            Err(BandError::OwnableInvalidOwner(OwnableInvalidOwner {
+                owner: Address::ZERO
+            }))
+        );
+    }
+
+    #[test]
+    fn constructor_stores_the_owner_and_chain_configuration() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        band.constructor(
+            vec![symbol("NVDA")],
+            vec![Address::ZERO],
+            vec![symbol("NVDA---24_7")],
+            vec![B256::ZERO],
+            vec![Address::ZERO],
+            HALT_SIGNER,
+            OWNER,
+            SEQUENCER,
+            true,
+        )
+        .unwrap();
+        assert_eq!(band.owner(), OWNER);
+        assert_eq!(band.chain_config(), (SEQUENCER, true));
+    }
+
+    #[test]
+    fn ownership_moves_in_two_steps() {
+        let vm = TestVM::default();
+        let mut band = configured(&vm);
+        let transferred = |from: Address, to: Address| {
+            vec![
+                OwnershipTransferred::SIGNATURE_HASH,
+                from.into_word(),
+                to.into_word(),
+            ]
+        };
+        assert_eq!(
+            vm.get_emitted_logs()[0].0,
+            transferred(Address::ZERO, OWNER)
+        );
+        assert_eq!((band.owner(), band.pending_owner()), (OWNER, Address::ZERO));
+        let next = address!("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC");
+        let unauthorized = |account| {
+            Err(BandError::OwnableUnauthorizedAccount(
+                OwnableUnauthorizedAccount { account },
+            ))
+        };
+
+        vm.set_sender(next);
+        assert_eq!(band.transfer_ownership(next), unauthorized(next));
+        vm.set_sender(OWNER);
+        band.transfer_ownership(next).unwrap();
+        assert_eq!(
+            vm.get_emitted_logs().last().unwrap().0,
+            vec![
+                OwnershipTransferStarted::SIGNATURE_HASH,
+                OWNER.into_word(),
+                next.into_word()
+            ]
+        );
+        assert_eq!((band.owner(), band.pending_owner()), (OWNER, next));
+        assert_eq!(band.accept_ownership(), unauthorized(OWNER));
+
+        vm.set_sender(next);
+        band.accept_ownership().unwrap();
+        assert_eq!(
+            vm.get_emitted_logs().last().unwrap().0,
+            transferred(OWNER, next)
+        );
+        assert_eq!((band.owner(), band.pending_owner()), (next, Address::ZERO));
+        vm.set_sender(OWNER);
+        assert_eq!(band.set_halt_signer(OWNER), unauthorized(OWNER));
+        assert_eq!(band.renounce_ownership(), unauthorized(OWNER));
+
+        vm.set_sender(next);
+        band.transfer_ownership(OWNER).unwrap();
+        band.transfer_ownership(Address::ZERO).unwrap();
+        assert_eq!(band.pending_owner(), Address::ZERO);
+        band.renounce_ownership().unwrap();
+        assert_eq!(band.owner(), Address::ZERO);
+        assert_eq!(band.set_halt_signer(next), unauthorized(next));
+    }
+
+    #[test]
+    fn the_owner_rotates_the_halt_signer() {
+        let vm = TestVM::default();
+        let mut band = configured(&vm);
+        let next = address!("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC");
+        vm.set_block_timestamp(WED_3AM_S);
+        let signature = sign_halt(&vm, true, WED_3AM_S - 10, WED_3AM_S + 600, HALT_SIGNER);
+        band.write_halt(
+            symbol("NVDA"),
+            true,
+            WED_3AM_S - 10,
+            WED_3AM_S + 600,
+            signature,
+        )
+        .unwrap();
+
+        vm.set_sender(OWNER);
+        assert_eq!(
+            band.set_halt_signer(Address::ZERO),
+            Err(BandError::InvalidHaltSigner(InvalidHaltSigner {}))
+        );
+        band.set_halt_signer(next).unwrap();
+        assert_eq!(band.halt_signer(), next);
+        let (topics, _) = vm.get_emitted_logs().last().unwrap().clone();
+        assert_eq!(
+            topics,
+            vec![
+                HaltSignerUpdated::SIGNATURE_HASH,
+                HALT_SIGNER.into_word(),
+                next.into_word()
+            ]
+        );
+        assert_eq!(
+            band.halt(symbol("NVDA")),
+            (true, WED_3AM_S + 600, WED_3AM_S - 10, false)
+        );
+
+        let signature = sign_halt(&vm, false, WED_3AM_S, WED_3AM_S + 60, HALT_SIGNER);
+        assert_eq!(
+            band.write_halt(symbol("NVDA"), false, WED_3AM_S, WED_3AM_S + 60, signature),
+            Err(BandError::SignerNotAuthorised(SignerNotAuthorised {
+                receivedSigner: HALT_SIGNER
+            }))
+        );
+        let signature = sign_halt(&vm, false, WED_3AM_S - 10, WED_3AM_S + 60, next);
+        assert!(matches!(
+            band.write_halt(
+                symbol("NVDA"),
+                false,
+                WED_3AM_S - 10,
+                WED_3AM_S + 60,
+                signature
+            ),
+            Err(BandError::HaltNotNewer(_))
+        ));
+        let signature = sign_halt(&vm, false, WED_3AM_S, WED_3AM_S + 60, next);
+        band.write_halt(symbol("NVDA"), false, WED_3AM_S, WED_3AM_S + 60, signature)
+            .unwrap();
+        assert!(!band.halt(symbol("NVDA")).0);
+    }
+
+    #[test]
+    fn a_down_or_recent_sequencer_degrades_the_band() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        sign_status(&mut band, CLOSED_LONG, REGULAR, MON_OPEN_S, SAT_NOON_S - 10);
+        band.assets
+            .setter(symbol("NVDA"))
+            .redstone_feed_id
+            .set(symbol("NVDA---24_7"));
+        store(
+            &mut band,
+            symbol("NVDA---24_7"),
+            U256::from(22_000_000_000u64),
+            (SAT_NOON_S - 10) * 1000,
+        );
+        vm.set_block_timestamp(SAT_NOON_S);
+        assert_eq!(band.quote(symbol("NVDA")).0, 2);
+        band.sequencer_uptime_feed.set(SEQUENCER);
+        let uptime = |answer: i64, started_at: u64| {
+            let data = (
+                U256::from(7u8),
+                I256::try_from(answer).unwrap(),
+                U256::from(started_at),
+                U256::from(started_at),
+                U256::from(7u8),
+            )
+                .abi_encode_params();
+            vm.mock_static_call(SEQUENCER, LATEST_ROUND_DATA_CALL.to_vec(), Ok(data));
+        };
+        uptime(0, SAT_NOON_S - 3_601);
+        assert!(band.sequencer_settled());
+        assert_eq!(band.quote(symbol("NVDA")).0, 2);
+        uptime(1, SAT_NOON_S - 86_400);
+        assert!(!band.sequencer_settled());
+        assert_eq!(band.quote(symbol("NVDA")).0, 1);
+        uptime(0, SAT_NOON_S - 3_600);
+        assert!(!band.sequencer_settled());
+        assert_eq!(band.quote(symbol("NVDA")).0, 1);
+        assert_eq!(band.chain_config(), (SEQUENCER, false));
+    }
+
+    #[test]
+    fn regular_hours_chainlink_sleeps_outside_regular_hours() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        sign_status(&mut band, CLOSED_SHORT, REGULAR, WED_OPEN_S, WED_3AM_S - 10);
+        nvda(
+            &vm,
+            &mut band,
+            22_050_000_000,
+            WED_3AM_S - 300,
+            22_000_000_000,
+            WED_3AM_S - 10,
+        );
+        vm.set_block_timestamp(WED_3AM_S);
+        assert_eq!(band.quote(symbol("NVDA")).0, 3);
+        band.chainlink_regular_hours.set(true);
+        assert_eq!(band.session().0, 2);
+        assert_eq!(band.quote(symbol("NVDA")).0, 1);
+        assert_eq!(band.quote(symbol("NVDA")).1, 1);
+
+        sign_status(
+            &mut band,
+            REGULAR,
+            CLOSED_SHORT,
+            WED_OPEN_S + 23_400,
+            WED_OPEN_S + 60,
+        );
+        nvda(
+            &vm,
+            &mut band,
+            22_050_000_000,
+            WED_OPEN_S + 30,
+            22_000_000_000,
+            WED_OPEN_S + 60,
+        );
+        vm.set_block_timestamp(WED_OPEN_S + 70);
+        assert_eq!(band.quote(symbol("NVDA")).0, 3);
     }
 
     #[test]

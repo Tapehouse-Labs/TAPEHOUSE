@@ -108,6 +108,7 @@ jobs:
       - run: make devnode
       - run: make deploy-stylus-devnode
       - run: make test-stylus-devnode
+      - run: make gas-stylus-devnode
 
   macos:
     name: Make 3.81 (macOS)
@@ -138,7 +139,7 @@ jobs:
           ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL }}
           ROBINHOOD_TESTNET_RPC_URL: ${{ secrets.ROBINHOOD_TESTNET_RPC_URL }}
           ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL }}
-      - run: /usr/bin/make -n test gas lint snapshot devnode devnode-stop deploy-stylus-devnode test-stylus-devnode check-activation
+      - run: /usr/bin/make -n test gas lint snapshot devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode check-activation
 
   workflows:
     name: Workflows

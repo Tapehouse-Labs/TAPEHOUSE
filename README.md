@@ -50,6 +50,7 @@ make test
 | `make check-activation` | `cargo stylus check` of every program against Robinhood Chain, its testnet and Arbitrum One |
 | `make build-apps` · `test-apps` · `lint-apps` | Apps only |
 | `make devnode deploy-stylus-devnode test-stylus-devnode` | Deploys `band` to a local dev node and writes live RedStone prices through it |
+| `make gas-stylus-devnode` · `snapshot-stylus-devnode` | Compares the dev-node suite's L2 gas with `stylus/.gas-devnode`, failing on a move over 0.5%, or regenerates it |
 | `make deploy-stylus CHAIN=<id> SIGNER='<flags>'` | Deploys `band` reproducibly, configured from `deployments/<id>.json`, and prints the transaction and address |
 | `make verify-stylus CHAIN=<id> TX=<hash>` | Verifies a deployment against the checked-out source |
 
@@ -98,6 +99,9 @@ cast wallet new ~/.foundry/keystores tapehouse-halt-signer
 - `writeHalt(bytes32 symbol, bool halted, uint64 issuedAt, uint64 expiresAt, bytes signature)` writes a trading halt signed by the halt signer (`HaltWritten`). Anyone may call it.
 - `halt(bytes32 symbol)` returns whether a signed halt holds, until when, when its last message was issued, and whether the issuer has paused the Stock Token's oracle.
 - `haltSigner()` returns the address whose halts the band accepts.
+- `owner()`, `pendingOwner()`, `transferOwnership(address)`, `acceptOwnership()` and `renounceOwnership()` follow OpenZeppelin's `Ownable2Step`, with its events and errors. The owner can only rotate the halt signer, so in effect it can halt an asset, never price one.
+- `setHaltSigner(address)` replaces the halt signer (`HaltSignerUpdated`). Owner only, never zero.
+- `chainConfig()` returns the L2 sequencer-uptime feed the band follows and whether its Chainlink feeds follow NYSE regular hours.
 - `session()` returns Chainlink's 24/5 session (0 not known, 1 closed, 2 open), NYSE's state and its next state (0 not known, 1 regular hours, 2 short close, 3 weekend or holiday), when NYSE changes state, and the session's next boundary: when an open session closes or a closed one reopens. Times are in milliseconds, zero when not known.
 - `anchor(bytes32 symbol)` returns the Chainlink print, index price and print time that an asset priced from an index is anchored to. Each new anchor emits `Anchored`.
 - `variance(bytes32 feedId)` returns the EWMA variance of a configured asset's 24/7 feed, in centi-basis-points squared per minute.
@@ -153,15 +157,33 @@ A signed halt is the EIP-712 message `HaltState(bytes32 symbol,bool halted,uint6
 - it was issued no later than the block, expires after it, and spans at most an hour;
 - it was issued after the last message written for the asset.
 
-A halted message holds the asset until `expiresAt`; a message with `halted` false lifts the halt. A halt that is not refreshed lapses within an hour, and until a message lifts it the band is at most degraded: `halt` then reports a non-zero `until` in the past. The halt signer is set in the constructor and cannot be zero.
+A halted message holds the asset until `expiresAt`; a message with `halted` false lifts the halt. A halt that is not refreshed lapses within an hour, and until a message lifts it the band is at most degraded: `halt` then reports a non-zero `until` in the past. The halt signer is set in the constructor, cannot be zero, and is rotated by the owner with `setHaltSigner`. A message is bound to one band, so a new band holds no halt until the signer signs for it.
+
+### Arbitrum One
+
+The same program is configured for Arbitrum One from `deployments/42161.json`. There it prices the **share**, not the Stock Token: Arbitrum One's Chainlink feeds report share prices, and the registry names no Stock Tokens, so no multiplier applies.
+
+- **Chainlink follows NYSE regular hours.** Arbitrum One's feeds print from about 12:00 UTC, before the open, through regular hours and at times after the close, and never overnight; their after-hours prints can swing (on 24 August 2026 NVDA alternated eight times between two prices about 148 bps apart after the close), and their weekend heartbeat can carry a price that differs from Friday's last round. The band there counts the Chainlink leg only while the signed status says NYSE is in regular hours, and anchors SPY's index leg only then. Outside regular hours an asset has its 24/7 leg alone, so its band is degraded where Robinhood Chain's has two legs.
+- **The L2 sequencer.** The band follows Arbitrum One's sequencer-uptime feed, as Chainlink advises for L2s: while the sequencer is down, and for an hour after it comes back, every band is at most degraded.
+
+Robinhood Chain has no sequencer-uptime feed, and its Chainlink feeds follow the 24/5 session. `band-args.sh` sets both from the chain's registry file: `.chainlinkSequencer.Uptime`, and regular hours on chain 42161.
+
+### Ownership and redeploys
+
+The owner is the constructor's `initialOwner`, the registry's `.tapehouse.Owner`, not `msg.sender`, which is StylusDeployer. Ownership moves in two steps, and `check-band.sh` checks the owner, because verification covers the code, not the constructor's arguments. The per-asset configuration can never change; a new configuration is a new band.
+
+A redeployed band is a new address, and every consumer holding the old one is re-pointed. Before that, a new band needs:
+- an hour of keeper writes, because its variance starts at zero;
+- every 24/7 feed written, then `syncMultiplier` on every asset with a Stock Token, because the constructor confirms no multiplier step;
+- the halt signer's messages for any halt in progress, because a message names one band.
 
 ### SPY
 
-SPY has no RedStone 24/7 feed. Its 24/7 leg is its last Chainlink print moved by the S&P 500 index (`USA500.Y---24_7`) since that print: `print × index / index at the print`. The index price at the print is anchored when an index package signed within 120 s of a new Chainlink round is written, so the leg never assumes a fixed ratio between the fund and the index. The index's variance stands in for SPY's, and the leg carries 25 bps of extra half-width for the gap between the fund and its index. SPY has no 24/7 leg until its first anchor, and none where it has no Chainlink feed. On Arbitrum One it keeps its Chainlink leg alone: those feeds follow regular hours and repeat the close in heartbeats, so an anchor there would pair a stale close with a live index. A Chainlink round that repeats the anchored price, such as a heartbeat over a weekend, keeps the anchor.
+SPY has no RedStone 24/7 feed. Its 24/7 leg is its last Chainlink print moved by the S&P 500 index (`USA500.Y---24_7`) since that print: `print × index / index at the print`. The index price at the print is anchored when an index package signed within 120 s of a new Chainlink round is written, so the leg never assumes a fixed ratio between the fund and the index. The index's variance stands in for SPY's, and the leg carries 25 bps of extra half-width for the gap between the fund and its index. SPY has no 24/7 leg until its first anchor, and none where it has no Chainlink feed. A Chainlink round that repeats the anchored price, such as a heartbeat over a weekend, keeps the anchor.
 
 Two things follow from the anchor. While the session is open SPY's two legs are not independent: the index leg restarts from each new print, so it cross-checks the index's move since that print, not the print itself. And whoever writes the index chooses which package within 120 s of the print becomes the anchor, so the leg can carry up to 240 s of the index's move as a bias.
 
-The asset configuration is set once, in the constructor, and cannot change. Each asset has a Chainlink feed, a 24/7 leg, or both. The 24/7 leg is a RedStone feed ID or an index feed ID, never both; an index needs the Chainlink feed that anchors it and backs one asset. An asset may name its Stock Token. Every configured feed must report 8 decimals. The halt signer is the registry's `.tapehouse.HaltSigner`.
+The asset configuration is set once, in the constructor, and cannot change. Each asset has a Chainlink feed, a 24/7 leg, or both. The 24/7 leg is a RedStone feed ID or an index feed ID, never both; an index needs the Chainlink feed that anchors it and backs one asset. An asset may name its Stock Token. Every configured feed must report 8 decimals. The halt signer and the owner are the registry's `.tapehouse.HaltSigner` and `.tapehouse.Owner`.
 
 `band` is larger than one contract's code limit, so it is deployed in code fragments that a small root contract points to, as Arbitrum allows (up to four fragments). The root is deployed through [StylusDeployer](https://github.com/OffchainLabs/nitro-contracts/blob/main/src/stylus/StylusDeployer.sol) at `0xcEcba2F1DC234f70Dd89F2041029807F8D03A990`, which deploys, activates and runs the constructor in one transaction, so nobody else can call the constructor first:
 
@@ -202,3 +224,4 @@ Each deployment below verifies from the commit that added its row: `git log --re
 | 46630 | band | `0x3Bf0F882d0edB6C06cBF0D78684F7464B72Fb985` | `0x03f46afb9767c866a36f3b6b53f972b7113ce54a6c8233856430576550677b96` |
 | 46630 | band | `0xa6FebD4225232E71A6A46209ADB46fD3dE1f5BDA` | `0xad35314edf2339d7ea91a75fb9618ca07906e1e7ac67064cf6827f50def1d934` |
 | 46630 | band | `0xA5896f75679F3D7c3aAe31FAd94C5C1B7FfB9A3f` | `0x4a5d7f7c48174bce43c1d3788720546a86901282cf3accc7f0e3afffbd7cc3c1` |
+| 46630 | band | `0xa70118d3324D90532E7D2854627b13CacE305641` | `0x7f003392328803b2fd7331f6dcc2d96f387e8e9b811cdc74b01e9c77ba5e1310` |

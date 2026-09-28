@@ -1,0 +1,13 @@
+anchor(SPY) 79940
+halt(NVDA) 87223
+legs(NVDA) 106078
+legs(unknown) 86502
+price(NVDA---24_7) 82159
+quote(NVDA) 128355
+quote(NVDA,oraclePaused) 128290
+quote(NVDA,sequencer) 123313
+quote(NVDA,signedHalt) 79946
+quote(SPY) 132379
+session() 90434
+setHaltSigner(address) 72404
+writeHalt(NVDA) 103739

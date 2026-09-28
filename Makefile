@@ -14,6 +14,7 @@ DEVNODE_KEY := 0xb6b15c8cb491557369f3c7d2c287b053eb229daa9c22138887752191c952065
 DEVNODE_ACCOUNT := 0x3f1Eae7D46d88F08fc2F8ed27FCb2AB183EB2d0E
 COVERAGE_MIN := 95
 STYLUS_MAX_FRAGMENTS := 4
+DEVNODE_GAS_TOLERANCE_BPS := 50
 STYLUS_SIZE_RUSTFLAGS := --remap-path-prefix=$(or $(CARGO_HOME),$(HOME)/.cargo)/registry/src=/cargo
 CONTRACT ?= band
 RPC_URL_4663 = $(ROBINHOOD_RPC_URL)
@@ -40,7 +41,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	build-apps test-apps lint-apps \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
-	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode
+	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode
 
 all: build
 
@@ -171,6 +172,20 @@ check-activation: check-stylus
 	@for rpc in $(ROBINHOOD_RPC_URL) $(ROBINHOOD_TESTNET_RPC_URL) $(ARBITRUM_RPC_URL); do \
 		for dir in stylus/contracts/*/; do \
 			(cd $$dir && cargo stylus check -e $$rpc) || exit 1; done; done
+
+gas-stylus-devnode:
+	@test -s stylus/target/devnode-gas.txt || { echo "No dev-node gas report. Run: make test-stylus-devnode"; exit 1; }
+	@awk -v tol=$(DEVNODE_GAS_TOLERANCE_BPS) 'NR == FNR { now[$$1] = $$2; next } \
+		{ seen[$$1] = 1; d = now[$$1] - $$2; if (!($$1 in now) || (d < 0 ? -d : d) * 10000 > $$2 * tol) { bad = 1; \
+			printf "%s: %s L2 gas, snapshot %s\n", $$1, ($$1 in now) ? now[$$1] : "not measured", $$2 } } \
+		END { for (k in now) if (!(k in seen)) { bad = 1; printf "%s: %s L2 gas, not in the snapshot\n", k, now[k] } \
+			if (bad) { print "Dev-node gas moved more than " tol / 100 "%. Run: make snapshot-stylus-devnode"; exit 1 } \
+			print "Dev-node gas within " tol / 100 "% of stylus/.gas-devnode." }' \
+		stylus/target/devnode-gas.txt stylus/.gas-devnode
+
+snapshot-stylus-devnode:
+	@test -s stylus/target/devnode-gas.txt || { echo "No dev-node gas report. Run: make test-stylus-devnode"; exit 1; }
+	@LC_ALL=C sort stylus/target/devnode-gas.txt > stylus/.gas-devnode && cat stylus/.gas-devnode
 
 deploy-stylus: check-docker check-foundry
 	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \

@@ -166,6 +166,11 @@ pub fn next_close(status: Option<Status>, close_ms: u64) -> u64 {
     }
 }
 
+/// Whether the signed status says NYSE is in regular hours in `session`.
+pub fn in_regular_hours(session: Option<Session>) -> bool {
+    session.is_some_and(|s| s.nyse == Nyse::Regular)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
