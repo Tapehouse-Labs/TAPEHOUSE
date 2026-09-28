@@ -201,7 +201,7 @@ make verify-stylus CHAIN=<chainId> TX=<deployment tx>
 
 Every program is optimised after the build by Binaryen's `wasm-opt`, with the version and flags pinned in the `[wasm-opt]` table of `stylus/Stylus.toml`. cargo-stylus folds that recipe into the program's project hash and applies it in reproducible builds, so verification rebuilds the same bytes. `make` puts that `wasm-opt` first on `PATH`; to run `cargo stylus` directly, add `${XDG_CACHE_HOME:-~/.cache}/binaryen/version_133/bin` to `PATH` yourself.
 
-`stylus/scripts/redstone-payload.py` builds a payload from the latest packages, for example `python3 stylus/scripts/redstone-payload.py NVDA---24_7`. Several packages that share a timestamp go in one payload: `python3 stylus/scripts/redstone-payload.py NVDA---24_7 USA500.Y---24_7 NY_MARKET_STATUS`. It reads the public gateways, or the main gateway when `REDSTONE_API_KEY` is set.
+`stylus/scripts/redstone-payload.py` builds a payload from the latest packages, for example `python3 stylus/scripts/redstone-payload.py NVDA---24_7`. Several packages that share a timestamp go in one payload: `python3 stylus/scripts/redstone-payload.py NVDA---24_7 USA500.Y---24_7 NY_MARKET_STATUS`. It reads RedStone's authenticated gateways first, with the API keys in `REDSTONE_API_KEY` and `REDSTONE_BACKUP_API_KEY` where set, and falls back to the keyless public gateways.
 
 ## Band feeds
 

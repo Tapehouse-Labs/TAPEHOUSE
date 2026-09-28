@@ -5,7 +5,8 @@ Usage: redstone-payload.py DATA_PACKAGE_ID [DATA_PACKAGE_ID ...]
 
 A data package ID is a single feed such as NVDA---24_7, or a group such as NY_MARKET_STATUS.
 
-Reads the keyless public gateways, or the main gateway when REDSTONE_API_KEY is set.
+Reads RedStone's authenticated gateways first, each with its API key from REDSTONE_API_KEY or
+REDSTONE_BACKUP_API_KEY where set, then the keyless public gateways.
 """
 
 import base64
@@ -13,11 +14,16 @@ import http.client
 import json
 import os
 import sys
+import urllib.parse
 import urllib.request
 from decimal import Decimal
 
 PATH = "/data-packages/latest/redstone-primary-prod"
-MAIN_GATEWAY = "https://oracle-gateway.a.redstone.finance"
+AUTHENTICATED_PATH = "/v2/data-packages/latest-by-data-feeds/redstone-primary-prod"
+AUTHENTICATED_GATEWAYS = (
+    ("https://oracle-gateway.a.redstone.finance", "REDSTONE_API_KEY"),
+    ("https://oracle-gateway.gateway.redstone.vip", "REDSTONE_BACKUP_API_KEY"),
+)
 PUBLIC_GATEWAYS = (
     "https://oracle-gateway-1.a.redstone.finance",
     "https://oracle-gateway-2.a.redstone.finance",
@@ -27,12 +33,17 @@ DEFAULT_DECIMALS = 8
 
 
 def latest_packages(data_package_ids: list) -> dict:
-    key = os.environ.get("REDSTONE_API_KEY")
-    requests = (
-        [urllib.request.Request(MAIN_GATEWAY + PATH, headers={"x-api-key": key})]
-        if key
-        else []
+    query = urllib.parse.urlencode(
+        {"dataFeedIds": ",".join(sorted(set(data_package_ids)))}
     )
+    requests = [
+        urllib.request.Request(
+            f"{gateway}{AUTHENTICATED_PATH}?{query}",
+            headers={"x-api-key": os.environ[variable]},
+        )
+        for gateway, variable in AUTHENTICATED_GATEWAYS
+        if os.environ.get(variable)
+    ]
     requests += [urllib.request.Request(gateway + PATH) for gateway in PUBLIC_GATEWAYS]
     error = None
     for request in requests:
