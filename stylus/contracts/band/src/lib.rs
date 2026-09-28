@@ -6,6 +6,7 @@ extern crate alloc;
 
 pub mod chainlink;
 pub mod error;
+pub mod halt;
 pub mod index;
 pub mod multiplier;
 pub mod quote;
@@ -26,8 +27,10 @@ use stylus_sdk::storage::{
 
 use crate::error::{
     AmbiguousLeg, BandError, DuplicateAsset, IncompleteStatus, IndexInUse, IndexWithoutChainlink,
-    InvalidFeed, InvalidToken, LengthMismatch, NoLegs, NoToken, PackageNotNewer, ZeroSymbol,
+    InvalidFeed, InvalidHaltSigner, InvalidToken, LengthMismatch, NoLegs, NoToken, PackageNotNewer,
+    SignerNotAuthorised, UnknownAsset, ZeroSymbol,
 };
+use crate::halt::Halt;
 use crate::index::Anchor;
 use crate::multiplier::{Change, Status as CorporateAction};
 use crate::session::{Session, Status};
@@ -39,6 +42,7 @@ sol! {
     event Anchored(bytes32 indexed symbol, uint64 chainlinkPrice, uint64 indexPrice, uint64 updatedAt);
     event MultiplierRecorded(bytes32 indexed symbol, uint128 before, uint128 after, uint64 effectiveAt);
     event MultiplierConfirmed(bytes32 indexed symbol, uint64 effectiveAt);
+    event HaltWritten(bytes32 indexed symbol, bool halted, uint64 issuedAt, uint64 expiresAt);
 }
 
 #[storage]
@@ -73,6 +77,8 @@ pub struct Asset {
     confirmed: StorageBool,
     multiplier_before: StorageU128,
     multiplier_after: StorageU128,
+    halt_issued_at: StorageU64,
+    halt_until: StorageU64,
 }
 
 #[storage]
@@ -83,6 +89,7 @@ pub struct Band {
     volatility: StorageMap<B256, Volatility>,
     index_assets: StorageMap<B256, StorageB256>,
     close_ms: StorageU64,
+    halt_signer: StorageAddress,
 }
 
 #[public]
@@ -90,7 +97,8 @@ impl Band {
     /// Sets the per-asset configuration once. A zero feed or feed ID means the asset has no such leg.
     /// An asset takes its 24/7 leg from its own RedStone feed or from an index feed, never both; an
     /// index leg needs a Chainlink feed to anchor it, and backs one asset. A Stock Token turns the
-    /// RedStone share price into the token's price through its ERC-8056 multiplier.
+    /// RedStone share price into the token's price through its ERC-8056 multiplier. `halt_signer` signs
+    /// trading halts.
     #[constructor]
     pub fn constructor(
         &mut self,
@@ -99,7 +107,12 @@ impl Band {
         redstone_feed_ids: Vec<B256>,
         index_feed_ids: Vec<B256>,
         tokens: Vec<Address>,
+        halt_signer: Address,
     ) -> Result<(), BandError> {
+        if halt_signer == Address::ZERO {
+            return Err(BandError::InvalidHaltSigner(InvalidHaltSigner {}));
+        }
+        self.halt_signer.set(halt_signer);
         let n = symbols.len();
         if chainlink_feeds.len() != n
             || redstone_feed_ids.len() != n
@@ -157,6 +170,8 @@ impl Band {
                     .token_terms(token, Change::default())
                     .filter(|(current, _, _)| *current != 0)
                     .ok_or(BandError::InvalidToken(InvalidToken { token }))?;
+                token::oracle_paused(self.vm(), token)
+                    .ok_or(BandError::InvalidToken(InvalidToken { token }))?;
                 let now = self.vm().block_timestamp();
                 if let Some(change) =
                     multiplier::record(Change::default(), current, new, effective_at, now)
@@ -195,9 +210,10 @@ impl Band {
     }
 
     /// Confirms a material change past its step once a Chainlink round that started at or after the
-    /// step falls inside the band of the 24/7 leg alone, then records the token's latest change. A
-    /// change is not replaced before it is confirmed. Anyone may call it; the multiplier before a step
-    /// can only be recorded before the step. Returns the status of the change in force.
+    /// step falls inside the band of the 24/7 leg alone, and the issuer has not paused the token's
+    /// oracle, then records the token's latest change. A change is not replaced before it is
+    /// confirmed. Anyone may call it; the multiplier before a step can only be recorded before the
+    /// step. Returns the status of the change in force.
     pub fn sync_multiplier(&mut self, symbol: B256) -> Result<u8, BandError> {
         let now = self.vm().block_timestamp();
         let token = self.assets.getter(symbol).token.get();
@@ -210,7 +226,7 @@ impl Band {
             .ok_or(BandError::InvalidToken(InvalidToken { token }))?;
         loop {
             if multiplier::status(change, now) == CorporateAction::Unconfirmed {
-                if !self.confirms(symbol, change) {
+                if self.oracle_paused(symbol) || !self.confirms(symbol, change) {
                     break;
                 }
                 change.confirmed = true;
@@ -258,15 +274,22 @@ impl Band {
     /// live, its centre, half-width in basis points and bounds. While the session is not known,
     /// Chainlink sleeps and a band that is not halted is degraded. After a material multiplier step,
     /// the band is halted until Chainlink confirms the new terms, because the share price may or may
-    /// not have moved with the step.
+    /// not have moved with the step. It is also halted while a signed trading halt holds or the issuer
+    /// has paused the token's oracle, and degraded once a signed halt has lapsed without a lift.
     pub fn quote(&self, symbol: B256) -> (u8, u8, u64, u64, u64, u128) {
         let now = self.vm().block_timestamp();
+        let halt = self.halt_of(symbol);
+        if halt::active(halt, now) {
+            return (0, 0, 0, 0, 0, 0);
+        }
         let (inputs, change, session) = self.inputs(symbol, now);
-        if multiplier::status(change, now) == CorporateAction::Unconfirmed {
+        if multiplier::status(change, now) == CorporateAction::Unconfirmed
+            || self.oracle_paused(symbol)
+        {
             return (0, 0, 0, 0, 0, 0);
         }
         let mut quote = quote::compute(&inputs);
-        if session.is_none() && quote.state != quote::State::Halted {
+        if (session.is_none() || halt::lapsed(halt, now)) && quote.state != quote::State::Halted {
             quote.state = quote::State::Degraded;
         }
         (
@@ -277,6 +300,75 @@ impl Band {
             quote.low,
             quote.high,
         )
+    }
+
+    /// The trading halt of `symbol` from its two sources: whether a halt signed by Tapehouse's halt
+    /// signer holds, the one input the band takes on Tapehouse's own signature; until when; when its
+    /// last message was issued; and whether the issuer has paused the Stock Token's oracle. Either
+    /// halts the band. A non-zero `until` in the past is a halt that lapsed without a lift, which
+    /// degrades the band. A token that cannot be read counts as paused.
+    pub fn halt(&self, symbol: B256) -> (bool, u64, u64, bool) {
+        let halt = self.halt_of(symbol);
+        (
+            halt::active(halt, self.vm().block_timestamp()),
+            halt.until,
+            halt.issued_at,
+            self.oracle_paused(symbol),
+        )
+    }
+
+    /// The address whose EIP-712 `HaltState` messages the band accepts.
+    pub fn halt_signer(&self) -> Address {
+        self.halt_signer.get()
+    }
+
+    /// Writes a trading halt for `symbol` signed by Tapehouse's halt signer, the one input the band
+    /// takes on Tapehouse's own signature, as EIP-712
+    /// `HaltState(bytes32 symbol,bool halted,uint64 issuedAt,uint64 expiresAt)` under the domain
+    /// "Tapehouse Band", version "1", of this band. Anyone may call it. `halted` holds the asset halted
+    /// until `expiresAt`; otherwise the halt is lifted. A message must be issued no later than now,
+    /// expire after now, span at most an hour, and be issued after the last one written.
+    pub fn write_halt(
+        &mut self,
+        symbol: B256,
+        halted: bool,
+        issued_at: u64,
+        expires_at: u64,
+        signature: Bytes,
+    ) -> Result<(), BandError> {
+        let (feed, feed_id, index_id, _) = self.asset(symbol);
+        if feed == Address::ZERO && feed_id == B256::ZERO && index_id == B256::ZERO {
+            return Err(BandError::UnknownAsset(UnknownAsset { symbol }));
+        }
+        let domain = halt::domain_separator(self.vm().chain_id(), self.vm().contract_address());
+        let hash = halt::signing_hash(domain, symbol, halted, issued_at, expires_at);
+        let signer = halt::signer(hash, &signature, |hash, v, r, s| {
+            ecrecover(self.vm(), hash, v, r, s)
+        })?;
+        if signer != self.halt_signer.get() {
+            return Err(BandError::SignerNotAuthorised(SignerNotAuthorised {
+                receivedSigner: signer,
+            }));
+        }
+        let now = self.vm().block_timestamp();
+        let next = halt::accept(
+            symbol,
+            self.halt_of(symbol),
+            halted,
+            issued_at,
+            expires_at,
+            now,
+        )?;
+        let mut asset = self.assets.setter(symbol);
+        asset.halt_issued_at.set(U64::from(next.issued_at));
+        asset.halt_until.set(U64::from(next.until));
+        self.vm().log(HaltWritten {
+            symbol,
+            halted,
+            issuedAt: issued_at,
+            expiresAt: expires_at,
+        });
+        Ok(())
     }
 
     /// Chainlink's 24/5 session from the signed New York market status: 0 not known, 1 closed,
@@ -407,6 +499,19 @@ impl Band {
             basis_bps,
         };
         (inputs, change, session)
+    }
+
+    fn halt_of(&self, symbol: B256) -> Halt {
+        let asset = self.assets.getter(symbol);
+        Halt {
+            issued_at: asset.halt_issued_at.get().to::<u64>(),
+            until: asset.halt_until.get().to::<u64>(),
+        }
+    }
+
+    fn oracle_paused(&self, symbol: B256) -> bool {
+        let token = self.assets.getter(symbol).token.get();
+        token != Address::ZERO && token::oracle_paused(self.vm(), token).unwrap_or(true)
     }
 
     fn change_of(&self, symbol: B256) -> Change {
@@ -703,6 +808,7 @@ mod tests {
     }
 
     const FEED: Address = address!("0x4444444444444444444444444444444444444444");
+    const HALT_SIGNER: Address = address!("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
     const DECIMALS_CALL: [u8; 4] = [0x31, 0x3c, 0xe5, 0x67];
     const LATEST_ROUND_DATA_CALL: [u8; 4] = [0xfe, 0xaf, 0x96, 0x8c];
 
@@ -733,6 +839,7 @@ mod tests {
             vec![symbol("NVDA---24_7")],
             vec![B256::ZERO],
             vec![Address::ZERO],
+            HALT_SIGNER,
         );
         assert_eq!(result, Err(BandError::LengthMismatch(LengthMismatch {})));
         let result = band.constructor(
@@ -741,6 +848,7 @@ mod tests {
             vec![],
             vec![B256::ZERO],
             vec![Address::ZERO],
+            HALT_SIGNER,
         );
         assert_eq!(result, Err(BandError::LengthMismatch(LengthMismatch {})));
         let result = band.constructor(
@@ -749,6 +857,7 @@ mod tests {
             vec![symbol("NVDA---24_7")],
             vec![],
             vec![Address::ZERO],
+            HALT_SIGNER,
         );
         assert_eq!(result, Err(BandError::LengthMismatch(LengthMismatch {})));
     }
@@ -763,6 +872,7 @@ mod tests {
             vec![symbol("NVDA---24_7")],
             vec![B256::ZERO],
             vec![Address::ZERO],
+            HALT_SIGNER,
         );
         assert_eq!(result, Err(BandError::ZeroSymbol(ZeroSymbol {})));
     }
@@ -777,6 +887,7 @@ mod tests {
             vec![B256::ZERO],
             vec![B256::ZERO],
             vec![Address::ZERO],
+            HALT_SIGNER,
         );
         assert_eq!(
             result,
@@ -796,6 +907,7 @@ mod tests {
             vec![symbol("NVDA---24_7"), symbol("TSLA---24_7")],
             vec![B256::ZERO, B256::ZERO],
             vec![Address::ZERO; 2],
+            HALT_SIGNER,
         );
         assert_eq!(
             result,
@@ -820,6 +932,7 @@ mod tests {
             vec![B256::ZERO],
             vec![B256::ZERO],
             vec![Address::ZERO],
+            HALT_SIGNER,
         );
         assert_eq!(
             result,
@@ -837,6 +950,7 @@ mod tests {
             vec![B256::ZERO],
             vec![B256::ZERO],
             vec![Address::ZERO],
+            HALT_SIGNER,
         );
         assert_eq!(
             result,
@@ -859,6 +973,7 @@ mod tests {
             vec![symbol("NVDA---24_7"), symbol("TSLA---24_7"), B256::ZERO],
             vec![B256::ZERO, B256::ZERO, symbol("USA500.Y---24_7")],
             vec![Address::ZERO; 3],
+            HALT_SIGNER,
         )
         .unwrap();
         assert_eq!(
@@ -974,6 +1089,7 @@ mod tests {
             vec![symbol("NVDA---24_7"), B256::ZERO],
             vec![B256::ZERO, symbol("USA500.Y---24_7")],
             vec![Address::ZERO; 2],
+            HALT_SIGNER,
         )
         .unwrap();
         assert!(band.prices.getter(symbol("NVDA---24_7")).tracked.get());
@@ -1061,6 +1177,7 @@ mod tests {
             vec![symbol("SPY---24_7")],
             vec![symbol("USA500.Y---24_7")],
             vec![Address::ZERO],
+            HALT_SIGNER,
         );
         assert_eq!(
             result,
@@ -1080,6 +1197,7 @@ mod tests {
             vec![B256::ZERO],
             vec![symbol("USA500.Y---24_7")],
             vec![Address::ZERO],
+            HALT_SIGNER,
         );
         assert_eq!(
             result,
@@ -1104,6 +1222,7 @@ mod tests {
             vec![B256::ZERO, B256::ZERO],
             vec![symbol("USA500.Y---24_7"), symbol("USA500.Y---24_7")],
             vec![Address::ZERO; 2],
+            HALT_SIGNER,
         );
         assert_eq!(
             result,
@@ -1556,6 +1675,32 @@ mod tests {
             vec![symbol("NVDA---24_7")],
             vec![B256::ZERO],
             vec![TOKEN],
+            HALT_SIGNER,
+        );
+        assert_eq!(
+            result,
+            Err(BandError::InvalidToken(InvalidToken { token: TOKEN }))
+        );
+    }
+
+    #[test]
+    fn constructor_rejects_a_token_without_an_oracle_pause() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        vm.mock_static_call(
+            TOKEN,
+            vec![0x77, 0x06, 0xba, 0x52],
+            Ok(U256::from(1_000_775_159_164_630_595u64)
+                .to_be_bytes::<32>()
+                .to_vec()),
+        );
+        let result = band.constructor(
+            vec![symbol("NVDA")],
+            vec![Address::ZERO],
+            vec![symbol("NVDA---24_7")],
+            vec![B256::ZERO],
+            vec![TOKEN],
+            HALT_SIGNER,
         );
         assert_eq!(
             result,
@@ -1578,6 +1723,7 @@ mod tests {
             vec![symbol("NVDA---24_7")],
             vec![B256::ZERO],
             vec![TOKEN],
+            HALT_SIGNER,
         );
         assert_eq!(
             result,
@@ -1594,6 +1740,152 @@ mod tests {
         vm.set_block_timestamp(WED_3AM_S);
         assert_eq!(band.corporate_action(symbol("NVDA")), (2, WED_3AM_S, 0, 0));
         assert_eq!(band.quote(symbol("NVDA")), (0, 0, 0, 0, 0, 0));
+        assert!(band.halt(symbol("NVDA")).3);
+    }
+
+    #[test]
+    fn constructor_rejects_a_zero_halt_signer() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        let result = band.constructor(
+            vec![symbol("NVDA")],
+            vec![Address::ZERO],
+            vec![symbol("NVDA---24_7")],
+            vec![B256::ZERO],
+            vec![Address::ZERO],
+            Address::ZERO,
+        );
+        assert_eq!(
+            result,
+            Err(BandError::InvalidHaltSigner(InvalidHaltSigner {}))
+        );
+        assert_eq!(band.halt_signer(), Address::ZERO);
+    }
+
+    fn sign_halt(
+        vm: &TestVM,
+        halted: bool,
+        issued_at: u64,
+        expires_at: u64,
+        signer: Address,
+    ) -> Bytes {
+        let domain = halt::domain_separator(vm.chain_id(), vm.contract_address());
+        let hash = halt::signing_hash(domain, symbol("NVDA"), halted, issued_at, expires_at);
+        let input = [
+            hash.as_slice(),
+            B256::with_last_byte(27).as_slice(),
+            R.as_slice(),
+            S.as_slice(),
+        ]
+        .concat();
+        vm.mock_static_call(ECRECOVER, input, Ok(signer.into_word().to_vec()));
+        Bytes::from([R.as_slice(), S.as_slice(), &[27]].concat())
+    }
+
+    #[test]
+    fn a_signed_halt_halts_the_quote_until_lifted_and_degrades_it_once_lapsed() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        band.halt_signer.set(HALT_SIGNER);
+        sign_status(&mut band, CLOSED_SHORT, REGULAR, WED_OPEN_S, WED_3AM_S - 10);
+        vm.set_block_timestamp(WED_3AM_S);
+        nvda(
+            &vm,
+            &mut band,
+            22_050_000_000,
+            WED_3AM_S - 300,
+            22_000_000_000,
+            WED_3AM_S - 10,
+        );
+        assert_eq!(band.quote(symbol("NVDA")).0, 3);
+        let signature = sign_halt(&vm, true, WED_3AM_S - 5, WED_3AM_S + 600, HALT_SIGNER);
+        band.write_halt(
+            symbol("NVDA"),
+            true,
+            WED_3AM_S - 5,
+            WED_3AM_S + 600,
+            signature,
+        )
+        .unwrap();
+        let logs = vm.get_emitted_logs();
+        assert_eq!(logs.last().unwrap().0[0], HaltWritten::SIGNATURE_HASH);
+        assert_eq!(
+            band.halt(symbol("NVDA")),
+            (true, WED_3AM_S + 600, WED_3AM_S - 5, false)
+        );
+        assert_eq!(band.quote(symbol("NVDA")), (0, 0, 0, 0, 0, 0));
+
+        vm.set_block_timestamp(WED_3AM_S + 60);
+        let signature = sign_halt(&vm, false, WED_3AM_S + 50, WED_3AM_S + 400, HALT_SIGNER);
+        band.write_halt(
+            symbol("NVDA"),
+            false,
+            WED_3AM_S + 50,
+            WED_3AM_S + 400,
+            signature,
+        )
+        .unwrap();
+        assert_eq!(band.halt(symbol("NVDA")), (false, 0, WED_3AM_S + 50, false));
+        vm.mock_static_call(
+            FEED,
+            LATEST_ROUND_DATA_CALL.to_vec(),
+            Ok(round(22_050_000_000, WED_3AM_S - 300)),
+        );
+        assert_eq!(band.quote(symbol("NVDA")).0, 3);
+
+        let signature = sign_halt(&vm, true, WED_3AM_S + 60, WED_3AM_S + 100, HALT_SIGNER);
+        band.write_halt(
+            symbol("NVDA"),
+            true,
+            WED_3AM_S + 60,
+            WED_3AM_S + 100,
+            signature,
+        )
+        .unwrap();
+        assert_eq!(band.quote(symbol("NVDA")), (0, 0, 0, 0, 0, 0));
+        vm.set_block_timestamp(WED_3AM_S + 100);
+        vm.mock_static_call(
+            FEED,
+            LATEST_ROUND_DATA_CALL.to_vec(),
+            Ok(round(22_050_000_000, WED_3AM_S - 300)),
+        );
+        assert_eq!(
+            band.halt(symbol("NVDA")),
+            (false, WED_3AM_S + 100, WED_3AM_S + 60, false)
+        );
+        assert_eq!(band.quote(symbol("NVDA")).0, 1);
+    }
+
+    #[test]
+    fn a_halt_from_another_signer_is_rejected() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        band.halt_signer.set(HALT_SIGNER);
+        band.assets.setter(symbol("NVDA")).chainlink_feed.set(FEED);
+        vm.set_block_timestamp(WED_3AM_S);
+        let other = address!("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC");
+        let signature = sign_halt(&vm, true, WED_3AM_S, WED_3AM_S + 60, other);
+        assert_eq!(
+            band.write_halt(symbol("NVDA"), true, WED_3AM_S, WED_3AM_S + 60, signature),
+            Err(BandError::SignerNotAuthorised(SignerNotAuthorised {
+                receivedSigner: other
+            }))
+        );
+        assert_eq!(band.halt(symbol("NVDA")), (false, 0, 0, false));
+    }
+
+    #[test]
+    fn a_halt_for_an_unknown_asset_reverts() {
+        let vm = TestVM::default();
+        let mut band = Band::from(&vm);
+        band.halt_signer.set(HALT_SIGNER);
+        let signature = sign_halt(&vm, true, 0, 60, HALT_SIGNER);
+        assert_eq!(
+            band.write_halt(symbol("NVDA"), true, 0, 60, signature),
+            Err(BandError::UnknownAsset(UnknownAsset {
+                symbol: symbol("NVDA")
+            }))
+        );
     }
 
     #[test]

@@ -8,6 +8,7 @@ sol_interface! {
         function uiMultiplier() external view returns (uint256);
         function newUIMultiplier() external view returns (uint256);
         function effectiveAt() external view returns (uint256);
+        function oraclePaused() external view returns (bool);
     }
 }
 
@@ -29,4 +30,11 @@ pub fn multiplier(host: &impl Host, token: Address) -> Option<u128> {
             .ok()?,
     )
     .ok()
+}
+
+/// Whether the issuer has paused the token's oracle. `None` when the call fails.
+pub fn oracle_paused(host: &impl Host, token: Address) -> Option<bool> {
+    IStockToken::new(token)
+        .oracle_paused(host, Call::new())
+        .ok()
 }

@@ -5,6 +5,7 @@ contract StubStockToken {
     uint256 internal multiplier;
     uint256 public newUIMultiplier;
     uint256 public effectiveAt;
+    bool public oraclePaused;
 
     constructor(uint256 multiplier_) {
         multiplier = multiplier_;
@@ -20,5 +21,13 @@ contract StubStockToken {
         multiplier = uiMultiplier();
         newUIMultiplier = newMultiplier;
         effectiveAt = effectiveAt_;
+    }
+
+    function pauseOracle() external {
+        oraclePaused = true;
+    }
+
+    function unpauseOracle() external {
+        oraclePaused = false;
     }
 }

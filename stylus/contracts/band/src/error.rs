@@ -50,6 +50,14 @@ sol! {
     error InvalidToken(address token);
     #[derive(Debug, PartialEq, Eq)]
     error NoToken(bytes32 symbol);
+    #[derive(Debug, PartialEq, Eq)]
+    error InvalidHaltSigner();
+    #[derive(Debug, PartialEq, Eq)]
+    error UnknownAsset(bytes32 symbol);
+    #[derive(Debug, PartialEq, Eq)]
+    error HaltOutsideWindow(uint64 issuedAt, uint64 expiresAt, uint64 blockTimestamp);
+    #[derive(Debug, PartialEq, Eq)]
+    error HaltNotNewer(bytes32 symbol, uint64 storedIssuedAt, uint64 issuedAt);
 }
 
 #[derive(SolidityError, Debug, PartialEq, Eq)]
@@ -77,4 +85,8 @@ pub enum BandError {
     IncompleteStatus(IncompleteStatus),
     InvalidToken(InvalidToken),
     NoToken(NoToken),
+    InvalidHaltSigner(InvalidHaltSigner),
+    UnknownAsset(UnknownAsset),
+    HaltOutsideWindow(HaltOutsideWindow),
+    HaltNotNewer(HaltNotNewer),
 }

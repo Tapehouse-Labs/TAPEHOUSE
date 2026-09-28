@@ -1,0 +1,345 @@
+{
+ "domain": [
+  {
+   "name": "Robinhood Chain",
+   "chain_id": "4663",
+   "band": "0xab8e440727A38bBB180f7032ca4a8009E7b52B80",
+   "expected": "0x15fee04bbe8ce9856665657fb1a7e5e692c023f529a50a0a85c9d9c12e7c2d81"
+  },
+  {
+   "name": "Robinhood Chain testnet",
+   "chain_id": "46630",
+   "band": "0xab8e440727A38bBB180f7032ca4a8009E7b52B80",
+   "expected": "0xd8d2513afe7a0d01650cf7344da6f5f9038ade8c034a6ebaf16e136e7592f8ba"
+  },
+  {
+   "name": "another band on Robinhood Chain",
+   "chain_id": "4663",
+   "band": "0x0000000000000000000000000000000000000001",
+   "expected": "0xa9ab3417af4dd3ec607330e419010c0d717bf4adaa93540800cb6cc22f99b2d9"
+  }
+ ],
+ "signed": [
+  {
+   "name": "NVDA halted for 30 minutes",
+   "chain_id": "4663",
+   "band": "0xab8e440727A38bBB180f7032ca4a8009E7b52B80",
+   "symbol": "0x4e56444100000000000000000000000000000000000000000000000000000000",
+   "halted": true,
+   "issued_at": "1790390000",
+   "expires_at": "1790391800",
+   "hash": "0xdd5a7ad41f0beed5a8817fdd91506eee138d1343ab244d1877d3faf909a29d80",
+   "signature": "0x7b919e4d69fe663a623f0f8b275a9a1e065f0bdffa2d569588540802701ab9a3336628a00a2c481a10b4eac623d20d9c00e15ea06d25409dd7eb45179d943f381c",
+   "signer": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+  },
+  {
+   "name": "NVDA's halt lifted",
+   "chain_id": "4663",
+   "band": "0xab8e440727A38bBB180f7032ca4a8009E7b52B80",
+   "symbol": "0x4e56444100000000000000000000000000000000000000000000000000000000",
+   "halted": false,
+   "issued_at": "1790390060",
+   "expires_at": "1790390900",
+   "hash": "0x0129c4217e09c14d87b1fa80cb9bb0e0a62436464cca74dc131233655f581197",
+   "signature": "0x9bc273a4f36f9a731f117793e4f2fbe3a26fa776277aead71352595ce2cf566703784ec5a80ba645b106f6b1753bbb35fb707ec40cbea12582196225d69899f61b",
+   "signer": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+  },
+  {
+   "name": "SPY halted for an hour",
+   "chain_id": "4663",
+   "band": "0xab8e440727A38bBB180f7032ca4a8009E7b52B80",
+   "symbol": "0x5350590000000000000000000000000000000000000000000000000000000000",
+   "halted": true,
+   "issued_at": "1790390000",
+   "expires_at": "1790393600",
+   "hash": "0x6c96c2b41eea7ef47d2ecc26ad7706c96b551352b3770bf2e149efa2e1a3381f",
+   "signature": "0x1126fb8d05010de51f1c656189a4605ee117fbc25e33fecd3dea0629117d410911dbfe23fa8f91313962256f2942c6447afc64a34fdc58f110b577ec9c616a031b",
+   "signer": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+  },
+  {
+   "name": "TSLA halted, signed a minute ago",
+   "chain_id": "4663",
+   "band": "0xab8e440727A38bBB180f7032ca4a8009E7b52B80",
+   "symbol": "0x54534c4100000000000000000000000000000000000000000000000000000000",
+   "halted": true,
+   "issued_at": "1790389940",
+   "expires_at": "1790390600",
+   "hash": "0x50178d845234de828cbd6a5bb77b2a75efc8ee699a200f81d33b22cb19a2fa6c",
+   "signature": "0xec2b365e2428fbfcb60670ad985e49c171383a0d26ff8fa38f810673f54cb7cc29e08f10d4c560c8c4c441aa75ca0091a386bdcc877268ae62a2f2717a292b011b",
+   "signer": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+  }
+ ],
+ "accept": [
+  {
+   "name": "a first halt",
+   "stored": {
+    "issued_at": "0",
+    "until": "0"
+   },
+   "halted": true,
+   "issued_at": "1790390000",
+   "expires_at": "1790391800",
+   "now": "1790390000",
+   "expected": {
+    "issued_at": "1790390000",
+    "until": "1790391800"
+   }
+  },
+  {
+   "name": "a first lift",
+   "stored": {
+    "issued_at": "0",
+    "until": "0"
+   },
+   "halted": false,
+   "issued_at": "1790390000",
+   "expires_at": "1790390060",
+   "now": "1790390000",
+   "expected": {
+    "issued_at": "1790390000",
+    "until": "0"
+   }
+  },
+  {
+   "name": "a newer lift clears a halt",
+   "stored": {
+    "issued_at": "1790389700",
+    "until": "1790390600"
+   },
+   "halted": false,
+   "issued_at": "1790389990",
+   "expires_at": "1790390060",
+   "now": "1790390000",
+   "expected": {
+    "issued_at": "1790389990",
+    "until": "0"
+   }
+  },
+  {
+   "name": "a newer halt extends one",
+   "stored": {
+    "issued_at": "1790389700",
+    "until": "1790390600"
+   },
+   "halted": true,
+   "issued_at": "1790390000",
+   "expires_at": "1790393600",
+   "now": "1790390000",
+   "expected": {
+    "issued_at": "1790390000",
+    "until": "1790393600"
+   }
+  },
+  {
+   "name": "the same issuedAt is not newer",
+   "stored": {
+    "issued_at": "1790389700",
+    "until": "1790390600"
+   },
+   "halted": true,
+   "issued_at": "1790389700",
+   "expires_at": "1790390600",
+   "now": "1790390000",
+   "expected": "HaltNotNewer"
+  },
+  {
+   "name": "an older message is not newer",
+   "stored": {
+    "issued_at": "1790389700",
+    "until": "1790390600"
+   },
+   "halted": false,
+   "issued_at": "1790389699",
+   "expires_at": "1790390600",
+   "now": "1790390000",
+   "expected": "HaltNotNewer"
+  },
+  {
+   "name": "issued in the future",
+   "stored": {
+    "issued_at": "0",
+    "until": "0"
+   },
+   "halted": true,
+   "issued_at": "1790390001",
+   "expires_at": "1790390600",
+   "now": "1790390000",
+   "expected": "HaltOutsideWindow"
+  },
+  {
+   "name": "issued now",
+   "stored": {
+    "issued_at": "0",
+    "until": "0"
+   },
+   "halted": true,
+   "issued_at": "1790390000",
+   "expires_at": "1790390600",
+   "now": "1790390000",
+   "expected": {
+    "issued_at": "1790390000",
+    "until": "1790390600"
+   }
+  },
+  {
+   "name": "expired",
+   "stored": {
+    "issued_at": "0",
+    "until": "0"
+   },
+   "halted": true,
+   "issued_at": "1790389400",
+   "expires_at": "1790390000",
+   "now": "1790390000",
+   "expected": "HaltOutsideWindow"
+  },
+  {
+   "name": "expires a second from now",
+   "stored": {
+    "issued_at": "0",
+    "until": "0"
+   },
+   "halted": true,
+   "issued_at": "1790389400",
+   "expires_at": "1790390001",
+   "now": "1790390000",
+   "expected": {
+    "issued_at": "1790389400",
+    "until": "1790390001"
+   }
+  },
+  {
+   "name": "exactly the longest window",
+   "stored": {
+    "issued_at": "0",
+    "until": "0"
+   },
+   "halted": true,
+   "issued_at": "1790389900",
+   "expires_at": "1790393500",
+   "now": "1790390000",
+   "expected": {
+    "issued_at": "1790389900",
+    "until": "1790393500"
+   }
+  },
+  {
+   "name": "a second over the longest window",
+   "stored": {
+    "issued_at": "0",
+    "until": "0"
+   },
+   "halted": true,
+   "issued_at": "1790389900",
+   "expires_at": "1790393501",
+   "now": "1790390000",
+   "expected": "HaltOutsideWindow"
+  },
+  {
+   "name": "a window beyond u64 arithmetic",
+   "stored": {
+    "issued_at": "0",
+    "until": "0"
+   },
+   "halted": true,
+   "issued_at": "0",
+   "expires_at": "18446744073709551615",
+   "now": "1790390000",
+   "expected": "HaltOutsideWindow"
+  }
+ ],
+ "active": [
+  {
+   "name": "no halt",
+   "halt": {
+    "issued_at": "0",
+    "until": "0"
+   },
+   "now": "1790390000",
+   "expected": false
+  },
+  {
+   "name": "a halt in force",
+   "halt": {
+    "issued_at": "1790389700",
+    "until": "1790390600"
+   },
+   "now": "1790390000",
+   "expected": true
+  },
+  {
+   "name": "the second a halt expires",
+   "halt": {
+    "issued_at": "1790389700",
+    "until": "1790390600"
+   },
+   "now": "1790390600",
+   "expected": false
+  },
+  {
+   "name": "a second before",
+   "halt": {
+    "issued_at": "1790389700",
+    "until": "1790390600"
+   },
+   "now": "1790390599",
+   "expected": true
+  }
+ ],
+ "lapsed": [
+  {
+   "name": "no halt",
+   "halt": {
+    "issued_at": "0",
+    "until": "0"
+   },
+   "now": "1790390000",
+   "expected": false
+  },
+  {
+   "name": "a halt in force",
+   "halt": {
+    "issued_at": "1790389700",
+    "until": "1790390600"
+   },
+   "now": "1790390000",
+   "expected": false
+  },
+  {
+   "name": "the second a halt expires",
+   "halt": {
+    "issued_at": "1790389700",
+    "until": "1790390600"
+   },
+   "now": "1790390600",
+   "expected": true
+  },
+  {
+   "name": "a second before",
+   "halt": {
+    "issued_at": "1790389700",
+    "until": "1790390600"
+   },
+   "now": "1790390599",
+   "expected": false
+  },
+  {
+   "name": "lifted",
+   "halt": {
+    "issued_at": "1790389940",
+    "until": "0"
+   },
+   "now": "1790390000",
+   "expected": false
+  },
+  {
+   "name": "long after a lapse",
+   "halt": {
+    "issued_at": "1790389700",
+    "until": "1790390600"
+   },
+   "now": "1790476400",
+   "expected": true
+  }
+ ]
+}

@@ -165,7 +165,7 @@ fn read_size(payload: &[u8], end: &mut usize, size: usize) -> Result<usize, Band
     usize::try_from(read_uint(payload, end, size)?).map_err(|_| overflow())
 }
 
-fn recover_signer(
+pub(crate) fn recover_signer(
     signed_hash: B256,
     signature: &[u8],
     recover: &impl Fn(B256, u8, B256, B256) -> Option<Address>,

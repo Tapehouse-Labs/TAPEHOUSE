@@ -86,6 +86,8 @@ interface IStockToken is IERC20 {
     event UIMultiplierUpdated(uint256 oldMultiplier, uint256 newMultiplier, uint256 effectiveAtTimestamp);
     event Paused();
     event Unpaused();
+    event OraclePaused();
+    event OracleUnpaused();
 
     error IsPaused();
     error Blocked(address account);
@@ -120,6 +122,9 @@ interface IStockToken is IERC20 {
     function totalSupplyUI() external view returns (uint256);
     function supportsInterface(bytes4 interfaceId) external view returns (bool);
     function updateMultiplier(uint256 newMultiplier, uint256 effectiveAt_) external;
+    function oraclePaused() external view returns (bool);
+    function pauseOracle() external;
+    function unpauseOracle() external;
 }
 
 interface IStockTokenRegistry {

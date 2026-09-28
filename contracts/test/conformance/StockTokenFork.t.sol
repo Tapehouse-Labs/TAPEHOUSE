@@ -60,6 +60,10 @@ contract StockTokenForkTest is Test {
     uint256 internal constant SPY_NEW_MULTIPLIER = 1_001_717_991_187_472_003;
     uint256 internal constant SPY_EFFECTIVE_AT = 1_789_690_233;
 
+    address internal constant CRWD = 0xea72Ecca2d0f6bFA1394DBBCff85b52CD4233931;
+    uint256 internal constant CRWD_ORACLE_PAUSE_BLOCK = 978_442;
+    uint256 internal constant CRWD_ORACLE_UNPAUSE_BLOCK = 1_287_194;
+
     bytes32 internal constant PERMIT_TYPEHASH =
         keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
 
@@ -340,6 +344,55 @@ contract StockTokenForkTest is Test {
         assertEq(abi.decode(logs[0].data, (uint256)), SPY_OLD_MULTIPLIER);
         assertEq(spy.newUIMultiplier(), 2e18);
         assertEq(spy.effectiveAt(), SPY_EFFECTIVE_AT + 1);
+    }
+
+    function test_OraclePauseIsPerTokenAndChangesNothingElse() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IStockToken.AccessControlUnauthorizedAccount.selector, address(this), ORACLE_PAUSER_ROLE
+            )
+        );
+        nvda.pauseOracle();
+
+        vm.recordLogs();
+        vm.prank(ORACLE_PAUSER);
+        nvda.pauseOracle();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(logs.length, 1);
+        assertEq(logs[0].emitter, address(nvda));
+        assertEq(logs[0].topics[0], IStockToken.OraclePaused.selector);
+        assertTrue(nvda.oraclePaused());
+        assertFalse(spy.oraclePaused());
+        assertFalse(nvda.paused());
+
+        deal(address(nvda), address(this), 1e18);
+        assertTrue(nvda.transfer(address(1), 1));
+        vm.prank(MULTIPLIER_UPDATER);
+        nvda.updateMultiplier(2e18, block.timestamp + 1 days);
+        assertEq(nvda.newUIMultiplier(), 2e18);
+
+        vm.prank(ORACLE_PAUSER);
+        nvda.pauseOracle();
+        assertTrue(nvda.oraclePaused());
+        vm.prank(TOKEN_PAUSER);
+        nvda.pause();
+        vm.expectEmit(address(nvda));
+        emit IStockToken.OracleUnpaused();
+        vm.prank(ORACLE_PAUSER);
+        nvda.unpauseOracle();
+        assertFalse(nvda.oraclePaused());
+    }
+
+    function test_CrwdOracleWasPausedAroundItsSplit() public {
+        vm.createSelectFork("robinhood", CRWD_ORACLE_PAUSE_BLOCK - 1);
+        assertFalse(IStockToken(CRWD).oraclePaused());
+        vm.createSelectFork("robinhood", CRWD_ORACLE_PAUSE_BLOCK);
+        assertTrue(IStockToken(CRWD).oraclePaused());
+        vm.createSelectFork("robinhood", CRWD_ORACLE_UNPAUSE_BLOCK - 1);
+        assertTrue(IStockToken(CRWD).oraclePaused());
+        assertEq(IStockToken(CRWD).uiMultiplier(), 4e18);
+        vm.createSelectFork("robinhood", CRWD_ORACLE_UNPAUSE_BLOCK);
+        assertFalse(IStockToken(CRWD).oraclePaused());
     }
 
     function test_Erc8056InterfaceIdsWithoutConversion() public view {

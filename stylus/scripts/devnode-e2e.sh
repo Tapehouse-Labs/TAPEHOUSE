@@ -87,10 +87,15 @@ jq 'del(.chainlink.TSLA_USD)' "$registry" > "$registry.missing"
 if out=$(BAND_ASSETS="NVDA TSLA" "$(dirname "$0")/check-band.sh" "$rpc" "$band" "$registry.missing" 2>&1); then
   fail "check-band.sh accepted a registry that band-args.sh rejects: $out"
 fi
+jq '.tapehouse.HaltSigner = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"' "$registry" > "$registry.signer"
+if out=$(BAND_ASSETS="NVDA TSLA SPY" "$(dirname "$0")/check-band.sh" "$rpc" "$band" "$registry.signer"); then
+  fail "check-band.sh accepted another halt signer"
+fi
+grep -q "halt signer" <<<"$out" || fail "check-band.sh failed for another reason: $out"
 args=$(BAND_ASSETS="NVDA TSLA" "$(dirname "$0")/band-args.sh" "$registry.swapped")
-read -r symbols feeds feed_ids index_ids tokens <<<"$args"
+read -r symbols feeds feed_ids index_ids tokens halt_signer <<<"$args"
 swapped=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
-  --constructor-args "$symbols" "$feeds" "$feed_ids" "$index_ids" "$tokens" 2>&1 | grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
+  --constructor-args "$symbols" "$feeds" "$feed_ids" "$index_ids" "$tokens" "$halt_signer" 2>&1 | grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
 if out=$(BAND_ASSETS="NVDA TSLA" "$(dirname "$0")/check-band.sh" "$rpc" "$swapped" "$registry.swapped"); then
   fail "check-band.sh accepted feeds that describe other assets"
 fi
@@ -114,9 +119,9 @@ fi
 grep -q 'data: "0x"$' <<<"$out" || fail "the second constructor call reverted for another reason: $out"
 extra=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
   --constructor-args "[$symbol_aapl,$symbol_spy]" "[$zero_address,$zero_address]" \
-  "[$(cast format-bytes32-string AAPL---24_7),$usa500]" "[$zero_id,$zero_id]" "[$zero_address,$zero_address]" 2>&1 |
+  "[$(cast format-bytes32-string AAPL---24_7),$usa500]" "[$zero_id,$zero_id]" "[$zero_address,$zero_address]" "$halt_signer" 2>&1 |
   grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
-jq -n '{chainId: 412346}' > "$registry.redstone"
+jq -n --arg signer "$halt_signer" '{chainId: 412346, tapehouse: {HaltSigner: $signer}}' > "$registry.redstone"
 if out=$(BAND_ASSETS="AAPL SPY" "$(dirname "$0")/check-band.sh" "$rpc" "$extra" "$registry.redstone"); then
   fail "check-band.sh accepted a band that configures an asset band-args.sh leaves out"
 fi
@@ -125,11 +130,18 @@ grep -q 'FAIL: band configures SPY' <<<"$out" || fail "check-band.sh failed for 
 stub_18=$(forge create --root "$root/contracts" test/devnode/StubAggregator.sol:StubAggregator \
   --rpc-url "$rpc" --private-key "$key" --broadcast --json --constructor-args 18 1 1 "NVDA / USD" | jq -r .deployedTo)
 if out=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
-  --constructor-args "[$symbol_nvda]" "[$stub_18]" "[$nvda]" "[$zero_id]" "[$zero_address]" 2>&1); then
+  --constructor-args "[$symbol_nvda]" "[$stub_18]" "[$nvda]" "[$zero_id]" "[$zero_address]" "$halt_signer" 2>&1); then
   fail "a feed with 18 decimals was accepted"
 fi
 if ! grep -q 0x88d8f57d <<<"$out" || ! grep -q 6787b555 <<<"$out"; then
   fail "expected InvalidFeed inside ContractInitializationError, got: $(tail -n 1 <<<"$out")"
+fi
+if out=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
+  --constructor-args "[$symbol_nvda]" "[$zero_address]" "[$nvda]" "[$zero_id]" "[$zero_address]" "$zero_address" 2>&1); then
+  fail "a zero halt signer was accepted"
+fi
+if ! grep -q 0x88d8f57d <<<"$out" || ! grep -q 126917ee <<<"$out"; then
+  fail "expected InvalidHaltSigner inside ContractInitializationError, got: $(tail -n 1 <<<"$out")"
 fi
 
 deploy_tx=$(grep 'deployment tx hash' "$root/stylus/target/devnode-band.log" | grep -o '0x[0-9a-f]\{64\}')
@@ -274,6 +286,90 @@ fresh_nvda() {
 }
 halted="0 0 0 0 0 0 "
 
+halt_key=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
+chain_id=$(cast chain-id --rpc-url "$rpc")
+block_time() { cast block --rpc-url "$rpc" latest -f timestamp; }
+next_second() {
+  local t
+  until t=$(block_time) && [ "$t" -gt "$1" ]; do
+    sleep 0.2
+    mine
+  done
+  echo "$t"
+}
+halt_signature() {
+  jq -n --arg band "${5:-$band}" --argjson chain "${6:-$chain_id}" --arg symbol "$symbol_nvda" --argjson halted "$1" \
+    --argjson issued "$2" --argjson expires "$3" '{
+    types: {
+      EIP712Domain: [{name: "name", type: "string"}, {name: "version", type: "string"},
+        {name: "chainId", type: "uint256"}, {name: "verifyingContract", type: "address"}],
+      HaltState: [{name: "symbol", type: "bytes32"}, {name: "halted", type: "bool"},
+        {name: "issuedAt", type: "uint64"}, {name: "expiresAt", type: "uint64"}]
+    },
+    primaryType: "HaltState",
+    domain: {name: "Tapehouse Band", version: "1", chainId: $chain, verifyingContract: $band},
+    message: {symbol: $symbol, halted: $halted, issuedAt: $issued, expiresAt: $expires}
+  }' > "$registry.halt.json"
+  cast wallet sign --private-key "${4:-$halt_key}" --data --from-file "$registry.halt.json"
+}
+write_halt() {
+  local signature hash
+  signature=$(halt_signature "$@")
+  hash=$(cast send --rpc-url "$rpc" --private-key "$key" "$band" "writeHalt(bytes32,bool,uint64,uint64,bytes)" \
+    "$symbol_nvda" "$1" "$2" "$3" "$signature" --json | jq -r .transactionHash) || fail "writeHalt($1, $2, $3) reverted"
+  cast rpc --rpc-url "$rpc" eth_getTransactionReceipt "$hash" | jq -r '"\(.status) \(.gasUsed) \(.gasUsedForL1)"' |
+    { read -r status gas l1; echo "$status $((gas - l1))"; }
+}
+expect_halt_revert() {
+  local out signature
+  signature=$(halt_signature "$1" "$2" "$3" "${5:-}" "${6:-}" "${7:-}")
+  if out=$(cast call --rpc-url "$rpc" "$band" "writeHalt(bytes32,bool,uint64,uint64,bytes)" \
+    "$symbol_nvda" "$1" "$2" "$3" "$signature" 2>&1); then
+    fail "expected revert $4, got $out"
+  fi
+  grep -q "$4" <<<"$out" || fail "expected revert $4, got $out"
+}
+halt_view() {
+  cast call --rpc-url "$rpc" "$band" "halt(bytes32)(bool,uint64,uint64,bool)" "$symbol_nvda" | cut -d' ' -f1 | tr '\n' ' '
+}
+
+[ "$(cast call --rpc-url "$rpc" "$band" "haltSigner()(address)")" = "$(jq -r .tapehouse.HaltSigner "$registry")" ] ||
+  fail "haltSigner() is not the registry's halt signer"
+live_state=$(quote "$symbol_nvda" | cut -d' ' -f1)
+[ "$live_state" != 0 ] || fail "NVDA is halted before any halt"
+issued=$(block_time)
+expect_halt_revert true "$issued" $((issued + 30)) 0xec459bc0 0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a
+expect_halt_revert true "$issued" $((issued + 3601)) 0x1d538dfe
+expect_halt_revert true "$issued" $((issued + 30)) 0xec459bc0 "" "$swapped"
+expect_halt_revert true "$issued" $((issued + 30)) 0xec459bc0 "" "" 46630
+read -r status halt_gas <<<"$(write_halt true "$issued" $((issued + 30)))"
+[ "$status" = 0x1 ] && [ "$(halt_view)" = "true $((issued + 30)) $issued false " ] &&
+  [ "$(quote "$symbol_nvda")" = "0 0 0 0 0 0 " ] || fail "a signed halt did not halt NVDA: $(halt_view)"
+expect_halt_revert true "$issued" $((issued + 30)) 0xedd6aa50
+signed_quote_gas=$(l2_gas "$(cast calldata "quote(bytes32)" "$symbol_nvda")")
+lifted=$(next_second "$issued")
+write_halt false "$lifted" $((lifted + 30)) > /dev/null
+[ "$(halt_view)" = "false 0 $lifted false " ] && [ "$(quote "$symbol_nvda" | cut -d' ' -f1)" != 0 ] ||
+  fail "a newer lift did not end the halt: $(halt_view)"
+issued=$(next_second "$lifted")
+write_halt true "$issued" $((issued + 20)) > /dev/null
+[ "$(quote "$symbol_nvda" | cut -d' ' -f1)" = 0 ] || fail "the second halt did not hold"
+after $((issued + 20))
+[ "$(halt_view)" = "false $((issued + 20)) $issued false " ] && [ "$(quote "$symbol_nvda" | cut -d' ' -f1)" = 1 ] ||
+  fail "a lapsed halt did not degrade NVDA: $(halt_view) $(quote "$symbol_nvda")"
+lifted=$(block_time)
+write_halt false "$lifted" $((lifted + 30)) > /dev/null
+[ "$(quote "$symbol_nvda" | cut -d' ' -f1)" = "$live_state" ] || fail "a lift after a lapse did not restore NVDA's band"
+cast send --rpc-url "$rpc" --private-key "$key" "$token" "pauseOracle()" > /dev/null
+[ "$(halt_view | cut -d' ' -f4)" = true ] && [ "$(quote "$symbol_nvda")" = "0 0 0 0 0 0 " ] ||
+  fail "the issuer's oracle pause did not halt NVDA: $(halt_view)"
+halted_quote_gas=$(l2_gas "$(cast calldata "quote(bytes32)" "$symbol_nvda")")
+cast send --rpc-url "$rpc" --private-key "$key" "$token" "unpauseOracle()" > /dev/null
+[ "$(quote "$symbol_nvda" | cut -d' ' -f1)" != 0 ] || fail "NVDA stayed halted after the oracle pause ended"
+echo "signed halt: written with L2 gas $halt_gas; replay, other key, band and chain rejected; lifted; lapsed to degraded"
+echo "L2 gas: quote(NVDA) under a signed halt $signed_quote_gas, while its oracle is paused $halted_quote_gas"
+
+
 m0=$(cast call --rpc-url "$rpc" "$token" "uiMultiplier()(uint256)" | cut -d' ' -f1)
 m1=$(math "$m0 * 10017 // 10000")
 at=$(schedule "$m1")
@@ -306,6 +402,10 @@ cast send --rpc-url "$rpc" --private-key "$key" "$nvda_feed" "setRound(int256,ui
 read -r status _ logs <<<"$(sync_multiplier)"
 [ "$logs" = 0 ] && [ "$(quote "$symbol_nvda")" = "$halted" ] || fail "a Chainlink round outside the 24/7 band confirmed the split: $(action)"
 cast send --rpc-url "$rpc" --private-key "$key" "$nvda_feed" "setRound(int256,uint256)" "$(token_px "$nvda_share")" "$(date +%s)" > /dev/null
+cast send --rpc-url "$rpc" --private-key "$key" "$token" "pauseOracle()" > /dev/null
+read -r status _ logs <<<"$(sync_multiplier)"
+[ "$logs $(action | cut -d' ' -f1)" = "0 2" ] || fail "a split was confirmed while the issuer paused the oracle: $(action)"
+cast send --rpc-url "$rpc" --private-key "$key" "$token" "unpauseOracle()" > /dev/null
 read -r status confirm_gas logs <<<"$(sync_multiplier)"
 [ "$logs $(action)" = "3 0 $at 0 $m3 " ] && [ "$(quote "$symbol_nvda")" != "$halted" ] ||
   fail "a Chainlink round inside the 24/7 band did not confirm the split and the dividend after it: $(action)"
@@ -340,9 +440,9 @@ echo "SPY's dividend: Chainlink and the index leg's anchor scaled to $cl_price a
 
 after "$m5_at"
 args=$(BAND_ASSETS="NVDA" "$(dirname "$0")/band-args.sh" "$registry")
-read -r symbols feeds feed_ids index_ids tokens <<<"$args"
+read -r symbols feeds feed_ids index_ids tokens halt_signer <<<"$args"
 fresh=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
-  --constructor-args "$symbols" "$feeds" "$feed_ids" "$index_ids" "$tokens" 2>&1 | grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
+  --constructor-args "$symbols" "$feeds" "$feed_ids" "$index_ids" "$tokens" "$halt_signer" 2>&1 | grep 'deployed code at address' | grep -o '0x[0-9a-f]\{40\}')
 [ "$(action "$symbol_nvda" "$fresh")" = "2 $m5_at 0 $m5 " ] || fail "a band deployed after a step does not start halted: $(action "$symbol_nvda" "$fresh")"
 nvda_share=$(fresh_nvda "$fresh")
 cast send --rpc-url "$rpc" --private-key "$key" "$nvda_feed" "setRound(int256,uint256)" "$(token_px "$nvda_share")" "$(date +%s)" > /dev/null

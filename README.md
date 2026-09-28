@@ -78,6 +78,12 @@ cast wallet import tapehouse-deployer --interactive
 
 `forge` uses it with `--account tapehouse-deployer`. `cargo stylus` uses it with `--keystore-path ~/.foundry/keystores/tapehouse-deployer --keystore-password-path <file>`.
 
+Trading halts are signed by a separate key, whose address each chain's registry records as `.tapehouse.HaltSigner`:
+
+```bash
+cast wallet new ~/.foundry/keystores tapehouse-halt-signer
+```
+
 ## The band program
 
 `stylus/contracts/band` verifies signed RedStone data packages on-chain with the same rules as `PrimaryProdDataServiceConsumerBase` in `@redstone-finance/evm-connector` 1.0.0: five authorised signers, three unique signers per feed, the median of their values, and a package at most 180 s old and 60 s ahead. Verification errors keep the reference contract's names and selectors.
@@ -89,6 +95,9 @@ cast wallet import tapehouse-deployer --interactive
 - `quote(bytes32 symbol)` returns the band: its state (0 halted, 1 degraded, 2 closed, 3 open), how many legs are live, its centre, half-width in basis points, and lower and upper bounds.
 - `corporateAction(bytes32 symbol)` returns the Stock Token's multiplier change as it affects the band: its status (0 none, 1 scheduled, 2 not yet confirmed), when it takes effect, and the multipliers before and after it.
 - `syncMultiplier(bytes32 symbol)` confirms a halted change (`MultiplierConfirmed`), then records the token's latest one (`MultiplierRecorded`). Anyone may call it.
+- `writeHalt(bytes32 symbol, bool halted, uint64 issuedAt, uint64 expiresAt, bytes signature)` writes a trading halt signed by the halt signer (`HaltWritten`). Anyone may call it.
+- `halt(bytes32 symbol)` returns whether a signed halt holds, until when, when its last message was issued, and whether the issuer has paused the Stock Token's oracle.
+- `haltSigner()` returns the address whose halts the band accepts.
 - `session()` returns Chainlink's 24/5 session (0 not known, 1 closed, 2 open), NYSE's state and its next state (0 not known, 1 regular hours, 2 short close, 3 weekend or holiday), when NYSE changes state, and the session's next boundary: when an open session closes or a closed one reopens. Times are in milliseconds, zero when not known.
 - `anchor(bytes32 symbol)` returns the Chainlink print, index price and print time that an asset priced from an index is anchored to. Each new anchor emits `Anchored`.
 - `variance(bytes32 feedId)` returns the EWMA variance of a configured asset's 24/7 feed, in centi-basis-points squared per minute.
@@ -131,13 +140,28 @@ A multiplier change is a step. The token does not expose the multiplier it repla
 
 A halted asset stays halted until it is confirmed: a later change does not replace an unconfirmed one. A change that took effect before deployment has no known size, so a new band starts halted for that asset until its first `syncMultiplier` after a keeper write. Each call reads the token's scheduled multiplier and `effectiveAt`, so a change nobody recorded, or one replaced without notice, is treated as unknown in size rather than priced wrongly; a current multiplier other than the one the recorded change implies is a missed step, halted from the moment it is seen. A token that cannot be read halts its asset. A 24/7 variance sample never spans a recorded step. For an asset priced from an index, the anchor's print is a Chainlink round like any other: scaled across a step under 50 bps, and no leg after a material step until a round after it re-anchors the index. Its confirmation compares Chainlink with a leg anchored to Chainlink, so it checks only the index's move since that print.
 
+### Trading halts
+
+A trading halt on the underlying halts the asset's band: `quote` returns all zeros while either source holds it.
+
+- **The signed halt.** Robinhood reports whether each Stock Token's underlying is halted (`isTradingHalt` in `https://api.robinhood.com/rhj/prices`), but not on-chain. The band accepts that state per asset when it is signed by Tapehouse's halt signer and written with `writeHalt`, which anyone may call. It is the one input the band takes on Tapehouse's own signature; every other price is signed by RedStone or Chainlink.
+- **The issuer's oracle pause.** The Stock Token's `oraclePaused()` is set by the issuer's oracle pauser, as it was around CRWD's 4:1 split on 2 July 2026. The band reads it at every quote, and `syncMultiplier` confirms no multiplier step while it is set. A configured token must implement it, and a token that cannot be read counts as paused.
+
+A signed halt is the EIP-712 message `HaltState(bytes32 symbol,bool halted,uint64 issuedAt,uint64 expiresAt)` under the domain `EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)` with name "Tapehouse Band", version "1", the chain and the band's address, so it is valid for one band only. The signature is 65 bytes, `r ‖ s ‖ v`, with the same checks as RedStone's: `v` of 27 or 28, a low `s`. A bad or foreign signature reverts with RedStone's `InvalidSignature` or `SignerNotAuthorised`. The band accepts a message when:
+
+- it recovers to `haltSigner()`;
+- it was issued no later than the block, expires after it, and spans at most an hour;
+- it was issued after the last message written for the asset.
+
+A halted message holds the asset until `expiresAt`; a message with `halted` false lifts the halt. A halt that is not refreshed lapses within an hour, and until a message lifts it the band is at most degraded: `halt` then reports a non-zero `until` in the past. The halt signer is set in the constructor and cannot be zero.
+
 ### SPY
 
 SPY has no RedStone 24/7 feed. Its 24/7 leg is its last Chainlink print moved by the S&P 500 index (`USA500.Y---24_7`) since that print: `print × index / index at the print`. The index price at the print is anchored when an index package signed within 120 s of a new Chainlink round is written, so the leg never assumes a fixed ratio between the fund and the index. The index's variance stands in for SPY's, and the leg carries 25 bps of extra half-width for the gap between the fund and its index. SPY has no 24/7 leg until its first anchor, and none where it has no Chainlink feed. On Arbitrum One it keeps its Chainlink leg alone: those feeds follow regular hours and repeat the close in heartbeats, so an anchor there would pair a stale close with a live index. A Chainlink round that repeats the anchored price, such as a heartbeat over a weekend, keeps the anchor.
 
 Two things follow from the anchor. While the session is open SPY's two legs are not independent: the index leg restarts from each new print, so it cross-checks the index's move since that print, not the print itself. And whoever writes the index chooses which package within 120 s of the print becomes the anchor, so the leg can carry up to 240 s of the index's move as a bias.
 
-The asset configuration is set once, in the constructor, and cannot change. Each asset has a Chainlink feed, a 24/7 leg, or both. The 24/7 leg is a RedStone feed ID or an index feed ID, never both; an index needs the Chainlink feed that anchors it and backs one asset. An asset may name its Stock Token. Every configured feed must report 8 decimals.
+The asset configuration is set once, in the constructor, and cannot change. Each asset has a Chainlink feed, a 24/7 leg, or both. The 24/7 leg is a RedStone feed ID or an index feed ID, never both; an index needs the Chainlink feed that anchors it and backs one asset. An asset may name its Stock Token. Every configured feed must report 8 decimals. The halt signer is the registry's `.tapehouse.HaltSigner`.
 
 `band` is larger than one contract's code limit, so it is deployed in code fragments that a small root contract points to, as Arbitrum allows (up to four fragments). The root is deployed through [StylusDeployer](https://github.com/OffchainLabs/nitro-contracts/blob/main/src/stylus/StylusDeployer.sol) at `0xcEcba2F1DC234f70Dd89F2041029807F8D03A990`, which deploys, activates and runs the constructor in one transaction, so nobody else can call the constructor first:
 
@@ -177,3 +201,4 @@ Each deployment below verifies from the commit that added its row: `git log --re
 | 46630 | band | `0x7c53aAa661185943F4dE195210406949fA5618C6` | `0xecaec7d4ae1997b08e034bc8c20866615e083be7856f71f96793e333e8d7b8da` |
 | 46630 | band | `0x3Bf0F882d0edB6C06cBF0D78684F7464B72Fb985` | `0x03f46afb9767c866a36f3b6b53f972b7113ce54a6c8233856430576550677b96` |
 | 46630 | band | `0xa6FebD4225232E71A6A46209ADB46fD3dE1f5BDA` | `0xad35314edf2339d7ea91a75fb9618ca07906e1e7ac67064cf6827f50def1d934` |
+| 46630 | band | `0xA5896f75679F3D7c3aAe31FAd94C5C1B7FfB9A3f` | `0x4a5d7f7c48174bce43c1d3788720546a86901282cf3accc7f0e3afffbd7cc3c1` |
