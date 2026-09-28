@@ -41,7 +41,8 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	build-apps test-apps lint-apps \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
-	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode
+	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode \
+	deploy-band-feeds verify-band-feeds lint-scripts
 
 all: build
 
@@ -49,7 +50,7 @@ build: build-contracts build-stylus build-apps
 
 test: test-contracts test-stylus test-apps
 
-lint: lint-contracts lint-stylus lint-apps
+lint: lint-contracts lint-stylus lint-apps lint-scripts
 
 coverage: coverage-contracts
 
@@ -102,6 +103,9 @@ lint-apps: check-node node_modules/.modules.yaml
 
 submodules:
 	git submodule update --init --recursive
+
+lint-scripts:
+	@shellcheck contracts/script/*.sh stylus/scripts/*.sh
 
 build-contracts: check-foundry submodules
 	cd contracts && forge build
@@ -194,6 +198,15 @@ deploy-stylus: check-docker check-foundry
 	@set -f; args=$$(stylus/scripts/band-args.sh $(or $(REGISTRY),deployments/$(CHAIN).json)) && \
 		CARGO_STYLUS_VERSION=$(CARGO_STYLUS_VERSION) stylus/scripts/reproducible.sh deploy $(RPC_URL_$(CHAIN)) $(CONTRACT) \
 		$(SIGNER) -- $$args
+
+deploy-band-feeds: check-foundry submodules
+	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
+		{ echo "Usage: make deploy-band-feeds CHAIN=<4663|46630|42161|412346> SIGNER='<forge wallet flags>' [REGISTRY=<file>]"; exit 1; }
+	@contracts/script/deploy-band-feeds.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
+
+verify-band-feeds: check-foundry submodules
+	@case "$(CHAIN)" in 4663|46630|42161) ;; *) echo "Usage: make verify-band-feeds CHAIN=<4663|46630|42161>"; exit 1;; esac
+	@contracts/script/verify-band-feeds.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
 
 verify-stylus: check-docker
 	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(TX)" || \

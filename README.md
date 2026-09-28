@@ -24,6 +24,7 @@ Portfolio margin for Stock Tokens on Robinhood Chain.
 | Binaryen | 133, from `stylus/Stylus.toml` | `make` downloads it on first use into `$XDG_CACHE_HOME/binaryen` (default `~/.cache/binaryen`), checked against a pinned SHA-256 |
 | Docker | any recent | [docker.com](https://www.docker.com) — for `make devnode`, `deploy-stylus` and `verify-stylus` |
 | Python 3 and jq | any recent | preinstalled on macOS — only for the dev-node suite |
+| ShellCheck | any recent | `brew install shellcheck`; preinstalled on GitHub's Ubuntu runners — for `make lint` |
 | GNU Make | 3.81 or newer | preinstalled on macOS and most Linux distributions |
 
 ## Build and test
@@ -41,7 +42,7 @@ make test
 |---|---|
 | `make build` | Builds every component |
 | `make test` | Runs every test suite |
-| `make lint` | Formatting, lint and static analysis |
+| `make lint` | Formatting, lint, static analysis and ShellCheck of the scripts |
 | `make coverage` | Solidity coverage, failing below 95% of lines or branches |
 | `make gas` | Contract sizes, gas snapshots and WASM sizes, failing on any change; the Stylus fragment count needs network access to Robinhood Chain |
 | `make snapshot` | Regenerates the gas snapshots and `stylus/.wasm-size`; commit the result |
@@ -49,10 +50,12 @@ make test
 | `make build-stylus` · `test-stylus` · `lint-stylus` · `gas-stylus` · `snapshot-stylus` | Stylus programs only |
 | `make check-activation` | `cargo stylus check` of every program against Robinhood Chain, its testnet and Arbitrum One |
 | `make build-apps` · `test-apps` · `lint-apps` | Apps only |
-| `make devnode deploy-stylus-devnode test-stylus-devnode` | Deploys `band` to a local dev node and writes live RedStone prices through it |
+| `make devnode deploy-stylus-devnode test-stylus-devnode` | Deploys `band` to a local dev node, writes live RedStone prices through it and reads it through a `BandFeed` |
 | `make gas-stylus-devnode` · `snapshot-stylus-devnode` | Compares the dev-node suite's L2 gas with `stylus/.gas-devnode`, failing on a move over 0.5%, or regenerates it |
 | `make deploy-stylus CHAIN=<id> SIGNER='<flags>'` | Deploys `band` reproducibly, configured from `deployments/<id>.json`, and prints the transaction and address |
 | `make verify-stylus CHAIN=<id> TX=<hash>` | Verifies a deployment against the checked-out source |
+| `make deploy-band-feeds CHAIN=<id> SIGNER='<flags>'` | Deploys a `BandFeed` for every asset the chain's band configures and prints each address |
+| `make verify-band-feeds CHAIN=<id>` | Verifies every feed in the registry's `.bandFeeds` on Sourcify |
 
 ## Networks
 
@@ -199,6 +202,25 @@ make verify-stylus CHAIN=<chainId> TX=<deployment tx>
 Every program is optimised after the build by Binaryen's `wasm-opt`, with the version and flags pinned in the `[wasm-opt]` table of `stylus/Stylus.toml`. cargo-stylus folds that recipe into the program's project hash and applies it in reproducible builds, so verification rebuilds the same bytes. `make` puts that `wasm-opt` first on `PATH`; to run `cargo stylus` directly, add `${XDG_CACHE_HOME:-~/.cache}/binaryen/version_133/bin` to `PATH` yourself.
 
 `stylus/scripts/redstone-payload.py` builds a payload from the latest packages, for example `python3 stylus/scripts/redstone-payload.py NVDA---24_7`. Several packages that share a timestamp go in one payload: `python3 stylus/scripts/redstone-payload.py NVDA---24_7 USA500.Y---24_7 NY_MARKET_STATUS`. It reads the public gateways, or the main gateway when `REDSTONE_API_KEY` is set.
+
+## Band feeds
+
+`contracts/src/BandFeed.sol` serves one asset's band to Solidity consumers. It reads `band` on every call, holds no owner and has nothing to configure after deployment.
+
+- **`AggregatorV3Interface`.** `latestRoundData()` answers one side of the band (low, mid or high, chosen at deployment; lending collateral reads the low side) with 8 decimals. The band is recomputed on every read and its state already judges staleness, so the round ID, `startedAt` and `updatedAt` are the current block's timestamp, and `getRoundData` answers only that round (`NoRound`).
+- **No answer is not zero.** A halted band reverts with `NoAnswer`: an unconfirmed multiplier step, a signed halt, or a paused Stock Token oracle. Where the band follows a sequencer-uptime feed, the feed also reverts with `SequencerNotSettled` while the sequencer is down or came back an hour ago or less. A consumer that treats a revert as "no price" stops new borrowing against the asset and never liquidates on a price of zero.
+- **`latestBand()`** returns the whole band: state, live legs, centre, half-width and bounds; the variance behind the half-width (the asset's 24/7 feed, or its index for SPY); the session; the signed halt and the Stock Token's oracle pause; whether the sequencer is settled; and the token's own market.
+- **The token's market, beside the band.** `twap` is the Stock Token's 30-minute Uniswap v3 TWAP in its pool's quote token, USDG on Robinhood Chain, with 8 decimals, and `premiumBps` is its distance from the band's centre, with USDG taken at par. It is never part of the band. Without a pool, or while the pool's history is shorter than 30 minutes, `twapValid` is false and both are zero.
+- **`seal()`** records the band before the session reopens. Anyone may call it while the session is closed and its reopen is at most ten minutes away; the latest call before the reopen stands in `seals(reopenMs)` and every call emits `Sealed` with the whole band, so the record rebuilds from events alone. On Arbitrum One the reopen is still the 24/5 session's, and the band sealed then has its 24/7 leg alone, because the Chainlink leg counts only from NYSE's regular open.
+
+`description()` says what is priced: the Robinhood Stock Token where the band names one, otherwise the share (Arbitrum One, the testnet).
+
+```bash
+make deploy-band-feeds CHAIN=<chainId> SIGNER='--account <name> --password-file <file>'
+make verify-band-feeds CHAIN=<chainId>
+```
+
+`make deploy-band-feeds` deploys a low-side feed for every launch asset the registry's band configures, with the asset's `<ASSET>_USDG_*` pool from `.uniswapV3` when it has a Stock Token. Record each address in the registry's `.bandFeeds` group; fork tests check every entry against its band. `make verify-band-feeds` rebuilds each feed's constructor arguments from the chain and verifies the feed on [Sourcify](https://sourcify.dev), which supports all three chains and the compiler this repository pins.
 
 ## Verification
 

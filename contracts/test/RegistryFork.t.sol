@@ -4,10 +4,11 @@ pragma solidity 0.8.37;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {AggregatorV3Interface, IUniswapV3Factory} from "./conformance/Interfaces.sol";
+import {BandFeed} from "../src/BandFeed.sol";
 
 contract RegistryForkTest is Test {
     uint256 internal constant ROBINHOOD_BLOCK = 69_922_505;
-    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 125_546_289;
+    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 125_558_861;
     uint256 internal constant ARBITRUM_BLOCK = 507_888_520;
     bytes32 internal constant BEACON_SLOT = 0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50;
     bytes4 internal constant STYLUS_ROOT_PREFIX = 0xeff00200;
@@ -52,6 +53,7 @@ contract RegistryForkTest is Test {
             vm.parseJsonAddress(json, ".tapehouse.Owner"),
             "tapehouse.Owner"
         );
+        _assertBandFeeds(json);
     }
 
     function test_ArbitrumEntriesAreTheContractsTheyClaimToBe() public {
@@ -65,6 +67,19 @@ contract RegistryForkTest is Test {
         (, int256 status, uint256 startedAt,,) = sequencer.latestRoundData();
         assertEq(status, 0);
         assertGt(startedAt, 0);
+        _assertBandFeeds(json);
+    }
+
+    function _assertBandFeeds(string memory json) internal view {
+        if (!vm.keyExistsJson(json, ".bandFeeds")) return;
+        address band = vm.parseJsonAddress(json, ".tapehouse.Band");
+        string[] memory assets = vm.parseJsonKeys(json, ".bandFeeds");
+        for (uint256 i; i < assets.length; ++i) {
+            BandFeed feed = BandFeed(vm.parseJsonAddress(json, string.concat(".bandFeeds.", assets[i])));
+            assertEq(address(feed.band()), band, assets[i]);
+            assertEq(feed.symbol(), bytes32(bytes(assets[i])), assets[i]);
+            assertEq(feed.decimals(), 8, assets[i]);
+        }
     }
 
     function _assertFeeds(string memory json) internal view {

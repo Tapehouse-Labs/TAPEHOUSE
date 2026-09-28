@@ -60,7 +60,7 @@ jobs:
             cat "$RUNNER_TEMP/coverage.txt"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-      - run: make lint-contracts
+      - run: make lint-contracts lint-scripts
 
   stylus:
     name: Stylus

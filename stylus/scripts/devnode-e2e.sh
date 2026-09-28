@@ -259,6 +259,41 @@ read -r status gas l1 _ <<<"$(write "$keeper_feeds" "$keeper_payload")"
 [ "$status" = 0x1 ] || fail "the second keeper write reverted"
 echo "keeper update of the same five feeds: L2 gas $((gas - l1))"
 
+feeds_of() {
+  jq --arg band "$1" '.tapehouse.Band = $band' "$registry" > "$registry.feeds"
+  BAND_ASSETS=$2 "$root/contracts/script/deploy-band-feeds.sh" "$rpc" "$registry.feeds" --private-key "$key"
+}
+description() { cast call --rpc-url "$rpc" "$1" "description()(string)"; }
+round_of() { cast call --rpc-url "$rpc" "$1" "latestRoundData()(uint80,int256,uint256,uint256,uint80)" | cut -d' ' -f1 | tr '\n' ' '; }
+expect_feed_revert() {
+  local out
+  if out=$(cast call --rpc-url "$rpc" "$1" "latestRoundData()(uint80,int256,uint256,uint256,uint80)" 2>&1); then
+    fail "expected revert $2, got $out"
+  fi
+  grep -q "$2" <<<"$out" || fail "expected revert $2, got $out"
+}
+band_view="latestBand()((uint8,uint8,uint64,uint64,uint64,uint128,uint128,uint8,uint8,uint8,uint64,uint64,bool,uint64,uint64,bool,bool,bool,uint256,int256))"
+feeds=$(feeds_of "$band" "NVDA TSLA SPY")
+feed_address() { awk -v asset="$1" '$1 == asset { print $2 }' <<<"$feeds"; }
+feed=$(feed_address NVDA)
+[ "$(description "$feed")" = '"NVDA / USD Tapehouse band, low side (Robinhood NVDA Stock Token)"' ] &&
+  [ "$(description "$(feed_address TSLA)")" = '"TSLA / USD Tapehouse band, low side (TSLA share)"' ] &&
+  [ "$(description "$(feed_address SPY)")" = '"SPY / USD Tapehouse band, low side (Robinhood SPY Stock Token)"' ] ||
+  fail "deploy-band-feeds.sh did not describe what each feed prices: $feeds"
+read -r state _ mid _ low _ <<<"$(quote "$symbol_nvda")"
+read -r round answer started updated _ <<<"$(round_of "$feed")"
+now=$(cast block --rpc-url "$rpc" latest -f timestamp)
+[ "$answer" = "$low" ] && [ "$round $started $updated" = "$now $now $now" ] || fail "the feed answered $answer at $round, quote's low is $low"
+[ "$(cast call --rpc-url "$rpc" "$feed" "decimals()(uint8)")" = 8 ] || fail "the feed does not have 8 decimals"
+[ "$(cast call --rpc-url "$rpc" "$feed" "$band_view" | sed 's/ \[[^]]*\]//g' | tr -d '() ' | cut -d, -f1,3)" = "$state,$mid" ] ||
+  fail "latestBand() is not the band: $(cast call --rpc-url "$rpc" "$feed" "$band_view")"
+if out=$(cast call --rpc-url "$rpc" "$feed" "seal()" 2>&1); then
+  echo "the band is within ten minutes of its reopen: seal() would store it"
+else
+  grep -q 0x7c193929 <<<"$out" || fail "expected NotSealWindow, got $out"
+fi
+echo "BandFeed: answers quote's low; L2 gas latestRoundData $(record "BandFeed.latestRoundData(NVDA)" "$(l2_gas "$(cast calldata "latestRoundData()")" "$feed")"), latestBand $(record "BandFeed.latestBand(NVDA)" "$(l2_gas "$(cast calldata "latestBand()")" "$feed")")"
+
 nvda_feed=$(jq -r .chainlink.NVDA_USD "$registry")
 math() { python3 -c "print($1)"; }
 mine() { cast send --rpc-url "$rpc" --private-key "$key" --value 0 "$(cast wallet address "$key")" > /dev/null; }
@@ -356,6 +391,7 @@ read -r status halt_gas <<<"$(write_halt true "$issued" $((issued + 30)))"
 [ "$status" = 0x1 ] && [ "$(halt_view)" = "true $((issued + 30)) $issued false " ] &&
   [ "$(quote "$symbol_nvda")" = "0 0 0 0 0 0 " ] || fail "a signed halt did not halt NVDA: $(halt_view)"
 expect_halt_revert true "$issued" $((issued + 30)) 0xedd6aa50
+expect_feed_revert "$feed" 0x39c5542d
 signed_quote_gas=$(record "quote(NVDA,signedHalt)" "$(l2_gas "$(cast calldata "quote(bytes32)" "$symbol_nvda")")")
 lifted=$(next_second "$issued")
 write_halt false "$lifted" $((lifted + 30)) > /dev/null
@@ -515,14 +551,20 @@ grep -q "FAIL: band's chain configuration" <<<"$out" || fail "check-band.sh fail
 settled=$(arbitrum_state)
 [ "$(settled_view)" = true ] && [ "$settled" != 0 ] || fail "NVDA's band on a settled sequencer is $settled"
 record "quote(NVDA,sequencer)" "$(l2_gas "$(cast calldata "quote(bytes32)" "$symbol_nvda")" "$arbitrum")" > /dev/null
+arbitrum_feed=$(feeds_of "$arbitrum" NVDA | awk '{ print $2 }')
+[ "$(description "$arbitrum_feed")" = '"NVDA / USD Tapehouse band, low side (NVDA share)"' ] || fail "the Arbitrum One feed does not price the share"
+round_of "$arbitrum_feed" > /dev/null
 cast send --rpc-url "$rpc" --private-key "$key" "$sequencer" "setRound(int256,uint256)" 1 "$(block_time)" > /dev/null
 [ "$(settled_view) $(arbitrum_state)" = "false 1" ] || fail "a down sequencer did not degrade the band"
+expect_feed_revert "$arbitrum_feed" 0xc6b5066d
 cast send --rpc-url "$rpc" --private-key "$key" "$sequencer" "setRound(int256,uint256)" 0 $(($(block_time) - 3500)) > /dev/null
 [ "$(settled_view) $(arbitrum_state)" = "false 1" ] || fail "a sequencer back for less than an hour did not keep the band degraded"
+expect_feed_revert "$arbitrum_feed" 0xc6b5066d
 fresh_nvda "$arbitrum" > /dev/null
 cast send --rpc-url "$rpc" --private-key "$key" "$sequencer" "setRound(int256,uint256)" 0 $(($(block_time) - 3700)) > /dev/null
 [ "$(settled_view) $(arbitrum_state)" = "true $settled" ] || fail "a sequencer back for over an hour did not restore the band"
-echo "Arbitrum One configuration: a down or recent sequencer degrades the band"
+round_of "$arbitrum_feed" > /dev/null || fail "the feed did not answer once the sequencer settled"
+echo "Arbitrum One configuration: a down or recent sequencer degrades the band, and the feed refuses to answer"
 
 tsla=$(cast format-bytes32-string TSLA---24_7)
 read -r status _ <<<"$(write "[$tsla]" "$(python3 "$payload" TSLA---24_7)")"

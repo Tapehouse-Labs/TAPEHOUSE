@@ -10,5 +10,9 @@
   },
   "chainlinkSequencer": {
     "Uptime": "0xFdB631F5EE196F0ed6FAa767959853A9F217697D"
+  },
+  "tapehouse": {
+    "HaltSigner": "0x56972f8bd78C46F782E19d8c2E09a5894356a18C",
+    "Owner": "0x8A2631c8226D7EA5612798e6E8C34F4DC703d0ac"
   }
 }
