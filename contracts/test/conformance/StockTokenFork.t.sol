@@ -110,18 +110,7 @@ contract StockTokenForkTest is Test {
         assertEq(vm.parseUint(ROBINHOOD_BLOCK_HEX), ROBINHOOD_BLOCK);
         bytes32 granted = keccak256("RoleGranted(bytes32,address,address)");
         bytes32 revoked = keccak256("RoleRevoked(bytes32,address,address)");
-        string memory filter = string.concat(
-            '[{"fromBlock":"0x0","toBlock":"',
-            ROBINHOOD_BLOCK_HEX,
-            '","address":"',
-            vm.toString(address(registry)),
-            '","topics":[["',
-            vm.toString(granted),
-            '","',
-            vm.toString(revoked),
-            '"]]}]'
-        );
-        RpcLog[] memory logs = abi.decode(vm.rpc("robinhood-logs", "eth_getLogs", filter), (RpcLog[]));
+        RpcLog[] memory logs = _inChainOrder(_registryLogs(granted), _registryLogs(revoked));
 
         bytes32[] memory roles = new bytes32[](logs.length);
         address[] memory accounts = new address[](logs.length);
@@ -149,6 +138,38 @@ contract StockTokenForkTest is Test {
                 if (expectedRoles[j] == roles[k] && holders[j] == accounts[k]) expected = true;
             }
             assertTrue(expected, vm.toString(accounts[k]));
+        }
+    }
+
+    function _registryLogs(bytes32 topic) internal returns (RpcLog[] memory) {
+        string memory filter = string.concat(
+            '[{"fromBlock":"0x0","toBlock":"',
+            ROBINHOOD_BLOCK_HEX,
+            '","address":"',
+            vm.toString(address(registry)),
+            '","topics":["',
+            vm.toString(topic),
+            '"]}]'
+        );
+        return abi.decode(vm.rpc("robinhood-logs", "eth_getLogs", filter), (RpcLog[]));
+    }
+
+    function _inChainOrder(RpcLog[] memory a, RpcLog[] memory b) internal pure returns (RpcLog[] memory logs) {
+        logs = new RpcLog[](a.length + b.length);
+        uint256 i;
+        uint256 j;
+        for (uint256 k; k < logs.length; ++k) {
+            logs[k] = j == b.length || (i < a.length && _position(a[i]) < _position(b[j])) ? a[i++] : b[j++];
+        }
+    }
+
+    function _position(RpcLog memory log) internal pure returns (uint256) {
+        return _quantity(log.blockNumber) << 64 | _quantity(log.logIndex);
+    }
+
+    function _quantity(bytes memory value) internal pure returns (uint256 n) {
+        for (uint256 i; i < value.length; ++i) {
+            n = n << 8 | uint8(value[i]);
         }
     }
 
