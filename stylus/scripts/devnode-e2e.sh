@@ -369,7 +369,6 @@ cast send --rpc-url "$rpc" --private-key "$key" "$token" "unpauseOracle()" > /de
 echo "signed halt: written with L2 gas $halt_gas; replay, other key, band and chain rejected; lifted; lapsed to degraded"
 echo "L2 gas: quote(NVDA) under a signed halt $signed_quote_gas, while its oracle is paused $halted_quote_gas"
 
-
 m0=$(cast call --rpc-url "$rpc" "$token" "uiMultiplier()(uint256)" | cut -d' ' -f1)
 m1=$(math "$m0 * 10017 // 10000")
 at=$(schedule "$m1")

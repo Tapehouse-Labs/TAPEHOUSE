@@ -41,6 +41,23 @@ contract RegistryForkTest is Test {
         assertEq(block.chainid, 46630);
         _assertTokens(json);
         assertEq(bytes4(vm.parseJsonAddress(json, ".tapehouse.Band").code), STYLUS_ROOT_PREFIX, "tapehouse.Band");
+        bytes memory haltSigner = vm.rpc(
+            "eth_call",
+            string.concat(
+                '[{"to":"',
+                vm.toString(vm.parseJsonAddress(json, ".tapehouse.Band")),
+                '","data":"',
+                vm.toString(abi.encodeWithSignature("haltSigner()")),
+                '"},"',
+                _quantity(ROBINHOOD_TESTNET_BLOCK),
+                '"]'
+            )
+        );
+        assertEq(
+            abi.decode(haltSigner, (address)),
+            vm.parseJsonAddress(json, ".tapehouse.HaltSigner"),
+            "tapehouse.HaltSigner"
+        );
     }
 
     function test_ArbitrumEntriesAreTheContractsTheyClaimToBe() public {
@@ -71,5 +88,22 @@ contract RegistryForkTest is Test {
             assertTrue(ok, symbols[i]);
             assertEq(abi.decode(symbol, (string)), symbols[i], symbols[i]);
         }
+    }
+
+    function _quantity(uint256 value) internal pure returns (string memory) {
+        bytes memory digits = "0123456789abcdef";
+        bytes memory out = new bytes(64);
+        uint256 length;
+        do {
+            out[63 - length++] = digits[value & 15];
+            value >>= 4;
+        } while (value != 0);
+        bytes memory quantity = new bytes(length + 2);
+        quantity[0] = "0";
+        quantity[1] = "x";
+        for (uint256 i; i < length; ++i) {
+            quantity[i + 2] = out[64 - length + i];
+        }
+        return string(quantity);
     }
 }

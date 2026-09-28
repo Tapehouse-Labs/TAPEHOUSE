@@ -37,5 +37,5 @@ for asset in $assets; do
 done
 
 [ -n "$symbols" ] || { echo "$registry configures no asset with a leg" >&2; exit 1; }
-halt_signer=$(jq -er '.tapehouse.HaltSigner // "" | select(test("^0x[0-9a-fA-F]{40}$"))' "$registry") || { echo "$registry has no .tapehouse.HaltSigner" >&2; exit 1; }
+halt_signer=$(jq -er '.tapehouse.HaltSigner // "" | select(test("^0x[0-9a-fA-F]{40}$") and (test("^0x0{40}$") | not))' "$registry") || { echo "$registry has no .tapehouse.HaltSigner" >&2; exit 1; }
 echo "[${symbols#,}]" "[${feeds#,}]" "[${feed_ids#,}]" "[${index_ids#,}]" "[${tokens#,}]" "$halt_signer"
