@@ -1,0 +1,2 @@
+# The scripts assert with `test && test || fail`, where fail exits.
+disable=SC2015

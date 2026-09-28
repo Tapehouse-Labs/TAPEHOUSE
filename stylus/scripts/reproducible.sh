@@ -7,6 +7,8 @@
 # many code fragments as it needs, and prints the deployment transaction and the program's address.
 # SIGNER is `--private-key-path FILE`, or `--account NAME --password-file FILE` for a Foundry keystore;
 # the files are mounted read-only.
+# MAX_FEE_PER_GAS_GWEI caps `deploy`'s fee per gas; without it, cargo-stylus uses the current gas price with no
+# margin, and a transaction is rejected if the base fee rises before it lands.
 # `verify` succeeds only when cargo-stylus prints "Verification successful".
 set -euo pipefail
 
@@ -69,7 +71,8 @@ git -C "$stylus/.." archive "$(git -C "$stylus/.." write-tree)" stylus | tar -xf
 if [ "$1" = deploy ]; then
   rpc=$2 contract=$3
   shift "$next"
-  run cargo stylus deploy --no-verify --contract "$contract" -e "$rpc" "${signer[@]}" --constructor-args "$@" |
+  run cargo stylus deploy --no-verify --contract "$contract" -e "$rpc" "${signer[@]}" \
+    ${MAX_FEE_PER_GAS_GWEI:+--max-fee-per-gas-gwei "$MAX_FEE_PER_GAS_GWEI"} --constructor-args "$@" |
     perl -pe 's/\e\[[0-9;]*m//g' | tee "$source/deploy.log" >&2
   tx=$(grep -o 'deployment tx hash: 0x[0-9a-f]\{64\}' "$source/deploy.log" | grep -o '0x.*')
   address=$(grep -o 'deployed code at address: 0x[0-9a-f]\{40\}' "$source/deploy.log" | grep -o '0x.*')
