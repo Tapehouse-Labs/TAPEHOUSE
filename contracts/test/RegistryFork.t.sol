@@ -9,11 +9,10 @@ import {BandFeed} from "../src/BandFeed.sol";
 
 contract RegistryForkTest is Test {
     uint256 internal constant ROBINHOOD_BLOCK = 69_922_505;
-    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 126_039_899;
+    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 126_318_441;
     uint256 internal constant ARBITRUM_BLOCK = 509_636_514;
     bytes32 internal constant BEACON_SLOT = 0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50;
     bytes4 internal constant STYLUS_ROOT_PREFIX = 0xeff00200;
-    bytes4 internal constant STYLUS_PROGRAM_PREFIX = 0xeff00000;
 
     function test_RobinhoodEntriesAreTheContractsTheyClaimToBe() public {
         string memory json = vm.readFile("../deployments/4663.json");
@@ -56,7 +55,12 @@ contract RegistryForkTest is Test {
             "tapehouse.Owner"
         );
         address margin = vm.parseJsonAddress(json, ".tapehouse.Margin");
-        assertEq(bytes4(margin.code), STYLUS_PROGRAM_PREFIX, "tapehouse.Margin");
+        assertEq(bytes4(margin.code), STYLUS_ROOT_PREFIX, "tapehouse.Margin");
+        assertEq(
+            _readAddress(margin, "band()", ROBINHOOD_TESTNET_BLOCK),
+            vm.parseJsonAddress(json, ".tapehouse.Band"),
+            "tapehouse.Margin band"
+        );
         assertEq(
             _readAddress(margin, "owner()", ROBINHOOD_TESTNET_BLOCK),
             vm.parseJsonAddress(json, ".tapehouse.Owner"),

@@ -12,7 +12,12 @@ evm_version = "osaka"
 optimizer = true
 optimizer_runs = 200
 isolate = true
-fs_permissions = [{ access = "read", path = "../deployments" }]
+fs_permissions = [
+    { access = "read", path = "../deployments" },
+    { access = "read", path = "../stylus/contracts/margin/testdata" },
+    { access = "read", path = "../stylus/contracts/margin/parameters.json" },
+    { access = "read", path = "../stylus/contracts/band/testdata" },
+]
 
 [rpc_endpoints]
 robinhood = "${ROBINHOOD_RPC_URL}"

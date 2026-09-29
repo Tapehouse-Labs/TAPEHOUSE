@@ -41,7 +41,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	build-apps test-apps lint-apps \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
-	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode \
+	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
 	deploy-band-feeds verify-band-feeds lint-scripts
 
 all: build
@@ -171,6 +171,9 @@ gas-stylus: snapshot-stylus
 		{ echo "Untracked stylus/.wasm-size. Run: make snapshot-stylus, then git add it."; exit 1; }
 	@git diff --quiet -- stylus/.wasm-size || \
 		{ echo "WASM size changed and is not staged. Run: make snapshot-stylus, then git add it."; exit 1; }
+	@table=$$(mktemp) && stylus/scripts/gas-table.sh > $$table && \
+		sed -n '/^| Call | Stylus | Solidity/,/^$$/p' README.md | sed '$$d' | cmp -s - $$table; code=$$?; rm -f $$table; \
+		[ $$code -eq 0 ] || { echo "README.md's gas table differs from stylus/.gas-devnode. Regenerate it with stylus/scripts/gas-table.sh."; exit 1; }
 
 check-activation: check-stylus
 	@for rpc in $(ROBINHOOD_RPC_URL) $(ROBINHOOD_TESTNET_RPC_URL) $(ARBITRUM_RPC_URL); do \
@@ -179,10 +182,11 @@ check-activation: check-stylus
 
 gas-stylus-devnode:
 	@test -s stylus/target/devnode-gas.txt || { echo "No dev-node gas report. Run: make test-stylus-devnode"; exit 1; }
-	@awk -v tol=$(DEVNODE_GAS_TOLERANCE_BPS) 'NR == FNR { now[$$1] = $$2; next } \
-		{ seen[$$1] = 1; if (!($$1 in now)) { bad = 1; printf "%s: not measured, snapshot %s\n", $$1, $$2; next } \
-			d = now[$$1] - $$2; if ((d < 0 ? -d : d) * 10000 > $$2 * tol) { bad = 1; \
-			printf "%s: %s L2 gas, snapshot %s\n", $$1, now[$$1], $$2 } } \
+	@awk -v tol=$(DEVNODE_GAS_TOLERANCE_BPS) '{ gas = $$NF; name = $$0; sub(/ [0-9]+$$/, "", name) } \
+		NR == FNR { now[name] = gas; next } \
+		{ seen[name] = 1; if (!(name in now)) { bad = 1; printf "%s: not measured, snapshot %s\n", name, gas; next } \
+			d = now[name] - gas; if ((d < 0 ? -d : d) * 10000 > gas * tol) { bad = 1; \
+			printf "%s: %s L2 gas, snapshot %s\n", name, now[name], gas } } \
 		END { for (k in now) if (!(k in seen)) { bad = 1; printf "%s: %s L2 gas, not in the snapshot\n", k, now[k] } \
 			if (bad) { print "Dev-node gas moved more than " tol / 100 "%. Run: make snapshot-stylus-devnode"; exit 1 } \
 			print "Dev-node gas within " tol / 100 "% of stylus/.gas-devnode." }' \
@@ -191,6 +195,10 @@ gas-stylus-devnode:
 snapshot-stylus-devnode:
 	@test -s stylus/target/devnode-gas.txt || { echo "No dev-node gas report. Run: make test-stylus-devnode"; exit 1; }
 	@LC_ALL=C sort stylus/target/devnode-gas.txt > stylus/.gas-devnode && cat stylus/.gas-devnode
+
+gas-table:
+	@test -s stylus/target/devnode-gas.txt || { echo "No dev-node gas report. Run: make test-stylus-devnode"; exit 1; }
+	@stylus/scripts/gas-table.sh stylus/target/devnode-gas.txt
 
 deploy-stylus: check-docker check-foundry
 	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" && test -x stylus/scripts/$(CONTRACT)-args.sh || \
@@ -239,5 +247,7 @@ deploy-stylus-devnode: check-stylus check-foundry submodules
 test-stylus-devnode: check-stylus check-foundry submodules
 	stylus/scripts/devnode-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) \
 		$$(cat stylus/target/devnode-band) stylus/target/devnode-registry.json
+	stylus/scripts/devnode-reference-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) \
+		$$(cat stylus/target/devnode-margin) stylus/target/devnode-registry.json
 	stylus/scripts/devnode-margin-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) \
 		$$(cat stylus/target/devnode-margin) stylus/target/devnode-registry.json

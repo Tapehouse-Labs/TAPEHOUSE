@@ -26,6 +26,19 @@ quote(NVDA,oraclePaused) 128442
 quote(NVDA,sequencer) 123439
 quote(NVDA,signedHalt) 80065
 quote(SPY) 132531
+reference.assets() 42216
+reference.correlation(NVDA,SPY) 54471
+reference.currentRequirement(1 of 6) 7189041
+reference.currentRequirement(3) 3816682
+reference.requirement(3) 3755130
+reference.requirement(6) 7171396
+reference.scenario(0) 232187
+reference.scenarioDigest(128) 1678505
+reference.scenarioDigest(256) 3167787
+reference.scenarioDigest(256,launch) 6502649
+reference.scenarioDigest(32) 561633
+reference.scenarioDigest(64) 933948
+reference.volatility(NVDA) 46665
 session() 90552
 setHaltSigner(address) 72522
-writeHalt(NVDA) 103846
+writeHalt(NVDA) 103858

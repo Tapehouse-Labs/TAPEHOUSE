@@ -50,8 +50,9 @@ make test
 | `make build-stylus` · `test-stylus` · `lint-stylus` · `gas-stylus` · `snapshot-stylus` | Stylus programs only |
 | `make check-activation` | `cargo stylus check` of every program against Robinhood Chain, its testnet and Arbitrum One |
 | `make build-apps` · `test-apps` · `lint-apps` | Apps only |
-| `make devnode deploy-stylus-devnode test-stylus-devnode` | Deploys `band` and `margin` to a local dev node, writes live RedStone prices through the band, reads it through a `BandFeed`, margins a portfolio against stub pools and the band's session, and updates the margin engine's parameters |
+| `make devnode deploy-stylus-devnode test-stylus-devnode` | Deploys `band` and `margin` to a local dev node, writes live RedStone prices through the band, reads it through a `BandFeed`, margins a portfolio against stub pools and the band's session, checks the margin engine's Solidity reference against it, and updates the margin engine's parameters |
 | `make gas-stylus-devnode` · `snapshot-stylus-devnode` | Compares the dev-node suite's L2 gas with `stylus/.gas-devnode`, failing on a move over 0.5%, or regenerates it |
+| `make gas-table` | Prints the L2 gas of the margin program and of its Solidity reference on the same calls, from the last dev-node run |
 | `make deploy-stylus CHAIN=<id> SIGNER='<flags>' [CONTRACT=margin]` | Deploys `band`, or the program `CONTRACT` names, reproducibly, configured from `deployments/<id>.json`, and prints the transaction and address |
 | `make verify-stylus CHAIN=<id> TX=<hash> [CONTRACT=margin]` | Verifies a deployment of `band`, or of the program `CONTRACT` names, against the checked-out source |
 | `make deploy-band-feeds CHAIN=<id> SIGNER='<flags>'` | Deploys a `BandFeed` for every launch asset the chain's band configures and prints each address |
@@ -338,6 +339,40 @@ stylus/scripts/check-margin.sh <rpc> <address> deployments/<chainId>.json
 
 `stylus/scripts/margin-args.sh` builds the constructor arguments: the assets the chain's band prices, in `band-args.sh`'s order, each with its parameters from `parameters.json`, its pool from the registry's `.uniswapV3` entry `parameters.json` names and its Stock Token, zero where absent; the correlations; the file's market where the band prices it; the registry's USDG, WETH and ETH/USD feed and its band, zero where absent; and its `.tapehouse.Owner`. It refuses an asset, a pair or a pool name the file lacks. `check-margin.sh` checks the assets, the floors and ceilings, the market, the pools, the feed, the band and the owner, that the registry's band prices every asset, and the values themselves until the first update.
 
+### Stylus versus Solidity
+
+`contracts/test/reference/MarginReference.sol` is the margin engine in Solidity: the same scenario set, requirement, pool reads, session and weekend cap, over the same configuration, with Uniswap's own `TickMath` and `FullMath`. It is a test double for Solidity tests, not a deployment: it holds its configuration without the program's checks, parameter updates or ownership transfers.
+
+It answers every view of the program to the bit. Its tests reproduce the 144 scenario digests and 14 launch scenarios in `stylus/contracts/margin/testdata`, the 120 requirements against Robinhood Chain's pools at block 75,093,578 in a fork test, the band's 38 sessions and a month of real ones. On the dev node it is deployed with the program's constructor arguments, and every view is compared call by call. Pools and feeds that answer as Uniswap and Chainlink do give the same result in both; malformed return data, which no real pool or feed gives, reverts the reference where the program reads no answer.
+
+It is compiled with this repository's settings, solc 0.8.37 and the optimizer at 200 runs, and its hot loops are `unchecked`, as the program's release build is. Checked arithmetic would nearly double its gas, and `via_ir` at 10,000 runs costs 11% more on the requirement than these settings.
+
+The dev-node suite measures both on the same calls, in L2 gas. `make devnode deploy-stylus-devnode test-stylus-devnode gas-table` prints the run's table; this one is from `stylus/.gas-devnode`, and `make gas` fails if they differ:
+
+| Call | Stylus | Solidity | Solidity / Stylus |
+|---|---|---|---|
+| `scenario(0)` | 118,013 | 232,187 | 2.0× |
+| `scenarioDigest(32)` | 128,910 | 561,633 | 4.4× |
+| `scenarioDigest(64)` | 139,628 | 933,948 | 6.7× |
+| `scenarioDigest(128)` | 163,408 | 1,678,505 | 10.3× |
+| `scenarioDigest(256)` | 209,547 | 3,167,787 | 15.1× |
+| `scenarioDigest(256,launch)` | 317,868 | 6,502,649 | 20.5× |
+| `requirement(3)` | 284,014 | 3,755,130 | 13.2× |
+| `requirement(6)` | 425,824 | 7,171,396 | 16.8× |
+| `currentRequirement(3)` | 348,196 | 3,816,682 | 11.0× |
+| `currentRequirement(1 of 6)` | 453,033 | 7,189,041 | 15.9× |
+| `assets()` | 94,636 | 42,216 | 0.4× |
+| `volatility(NVDA)` | 99,212 | 46,665 | 0.5× |
+| `correlation(NVDA,SPY)` | 106,019 | 54,471 | 0.5× |
+
+- **Stylus wins wherever the scenario set is walked,** from 4.4× for the 32-point lattice to 20.5× for the six launch assets' full set, and 13.2× and 16.8× for the requirement of three and six assets.
+  - Every call pays about 95,000 to enter the uncached, three-fragment program. That is the cost of `assets()`, intrinsic gas included.
+  - Net of it, the three-asset requirement is about 20× cheaper.
+  - Generating the 778 rows, `scenarioDigest(256)`, takes about three quarters of the three-asset requirement's gas in Stylus and five sixths in Solidity. The P&L and aggregation over them are the rest, with the pool reads.
+- **Stylus loses the small views,** at about twice the gas: `assets()`, `volatility` and `correlation` read a few words, and entering the program costs more than reading them. On chains with Arbitrum's CacheManager, caching the program lowers that entry cost. One scenario, the smallest walk, is already 2.0× cheaper in Stylus.
+- **A real pool read costs the same work from either side:** both run the pool's own Solidity. In the fork, at block 75,093,578, reading and pricing the six launch pools and ETH/USD adds 458,971 gas to the reference's requirement, 76,495 per pool. The dev node's stub pools cost far less.
+- **`wasm-opt` is worth 2% of size and 3% to 5% of gas.** Deployed without the `[wasm-opt]` tables on the dev node, `margin` compresses to 53,446 bytes against 52,282, and costs 294,039 for the three-asset requirement against 284,014, 219,433 for `scenarioDigest(256)` against 209,547, and 100,055 for `assets()` against 94,636.
+
 ## Verification
 
 Every deployed Stylus program can be rebuilt from this repository and compared byte for byte with the code on chain, fragment by fragment. `make deploy-stylus` and `make verify-stylus` run `cargo-stylus` in the Docker image that `cargo stylus deploy` and `cargo stylus verify` use for reproducible builds (`offchainlabs/cargo-stylus-base` plus the toolchain in `stylus/rust-toolchain.toml`, linux/amd64), on the staged content of `stylus/`, so untracked files and unstaged edits never enter the build.
@@ -366,3 +401,4 @@ Each deployment below verifies from the commit that added its row: `git log --re
 | 46630 | band | `0xa70118d3324D90532E7D2854627b13CacE305641` | `0x7f003392328803b2fd7331f6dcc2d96f387e8e9b811cdc74b01e9c77ba5e1310` |
 | 42161 | band | `0xa0c0Cb25F5504395fB977DA7186a7B68cBcfa8Eb` | `0x48f8a4eb8629970093c70e250c14037f360b2f380282d11f6e113a17bd408a12` |
 | 46630 | margin | `0x0FB6856c36c25e01190d6a8f2eBbE28aCA05a341` | `0xb6192ef3b615fdc2254eb718178ea74c0d83e7670b4301bd0fabf1c980eb0a38` |
+| 46630 | margin | `0x9B2DB8135222d7B05aEA29B54aE0317E8640D6B0` | `0x311698b2648cf30aa5a1ab9fcca23aeb1f6fb8db0a780c83e844e4cbe66cd5db` |
