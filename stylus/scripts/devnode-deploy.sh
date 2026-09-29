@@ -5,7 +5,8 @@
 # 28 September 2026, the SPY pool with the Stock Token as token0, writes
 # them to stylus/target/devnode-registry.json with Anvil's second test account as the halt signer and the
 # deploying account as the owner, and deploys the band and margin programs configured from that file through
-# StylusDeployer. Writes each program's address to stylus/target/devnode-<program>.
+# StylusDeployer, writing the band into the file before margin. Writes each program's address to
+# stylus/target/devnode-<program>.
 set -euo pipefail
 
 rpc=$1 key=$2
@@ -62,4 +63,6 @@ deploy() {
 }
 
 deploy band
+jq --arg band "$(cat "$target/devnode-band")" '.tapehouse.Band = $band' "$target/devnode-registry.json" > "$target/registry.tmp"
+mv "$target/registry.tmp" "$target/devnode-registry.json"
 deploy margin

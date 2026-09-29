@@ -107,8 +107,14 @@ pub fn loss(exposures: &[i128], returns: &[i32]) -> i128 {
 ///   stock and −8% or +6% for the market asset, whichever asset loses most.
 ///
 /// Never negative.
-#[inline(never)]
 pub fn scenario_requirement(set: &Set, exposures: &[i128], spans_closure: bool) -> i128 {
+    let (open, closed) = scenario_requirements(set, exposures);
+    if spans_closure { closed } else { open }
+}
+
+/// [`scenario_requirement`] over the open market and across a closure, from one pass over the set.
+#[inline(never)]
+pub fn scenario_requirements(set: &Set, exposures: &[i128]) -> (i128, i128) {
     let market = set.parameters().market;
     let size = set.size();
     let n = exposures.len();
@@ -116,12 +122,8 @@ pub fn scenario_requirement(set: &Set, exposures: &[i128], spans_closure: bool) 
     let mut apart = Worst::new();
     let mut alone = vec![Worst::new(); n];
     let mut stress = 0;
-    let rows = if spans_closure {
-        count(size, n)
-    } else {
-        3 * size + 2
-    };
-    for index in 0..rows {
+    let mut gaps = 0;
+    for index in 0..count(size, n) {
         let returns = set.row(index);
         if index < size {
             joint.push(loss(exposures, &returns));
@@ -131,8 +133,10 @@ pub fn scenario_requirement(set: &Set, exposures: &[i128], spans_closure: bool) 
             }
         } else if index < 3 * size {
             apart.push(loss(exposures, &returns));
-        } else {
+        } else if index < 3 * size + 2 {
             stress = stress.max(loss(exposures, &returns));
+        } else {
+            gaps = gaps.max(loss(exposures, &returns));
         }
     }
     let dependent = joint.shortfall(size).max(apart.shortfall(size));
@@ -151,15 +155,11 @@ pub fn scenario_requirement(set: &Set, exposures: &[i128], spans_closure: bool) 
         })
         .max()
         .unwrap_or(0);
-    capped.max(stress).max(floor).max(0)
+    let open = capped.max(stress).max(floor).max(0);
+    (open, open.max(gaps))
 }
 
-/// The requirement of `exposures` valued at `prices`: [`scenario_requirement`] plus [`liquidity_addon`] for
-/// every position, on the side a liquidation takes. `depths` holds each asset's selling then buying depth in
-/// whole USD. A read pool counts at the smaller of the governed depth and its own, and its own lowers the
-/// governed depth by half at most: one second with no liquidity in range empties a harmonic mean. An unread
-/// pool counts at the governed depth, with no discount. An asset held without a read pool sets its bit in the second value.
-#[inline(never)]
+/// The requirement of `exposures` valued at `prices`: [`scenario_requirement`] plus [`liquidity`].
 pub fn requirement(
     set: &Set,
     exposures: &[i128],
@@ -168,8 +168,41 @@ pub fn requirement(
     depths: &[u32],
     pools: &[Pool],
 ) -> (U256, u8) {
-    let mut total = U256::from(scenario_requirement(set, exposures, spans_closure));
-    let gaps = set.parameters().gaps;
+    let (open, closed, missing) = requirements(set, exposures, prices, depths, pools);
+    (if spans_closure { closed } else { open }, missing)
+}
+
+/// [`requirement`] over the open market and across a closure, and the missing bits.
+#[inline(never)]
+pub fn requirements(
+    set: &Set,
+    exposures: &[i128],
+    prices: &[U256],
+    depths: &[u32],
+    pools: &[Pool],
+) -> (U256, U256, u8) {
+    let (open, closed) = scenario_requirements(set, exposures);
+    let (addon, missing) = liquidity(exposures, prices, set.parameters().gaps, depths, pools);
+    (
+        U256::from(open) + addon,
+        U256::from(closed) + addon,
+        missing,
+    )
+}
+
+/// The [`liquidity_addon`] of every position, on the side a liquidation takes, and a bit for every asset
+/// held without a read pool. `depths` holds each asset's selling then buying depth in whole USD. A read
+/// pool counts at the smaller of the governed depth and its own, and its own lowers the governed depth by
+/// half at most: one second with no liquidity in range empties a harmonic mean. An unread pool counts at the
+/// governed depth, with no discount.
+pub fn liquidity(
+    exposures: &[i128],
+    prices: &[U256],
+    gaps: &[u32],
+    depths: &[u32],
+    pools: &[Pool],
+) -> (U256, u8) {
+    let mut total = U256::ZERO;
     let mut missing = 0;
     for (i, &exposure) in exposures.iter().enumerate() {
         if exposure == 0 {
@@ -542,6 +575,16 @@ mod tests {
             .map(|&g| 100_000 * DOLLAR * i128::from(g) / PPM)
             .sum();
         assert_eq!(weekend, gaps_together);
+    }
+
+    #[test]
+    fn the_market_move_counts_over_the_open_market_and_across_a_closure() {
+        let parameters = three();
+        let set = Set::new(&parameters, 256, 5 * DAYS_2);
+        let short = [0, 0, -100_000 * DOLLAR];
+        let up = loss(&short, &set.row(3 * 256 + 1));
+        assert!(up > 6_000 * DOLLAR);
+        assert_eq!(scenario_requirements(&set, &short), (up, up));
     }
 
     #[test]

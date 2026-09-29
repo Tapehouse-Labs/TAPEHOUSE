@@ -2,10 +2,11 @@
 # Usage: devnode-margin-e2e.sh RPC_URL PRIVATE_KEY MARGIN_ADDRESS DEPLOYMENTS_JSON
 # Checks the margin program deployed by devnode-deploy.sh for NVDA, TSLA and SPY: its configuration against the
 # registry and the dev node's band, its scenario set and a requirement against the references in testdata, the
-# bit a pool without history sets, every refused update, an accepted one and the day that must pass before the
-# next, and a constructor that refuses a matrix that is not positive definite. Measures the scenario set by
-# lattice size, the requirement of three and of six assets, and an update of every volatility on programs with
-# the six launch assets and with eight. Appends its L2 gas to stylus/target/devnode-gas.txt.
+# bit a pool without history sets, the current requirement against the band's session and without a band, every
+# refused update, an accepted one and the day that must pass before the next, and a constructor that refuses a
+# matrix that is not positive definite. Measures the scenario set by lattice size, the requirement of three and
+# of six assets, the current requirement, and an update of every volatility on programs with the six launch
+# assets and with eight. Appends its L2 gas to stylus/target/devnode-gas.txt.
 set -euo pipefail
 
 rpc=$1 key=$2 margin=$3 registry=$4
@@ -41,8 +42,7 @@ expect_refusal() {
   grep -q "$(cast sig "$6")" <<<"$out" || fail "expected $6, got $out"
 }
 
-jq --arg band "$(cat "$root/stylus/target/devnode-band")" '.tapehouse.Band = $band' "$registry" > "$registry.band"
-BAND_ASSETS="NVDA TSLA SPY" "$(dirname "$0")/check-margin.sh" "$rpc" "$margin" "$registry.band"
+BAND_ASSETS="NVDA TSLA SPY" "$(dirname "$0")/check-margin.sh" "$rpc" "$margin" "$registry"
 if out=$(BAND_ASSETS="NVDA SPY" "$(dirname "$0")/check-margin.sh" "$rpc" "$margin" "$registry"); then
   fail "check-margin.sh accepted a program that differs from the registry"
 fi
@@ -52,7 +52,12 @@ if out=$(BAND_ASSETS="NVDA TSLA SPY" "$(dirname "$0")/check-margin.sh" "$rpc" "$
   fail "check-margin.sh accepted a band that answers nothing"
 fi
 grep -q '^FAIL: band' <<<"$out" || fail "check-margin.sh refused a band that answers nothing for another reason: $out"
-jq --arg token "$other" '.tokens.NVDA = $token' "$registry.band" > "$registry.token"
+jq 'del(.tapehouse.Band)' "$registry" > "$registry.unbanded"
+if out=$(BAND_ASSETS="NVDA TSLA SPY" "$(dirname "$0")/check-margin.sh" "$rpc" "$margin" "$registry.unbanded" 2>&1); then
+  fail "check-margin.sh accepted a registry without the program's band"
+fi
+grep -q "^FAIL: margin's band is" <<<"$out" || fail "check-margin.sh refused a registry without the band for another reason: $out"
+jq --arg token "$other" '.tokens.NVDA = $token' "$registry" > "$registry.token"
 if out=$(BAND_ASSETS="NVDA TSLA SPY" "$(dirname "$0")/check-margin.sh" "$rpc" "$margin" "$registry.token" 2>&1); then
   fail "check-margin.sh accepted a registry whose Stock Token NVDA's pool does not trade"
 fi
@@ -93,6 +98,40 @@ stale=$(cast call --rpc-url "$rpc" "$margin" "$requirement(uint256,uint8)" "$spy
 cast send --rpc-url "$rpc" --private-key "$key" "$feed" "setRound(int256,uint256)" 268330550000 "$now" > /dev/null
 [ "${live#* }" = "0 " ] && [ "${stale#* }" = "4 " ] && ! less "${live%% *}" "${stale%% *}" ||
   fail "a stale ETH/USD answer did not set SPY's bit and drop its pool's discount: $stale, with it $live"
+band=$(jq -r '.tapehouse.Band' "$registry")
+read -r open_code nyse nyse_next change_ms boundary_ms <<<"$(cast call --rpc-url "$rpc" "$band" "session()(uint8,uint8,uint8,uint64,uint64)" | sed 's/ \[[^]]*\]//' | tr '\n' ' ')"
+now_ms=$(( $(cast block --rpc-url "$rpc" latest -f timestamp) * 1000 ))
+requirement_at() { cast call --rpc-url "$rpc" "$margin" "$requirement(uint256,uint8)" "$quantities" "$prices" 172800 "$1" | head -n 1 | cut -d' ' -f1; }
+held=$(cast call --rpc-url "$rpc" "$margin" "currentRequirement(int256[],uint256[])(uint256,uint8,uint8)" "$quantities" "$prices" | sed 's/ \[[^]]*\]//' | tr '\n' ' ')
+expected=$(python3 -c '
+import sys
+open_, closed, code, boundary, now = map(int, sys.argv[1:])
+ramp = 25_200_000
+buffered = -(-open_ * 5 // 4)
+across = max(buffered, closed)
+if code != 2:
+    print(across, code)
+elif boundary != 0 and boundary <= now:
+    print(across, 1)
+elif boundary != 0 and boundary - now < ramp:
+    elapsed = ramp - (boundary - now)
+    print(buffered + (across - buffered) * elapsed // ramp, 3)
+else:
+    print(buffered, 2)
+' "$(requirement_at false)" "$(requirement_at true)" "$open_code" "$boundary_ms" "$now_ms")
+read -r value _ code <<<"$held"
+[ "$value $code" = "$expected" ] ||
+  fail "the current requirement is $value in regime $code; from the band's session $open_code $nyse $nyse_next $change_ms $boundary_ms it is $expected"
+current_gas=$(measure "margin.currentRequirement(3)" "currentRequirement(int256[],uint256[])" "$quantities" "$prices")
+estimate_at() {
+  cast rpc --rpc-url "$rpc" eth_estimateGas "{\"to\":\"$margin\",\"data\":\"$1\"}" latest '{}' \
+    "{\"time\":\"$(printf '0x%x' "$2")\"}" | tr -d '"'
+}
+call_data=$(cast calldata "currentRequirement(int256[],uint256[])" "$quantities" "$prices")
+spread=$(($(estimate_at "$call_data" $((now_ms / 1000 + 7200))) - $(estimate_at "$call_data" $((now_ms / 1000)))))
+[ "${spread#-}" -le 200 ] ||
+  fail "currentRequirement's gas moves by $spread from regime $code to an unknown session, beyond the gas gate's noise"
+echo "margin current requirement: regime $code from the band's session; L2 gas $current_gas, the same within ${spread#-} in an unknown session"
 echo "margin requirement: the requirement on chain is the reference requirement; a pool without history or a stale ether price sets its bit; L2 gas \
 $(measure "margin.requirement(3)" "$requirement" "$quantities" "$prices" 172800 false) for three assets"
 
@@ -147,10 +186,14 @@ ones="[$(for _ in $(seq 28); do echo 1; done | paste -sd, -)]"
 eights="[10000,10000,10000,10000,10000,10000,10000,10000]"
 sixteen="[$(for _ in $(seq 16); do echo 1000000; done | paste -sd, -)]"
 eight=$(deploy_margin "[$assets]" "$ones" "$ones" 0x0000000000000000000000000000000000000000000000000000000000000000 \
-  $zero $zero $zero "$owner" | address_of)
+  $zero $zero $zero $zero "$owner" | address_of)
 eight_gas=$(record "margin.setParameters(8)" \
   "$(l2_gas "$(cast calldata "$update" "[12000,12000,12000,12000,12000,12000,12000,12000]" "$ones" "$eights" "$sixteen")" "$eight")")
 echo "margin update of every volatility: L2 gas $six_gas for the six launch assets, $eight_gas for eight"
+read -r value missing code <<<"$(cast call --rpc-url "$rpc" "$eight" "currentRequirement(int256[],uint256[])(uint256,uint8,uint8)" \
+  "[0,0,0,0,0,0,0,0]" "$eights" | tr '\n' ' ')"
+[ "$value $missing $code" = "0 0 0" ] ||
+  fail "a margin program without a band gave $value, $missing in regime $code, not an unknown session"
 echo "margin scenarios for the six launch assets: L2 gas $(record "margin.scenarioDigest(256,launch)" \
   "$(l2_gas "$(cast calldata "scenarioDigest(uint16,uint64)" 256 172800)" "$six")")"
 launch_quantities=$(list '[.vectors[] | select(.label == "100k each of the six")][0].quantities')
@@ -171,7 +214,7 @@ if out=$(deploy_margin "${args[@]:0:4}" $zero $zero "${args[@]:6}"); then
   fail "a pool against neither USDG nor WETH was accepted"
 fi
 refused_with "InvalidPool(bytes32,address)" "$out"
-if out=$(deploy_margin "${args[@]:0:6}" $zero "${args[7]}"); then
+if out=$(deploy_margin "${args[@]:0:6}" $zero "${args[@]:7}"); then
   fail "a WETH pool without an ETH/USD feed was accepted"
 fi
 refused_with "InvalidFeed(address)" "$out"

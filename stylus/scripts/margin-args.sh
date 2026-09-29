@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Usage: margin-args.sh DEPLOYMENTS_JSON
-# Prints the margin program's constructor arguments as eight shell words: the assets, correlation floors,
-# correlations, the market, USDG, WETH, the ETH/USD feed and the owner. Each asset is a tuple of its symbol,
-# volatility floor, volatility, weekend-gap floor, weekend gap, selling depth, buying depth, pool and Stock
-# Token.
+# Prints the margin program's constructor arguments as nine shell words: the assets, correlation floors,
+# correlations, the market, USDG, WETH, the ETH/USD feed, the band and the owner. Each asset is a tuple of its
+# symbol, volatility floor, volatility, weekend-gap floor, weekend gap, selling depth, buying depth, pool and
+# Stock Token.
 # The assets are those band-args.sh configures for the same file, in its order, and BAND_ASSETS narrows them
 # as it does there. Each asset's parameters come from stylus/contracts/margin/parameters.json: an asset or a
 # pair missing from it, or a value that is not a positive integer, is an error. Correlations are listed for
@@ -11,7 +11,8 @@
 # the equal-weighted portfolio, where it does not. Each asset's pool is the file's .uniswapV3 entry that
 # parameters.json's .pool names, and zero where the file has none; an asset missing from .pool is an error.
 # Each asset's Stock Token, and USDG, WETH and the ETH/USD feed, are the file's .tokens.<asset>, .tokens.USDG,
-# .tokens.WETH and .chainlink.ETH_USD, zero where absent. The owner is the file's .tapehouse.Owner.
+# .tokens.WETH and .chainlink.ETH_USD, zero where absent. The band is the file's .tapehouse.Band, zero where
+# absent, and the owner its .tapehouse.Owner.
 set -euo pipefail
 
 registry=$1
@@ -57,4 +58,4 @@ for ((i = 0; i < ${#names[@]}; i++)); do
   done
 done
 optional() { jq -r --arg zero $zero_address "$1 // \$zero" "$registry"; }
-echo "[${assets#,}]" "[${correlation_floors#,}]" "[${correlations#,}]" "$market" "$(optional .tokens.USDG)" "$(optional .tokens.WETH)" "$(optional .chainlink.ETH_USD)" "$owner"
+echo "[${assets#,}]" "[${correlation_floors#,}]" "[${correlations#,}]" "$market" "$(optional .tokens.USDG)" "$(optional .tokens.WETH)" "$(optional .chainlink.ETH_USD)" "$(optional .tapehouse.Band)" "$owner"

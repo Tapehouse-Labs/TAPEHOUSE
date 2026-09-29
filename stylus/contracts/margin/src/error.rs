@@ -45,6 +45,8 @@ sol! {
     error InvalidFeed(address feed);
     #[derive(Debug, PartialEq, Eq)]
     error ExposureTooLarge(bytes32 symbol);
+    #[derive(Debug, PartialEq, Eq)]
+    error InsufficientGas();
 }
 
 /// The errors of the margin program.
@@ -70,6 +72,7 @@ pub enum MarginError {
     InvalidPool(InvalidPool),
     InvalidFeed(InvalidFeed),
     ExposureTooLarge(ExposureTooLarge),
+    InsufficientGas(InsufficientGas),
     OwnableUnauthorizedAccount(OwnableUnauthorizedAccount),
     OwnableInvalidOwner(OwnableInvalidOwner),
 }

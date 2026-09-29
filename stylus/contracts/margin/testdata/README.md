@@ -21,3 +21,5 @@ For each configuration it gives the set's keccak-256 at horizons of 0, 1, 2 and 
 - with the pools read; with them unread, where each asset held is still charged its pool's fee and governed depth and sets its bit; and without them, as on Arbitrum One, where every asset held sets its bit.
 
 It also gives the requirement the dev-node suite expects from its three assets, with NVDA's stub pool repeating the real pool's mean tick and liquidity. Every value was computed in unbounded integer arithmetic, independently of this crate.
+
+`session-timeline.json` holds the session the band's `session()` returns every 15 minutes from 27 August to 28 September 2026: 3,071 instants, each `[now_ms, open, nyse, nyse_next, change_ms, boundary_ms]` with `open` 0 unknown, 1 closed and 2 open. It was derived from the New York market status RedStone signed over those days, with the same reference that checks the band's `session-vectors.json`. It holds five Friday post-markets and Labor Day.

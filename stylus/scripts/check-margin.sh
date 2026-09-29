@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Usage: check-margin.sh RPC_URL MARGIN_ADDRESS DEPLOYMENTS_JSON
-# Checks that a deployed margin program holds the assets, floors, depth ceilings, market, pools, ETH/USD feed
-# and owner margin-args.sh builds from DEPLOYMENTS_JSON, that each pool trades the file's Stock Token for its
-# asset against its USDG or WETH, and that the file's band, where it names one, prices every one of those
-# assets. The depth ceilings are the file's initial depths. Until the first update the
-# parameters themselves must be the file's initial values; after it they must sit at or above their floors
-# and at or below their ceilings, since the owner moves them.
+# Checks that a deployed margin program holds the assets, floors, depth ceilings, market, pools, ETH/USD feed,
+# band and owner margin-args.sh builds from DEPLOYMENTS_JSON, that each pool trades the file's Stock Token for
+# its asset against its USDG or WETH, and that the file's band, where it names one, prices every one of those
+# assets. The depth ceilings are the file's initial depths. Until the first update the parameters themselves
+# must be the file's initial values; after it they must sit at or above their floors and at or below their
+# ceilings, since the owner moves them.
 set -euo pipefail
 
 rpc=$1 margin=$2 registry=$3
 args=$("$(dirname "$0")/margin-args.sh" "$registry")
-read -r assets correlation_floors correlations market usdg weth eth_usd owner <<<"$args"
+read -r assets correlation_floors correlations market usdg weth eth_usd band owner <<<"$args"
 symbols=() volatility_floors=() volatilities=() gap_floors=() gaps=() depths=() pools=() tokens=()
 entries=${assets#[(}
 entries=${entries%)]}
@@ -28,7 +28,7 @@ held=$(cast call --rpc-url "$rpc" "$margin" "market()(bytes32)")
 held=$(cast call --rpc-url "$rpc" "$margin" "ethUsdFeed()(address)")
 [ "$held" = "$(cast to-check-sum-address "$eth_usd")" ] || { echo "FAIL: margin's ETH/USD feed is $held, $registry gives $eth_usd"; exit 1; }
 updated=$(cast call --rpc-url "$rpc" "$margin" "lastUpdate()(uint64)")
-band=$(jq -r '.tapehouse.Band // empty' "$registry")
+band=${band#0x0000000000000000000000000000000000000000}
 zero_address=0x0000000000000000000000000000000000000000
 zero_id=0x0000000000000000000000000000000000000000000000000000000000000000
 IFS=, read -r -a correlation_floors <<<"${correlation_floors//[\[\]]/}"
@@ -84,4 +84,7 @@ for i in "${!symbols[@]}"; do
     k=$((k + 1))
   done
 done
+held=$(cast call --rpc-url "$rpc" "$margin" "band()(address)")
+[ "$held" = "$(cast to-check-sum-address "${band:-0x0000000000000000000000000000000000000000}")" ] ||
+  { echo "FAIL: margin's band is $held, $registry gives ${band:-none}"; exit 1; }
 echo "margin $margin matches $registry for ${#symbols[@]} assets."

@@ -8,6 +8,7 @@ pub mod error;
 pub mod matrix;
 pub mod requirement;
 pub mod scenario;
+pub mod session;
 pub mod uniswap;
 
 use alloc::vec::Vec;
@@ -23,13 +24,15 @@ use stylus_sdk::storage::{
 
 use crate::error::{
     AssetCount, CorrelationStepTooLarge, DepthStepTooLarge, DuplicateAsset, ExposureTooLarge,
-    GapStepTooLarge, InvalidCorrelation, InvalidDepth, InvalidFeed, InvalidGap, InvalidPool,
-    InvalidVolatility, LengthMismatch, MarginError, NotPositiveDefinite, ScenarioOutOfRange,
-    UnknownAsset, UnsupportedScenarioSize, UpdateTooSoon, VolatilityStepTooLarge, ZeroSymbol,
+    GapStepTooLarge, InsufficientGas, InvalidCorrelation, InvalidDepth, InvalidFeed, InvalidGap,
+    InvalidPool, InvalidVolatility, LengthMismatch, MarginError, NotPositiveDefinite,
+    ScenarioOutOfRange, UnknownAsset, UnsupportedScenarioSize, UpdateTooSoon,
+    VolatilityStepTooLarge, ZeroSymbol,
 };
 use crate::matrix::{ONE, pair, positive_definite};
-use crate::requirement::{Pool, PoolTerms, exposures, requirement};
+use crate::requirement::{Pool, PoolTerms, exposures, requirements};
 use crate::scenario::{Parameters, SIZES, Set, count};
+use crate::session::{HORIZON, current, regime, starved};
 
 /// Most assets the engine takes: the exact positive-definiteness check stays within 256 bits up to 9.
 pub const MAX_ASSETS: usize = 8;
@@ -88,6 +91,7 @@ pub struct Margin {
     market: StorageU8,
     sources: StorageMap<B256, Source>,
     eth_usd: StorageAddress,
+    band: StorageAddress,
     last_update: StorageU64,
 }
 
@@ -102,7 +106,8 @@ impl Margin {
     /// Depths are the USD a liquidation can sell, then buy, within a 10% move of each asset's pool, and their
     /// first values are ceilings that never change. `market` is the asset that stands for the market, or zero
     /// for the equal-weighted portfolio of the assets. Each asset's pool trades its Stock Token against `usdg`
-    /// or `weth`, or is zero for none; `eth_usd` prices WETH. `initial_owner` may update the parameters.
+    /// or `weth`, or is zero for none; `eth_usd` prices WETH. `band`'s session sets the current
+    /// requirement's regime. `initial_owner` may update the parameters.
     #[constructor]
     #[allow(clippy::too_many_arguments)]
     pub fn constructor(
@@ -114,6 +119,7 @@ impl Margin {
         usdg: Address,
         weth: Address,
         eth_usd: Address,
+        band: Address,
         initial_owner: Address,
     ) -> Result<(), MarginError> {
         self.ownable.initialize::<MarginError>(initial_owner)?;
@@ -181,6 +187,7 @@ impl Margin {
             self.market.set(U8::from(i + 1));
         }
         self.eth_usd.set(eth_usd);
+        self.band.set(band);
         for &(symbol, .., pool, token) in &assets {
             self.set_source(symbol, pool, token, usdg, weth, eth_usd)?;
         }
@@ -418,6 +425,11 @@ impl Margin {
         self.eth_usd.get()
     }
 
+    /// The band whose session sets the current requirement's regime.
+    pub fn band(&self) -> Address {
+        self.band.get()
+    }
+
     /// The asset that stands for the market; zero for the equal-weighted portfolio of the assets.
     pub fn market(&self) -> B256 {
         match self.market.get().to::<usize>() {
@@ -488,18 +500,79 @@ impl Margin {
         horizon: u64,
         spans_closure: bool,
     ) -> Result<(U256, u8), MarginError> {
+        let (open, closed, missing) = self.requirements(&quantities, &prices, horizon)?;
+        Ok((if spans_closure { closed } else { open }, missing))
+    }
+
+    /// The margin a portfolio needs now, in USD with 18 decimals, the bits of `requirement`, and the regime
+    /// the band's session puts it in: 0 unknown, 1 closed, 2 open, 3 closing. The horizon is two days in
+    /// every regime. The open market adds a 25% buffer. A closure, or a session the band cannot tell,
+    /// needs the larger of that and the requirement across a closure, which counts the weekend-gap
+    /// scenarios; the seven hours before a weekend or holiday session close rise to it in a straight line.
+    /// A call that leaves the band's `session()` too little gas reverts with `InsufficientGas` rather than
+    /// read as an unknown session.
+    pub fn current_requirement(
+        &self,
+        quantities: Vec<I256>,
+        prices: Vec<U256>,
+    ) -> Result<(U256, u8, u8), MarginError> {
+        let (open, closed, missing) = self.requirements(&quantities, &prices, HORIZON)?;
+        let before = self.vm().evm_gas_left();
+        let session = session::read(self.vm(), self.band.get());
+        if session.is_none() && starved(before, self.vm().evm_gas_left()) {
+            return Err(MarginError::InsufficientGas(InsufficientGas {}));
+        }
+        let regime = regime(session, self.vm().block_timestamp().saturating_mul(1_000));
+        Ok((current(open, closed, regime), missing, regime.code()))
+    }
+}
+
+#[public]
+impl IOwnable2Step for Margin {
+    type Error = MarginError;
+
+    fn owner(&self) -> Address {
+        self.ownable.owner()
+    }
+
+    fn pending_owner(&self) -> Address {
+        self.ownable.pending_owner()
+    }
+
+    fn transfer_ownership(&mut self, new_owner: Address) -> Result<(), MarginError> {
+        self.ownable.transfer_ownership(new_owner)
+    }
+
+    fn accept_ownership(&mut self) -> Result<(), MarginError> {
+        self.ownable.accept_ownership()
+    }
+
+    fn renounce_ownership(&mut self) -> Result<(), MarginError> {
+        self.ownable.renounce_ownership()
+    }
+}
+
+impl Margin {
+    /// The requirement of a portfolio over the open market and across a closure, and its missing bits.
+    #[inline(never)]
+    fn requirements(
+        &self,
+        quantities: &[I256],
+        prices: &[U256],
+        horizon: u64,
+    ) -> Result<(U256, U256, u8), MarginError> {
         let (symbols, volatilities, correlations, gaps, market) = self.parameters();
         let n = symbols.len();
         if quantities.len() != n || prices.len() != n {
             return Err(MarginError::LengthMismatch(LengthMismatch {}));
         }
-        let exposures = exposures(&quantities, &prices).map_err(|i| {
+        let exposures = exposures(quantities, prices).map_err(|i| {
             MarginError::ExposureTooLarge(ExposureTooLarge {
                 symbol: B256::from(symbols[i]),
             })
         })?;
         if exposures.iter().all(|&e| e == 0) {
-            return Ok((U256::ZERO, 0));
+            return Ok((U256::ZERO, U256::ZERO, 0));
         }
         let parameters = Parameters {
             symbols: &symbols,
@@ -530,43 +603,9 @@ impl Margin {
         let depths: Vec<u32> = (0..2 * n)
             .map(|k| self.depths.get(k).unwrap().to())
             .collect();
-        Ok(requirement(
-            &set,
-            &exposures,
-            &prices,
-            spans_closure,
-            &depths,
-            &pools,
-        ))
-    }
-}
-
-#[public]
-impl IOwnable2Step for Margin {
-    type Error = MarginError;
-
-    fn owner(&self) -> Address {
-        self.ownable.owner()
+        Ok(requirements(&set, &exposures, prices, &depths, &pools))
     }
 
-    fn pending_owner(&self) -> Address {
-        self.ownable.pending_owner()
-    }
-
-    fn transfer_ownership(&mut self, new_owner: Address) -> Result<(), MarginError> {
-        self.ownable.transfer_ownership(new_owner)
-    }
-
-    fn accept_ownership(&mut self) -> Result<(), MarginError> {
-        self.ownable.accept_ownership()
-    }
-
-    fn renounce_ownership(&mut self) -> Result<(), MarginError> {
-        self.ownable.renounce_ownership()
-    }
-}
-
-impl Margin {
     #[inline(never)]
     fn set_source(
         &mut self,
@@ -759,9 +798,9 @@ mod tests {
     use super::*;
     use crate::error::{
         AssetCount, CorrelationStepTooLarge, DepthStepTooLarge, DuplicateAsset, ExposureTooLarge,
-        GapStepTooLarge, InvalidCorrelation, InvalidDepth, InvalidGap, InvalidPool,
-        InvalidVolatility, LengthMismatch, NotPositiveDefinite, ScenarioOutOfRange, UnknownAsset,
-        UnsupportedScenarioSize, UpdateTooSoon, VolatilityStepTooLarge, ZeroSymbol,
+        GapStepTooLarge, InsufficientGas, InvalidCorrelation, InvalidDepth, InvalidGap,
+        InvalidPool, InvalidVolatility, LengthMismatch, NotPositiveDefinite, ScenarioOutOfRange,
+        UnknownAsset, UnsupportedScenarioSize, UpdateTooSoon, VolatilityStepTooLarge, ZeroSymbol,
     };
     use ownable::{OwnableInvalidOwner, OwnableUnauthorizedAccount, OwnershipTransferred};
     use proptest::prelude::*;
@@ -798,6 +837,7 @@ mod tests {
         usdg: Address,
         weth: Address,
         eth_usd: Address,
+        band: Address,
         owner: Address,
     }
 
@@ -817,6 +857,7 @@ mod tests {
             usdg: Address::ZERO,
             weth: Address::ZERO,
             eth_usd: Address::ZERO,
+            band: Address::ZERO,
             owner: OWNER,
         }
     }
@@ -846,6 +887,7 @@ mod tests {
             c.usdg,
             c.weth,
             c.eth_usd,
+            c.band,
             c.owner,
         )?;
         Ok(margin)
@@ -1717,6 +1759,68 @@ mod tests {
         assert_eq!(
             value,
             U256::from(767_790_000_000_000_000_000u128) * U256::from(6) / U256::from(100)
+        );
+    }
+
+    #[test]
+    fn the_current_requirement_follows_the_band_session() {
+        let band = address!("0x0000000000000000000000000000000000000b01");
+        let vm = TestVM::default();
+        let margin = deploy(&vm, Config { band, ..config() }).unwrap();
+        assert_eq!(margin.band(), band);
+        let one = I256::try_from(1_000_000_000_000_000_000u128).unwrap();
+        let prices = vec![
+            U256::from(22_886_000_000u64),
+            U256::from(35_802_000_000u64),
+            U256::from(76_779_000_000u64),
+        ];
+        let holding = vec![one; 3];
+        let (open, _) = margin
+            .requirement(holding.clone(), prices.clone(), session::HORIZON, false)
+            .unwrap();
+        let (closed, _) = margin
+            .requirement(holding.clone(), prices.clone(), session::HORIZON, true)
+            .unwrap();
+        let buffered = (open * U256::from(5)).div_ceil(U256::from(4));
+        assert!(closed > buffered);
+        let now = 1_790_000_000u64;
+        vm.set_block_timestamp(now);
+        let call = hex::decode("5e3568b8").unwrap();
+        let at = |s: (u8, u8, u8, u64, u64)| {
+            let words = [s.0.into(), s.1.into(), s.2.into(), s.3, s.4].map(U256::from);
+            vm.mock_static_call(band, call.clone(), Ok(words.abi_encode_params()));
+            margin
+                .current_requirement(holding.clone(), prices.clone())
+                .unwrap()
+        };
+        assert_eq!(at((2, 1, 2, 0, 0)), (buffered, 0b111, 2));
+        assert_eq!(
+            at((1, 3, 1, 0, now * 1_000 + 3_600_000)),
+            (closed, 0b111, 1)
+        );
+        let (value, _, code) = at((2, 3, 1, 0, now * 1_000 + 12_600_000));
+        assert_eq!(code, 3);
+        assert_eq!(value, buffered + (closed - buffered) / U256::from(2));
+        vm.mock_static_call(band, call.clone(), Err(vec![]));
+        assert_eq!(
+            margin
+                .current_requirement(holding.clone(), prices.clone())
+                .unwrap(),
+            (closed, 0b111, 0)
+        );
+        vm.set_gas_left(0);
+        assert_eq!(
+            margin.current_requirement(holding.clone(), prices.clone()),
+            Err(MarginError::InsufficientGas(InsufficientGas {}))
+        );
+        assert_eq!(at((2, 1, 2, 0, 0)), (buffered, 0b111, 2));
+        vm.set_gas_left(u64::MAX);
+        let unset = TestVM::default();
+        let without = deploy(&unset, config()).unwrap();
+        assert_eq!(without.band(), Address::ZERO);
+        assert_eq!(
+            without.current_requirement(holding, prices).unwrap(),
+            (closed, 0b111, 0)
         );
     }
 }

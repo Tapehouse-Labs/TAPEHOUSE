@@ -50,7 +50,7 @@ make test
 | `make build-stylus` · `test-stylus` · `lint-stylus` · `gas-stylus` · `snapshot-stylus` | Stylus programs only |
 | `make check-activation` | `cargo stylus check` of every program against Robinhood Chain, its testnet and Arbitrum One |
 | `make build-apps` · `test-apps` · `lint-apps` | Apps only |
-| `make devnode deploy-stylus-devnode test-stylus-devnode` | Deploys `band` and `margin` to a local dev node, writes live RedStone prices through the band, reads it through a `BandFeed`, margins a portfolio against a stub pool, and updates the margin engine's parameters |
+| `make devnode deploy-stylus-devnode test-stylus-devnode` | Deploys `band` and `margin` to a local dev node, writes live RedStone prices through the band, reads it through a `BandFeed`, margins a portfolio against stub pools and the band's session, and updates the margin engine's parameters |
 | `make gas-stylus-devnode` · `snapshot-stylus-devnode` | Compares the dev-node suite's L2 gas with `stylus/.gas-devnode`, failing on a move over 0.5%, or regenerates it |
 | `make deploy-stylus CHAIN=<id> SIGNER='<flags>' [CONTRACT=margin]` | Deploys `band`, or the program `CONTRACT` names, reproducibly, configured from `deployments/<id>.json`, and prints the transaction and address |
 | `make verify-stylus CHAIN=<id> TX=<hash> [CONTRACT=margin]` | Verifies a deployment of `band`, or of the program `CONTRACT` names, against the checked-out source |
@@ -237,7 +237,7 @@ make verify-band-feeds CHAIN=<chainId>
 - **Valid matrices only.** The correlation matrix must stay positive definite, as the correlation matrix of assets that are not linear combinations of one another is. The check is exact: Bareiss's fraction-free elimination yields every leading principal minor as an integer, and Sylvester's criterion asks that each be positive. Hadamard's inequality keeps every intermediate within 256 bits for up to 9 assets; the engine takes at most 8.
 - **Ownership** follows OpenZeppelin's `Ownable2Step`, from the same `stylus/crates/ownable` as the band's, with an explicit `initialOwner`: the registry's owner, as for the band.
 
-Reads: `assets()`, `volatility(symbol)`, `correlation(symbol, other)` and `weekendGap(symbol)`, each with its floor, `depth(symbol)` with its ceilings, `pool(symbol)`, `ethUsdFeed()`, `market()` and `lastUpdate()`.
+Reads: `assets()`, `volatility(symbol)`, `correlation(symbol, other)` and `weekendGap(symbol)`, each with its floor, `depth(symbol)` with its ceilings, `pool(symbol)`, `ethUsdFeed()`, `band()`, `market()` and `lastUpdate()`.
 
 ### Scenarios
 
@@ -309,12 +309,30 @@ Over the 200 portfolios above, at 100,000 USD per unit of weight and two days, t
 
 `stylus/contracts/margin/testdata/requirement-vectors.json` holds 120 requirements computed separately from this program, in Python, from the pools' state at Robinhood Chain block 75,093,578: with the pools read, unread and absent. The dev-node suite checks the program's requirement against one more.
 
+### The current requirement
+
+`currentRequirement(quantities, prices)` is the requirement an account needs now. It reads the band's session and returns the requirement, the missing bits and the regime: 0 unknown, 1 closed, 2 open, 3 closing.
+
+| Regime | Requirement |
+|---|---|
+| Open | The requirement over two days, plus a 25% buffer |
+| Closing: from three hours before a weekend or holiday close to the end of its four-hour post-market | Rises in a straight line from the open value to the closed one |
+| Closed | The larger of the buffered open requirement and the requirement across the closure, which counts the weekend-gap scenarios |
+| Unknown: the band cannot tell, as when its signed status is more than an hour old, or no band is set | As closed |
+
+- **The horizon is two days in every regime.** Over ten years, the move from a Friday close to the Monday open has 0.45 to 0.73 times the variance of one trading day, but its 99% expected shortfall matches that of 1.8 to 4.1 days of normal diffusion: the closure adds a jump, not a longer diffusion. The draws keep EMIR's two-day margin period of risk, and the weekend-gap scenarios carry the jump.
+- **The buffer covers the weekend first.** It is collected all week and released into the closure: across a closure an account needs the larger of the buffered and the closed requirement, not their sum. Over the 200 long-only portfolios above, before the liquidity add-on, the buffered requirement already covers the closed one for 194; the largest shortfall is 5.1%.
+- **The rest is added while the market is liquid.** The ramp starts three hours before the regular close, so an account that must add margin or reduce can do so against the regular session's book, and ends when the session closes. The band marks the last trading day before a weekend or holiday close from its open, so the ramp needs no clock or calendar of its own.
+- **No scheduled change of regime raises a requirement at once.** The ramp starts where the open requirement stands and ends where the closed one starts, and a reopen only lowers it. The tests replay a month of real sessions, every 15 minutes, and find the requirement rising only through the ramp. Three unscheduled changes can step it up: a session that turns unknown, a band that missed the regular close, and a holiday eve signed as a short close, whose ramp can only start at the close.
+
+A caller cannot choose the unknown regime by starving the band's `session()` of gas: a failed call that leaves no more than the 64th of the gas a call holds back reverts with `InsufficientGas`.
+
 ```bash
 make deploy-stylus CHAIN=<chainId> SIGNER='--account <name> --password-file <file>' CONTRACT=margin
 stylus/scripts/check-margin.sh <rpc> <address> deployments/<chainId>.json
 ```
 
-`stylus/scripts/margin-args.sh` builds the constructor arguments: the assets the chain's band prices, in `band-args.sh`'s order, each with its parameters from `parameters.json`, its pool from the registry's `.uniswapV3` entry `parameters.json` names and its Stock Token, zero where absent; the correlations; the file's market where the band prices it; the registry's USDG, WETH and ETH/USD feed, zero where absent; and its `.tapehouse.Owner`. It refuses an asset, a pair or a pool name the file lacks. `check-margin.sh` checks the assets, the floors and ceilings, the market, the pools, the feed and the owner, that the registry's band prices every asset, and the values themselves until the first update.
+`stylus/scripts/margin-args.sh` builds the constructor arguments: the assets the chain's band prices, in `band-args.sh`'s order, each with its parameters from `parameters.json`, its pool from the registry's `.uniswapV3` entry `parameters.json` names and its Stock Token, zero where absent; the correlations; the file's market where the band prices it; the registry's USDG, WETH and ETH/USD feed and its band, zero where absent; and its `.tapehouse.Owner`. It refuses an asset, a pair or a pool name the file lacks. `check-margin.sh` checks the assets, the floors and ceilings, the market, the pools, the feed, the band and the owner, that the registry's band prices every asset, and the values themselves until the first update.
 
 ## Verification
 
