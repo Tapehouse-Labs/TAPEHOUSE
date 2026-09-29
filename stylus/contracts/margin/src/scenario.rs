@@ -258,6 +258,16 @@ impl<'a> Set<'a> {
         row
     }
 
+    /// The lattice size of the set.
+    pub fn size(&self) -> usize {
+        self.size
+    }
+
+    /// The parameters the set is drawn from.
+    pub fn parameters(&self) -> &Parameters<'a> {
+        self.parameters
+    }
+
     /// Every scenario in the canonical order of the assets, ascending by symbol, as big-endian int32:
     /// the same bytes for any order the assets were stored in.
     pub fn encoded(&self) -> Vec<u8> {

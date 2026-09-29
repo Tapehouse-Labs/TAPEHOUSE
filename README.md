@@ -50,7 +50,7 @@ make test
 | `make build-stylus` · `test-stylus` · `lint-stylus` · `gas-stylus` · `snapshot-stylus` | Stylus programs only |
 | `make check-activation` | `cargo stylus check` of every program against Robinhood Chain, its testnet and Arbitrum One |
 | `make build-apps` · `test-apps` · `lint-apps` | Apps only |
-| `make devnode deploy-stylus-devnode test-stylus-devnode` | Deploys `band` and `margin` to a local dev node, writes live RedStone prices through the band, reads it through a `BandFeed`, and updates the margin engine's parameters |
+| `make devnode deploy-stylus-devnode test-stylus-devnode` | Deploys `band` and `margin` to a local dev node, writes live RedStone prices through the band, reads it through a `BandFeed`, margins a portfolio against a stub pool, and updates the margin engine's parameters |
 | `make gas-stylus-devnode` · `snapshot-stylus-devnode` | Compares the dev-node suite's L2 gas with `stylus/.gas-devnode`, failing on a move over 0.5%, or regenerates it |
 | `make deploy-stylus CHAIN=<id> SIGNER='<flags>' [CONTRACT=margin]` | Deploys `band`, or the program `CONTRACT` names, reproducibly, configured from `deployments/<id>.json`, and prints the transaction and address |
 | `make verify-stylus CHAIN=<id> TX=<hash> [CONTRACT=margin]` | Verifies a deployment of `band`, or of the program `CONTRACT` names, against the checked-out source |
@@ -224,20 +224,20 @@ make verify-band-feeds CHAIN=<chainId>
 
 ## The margin engine
 
-`margin` is the Stylus program that margins a portfolio of Stock Tokens as one position. It holds the risk parameters it generates its scenarios from: each asset's daily volatility and weekend gap, each pair's correlation, and a hard floor under every one of them.
+`margin` is the Stylus program that margins a portfolio of Stock Tokens as one position. It holds the risk parameters it generates its scenarios from: each asset's daily volatility and weekend gap, each pair's correlation, and a hard floor under every one of them. It also holds each asset's liquidation depth, whose first value is its ceiling, and the Uniswap v3 pool it is liquidated in.
 
-- **Units.** Volatility is the standard deviation of daily log returns, in centi-basis-points (1e-6): NVDA's 31,352 is 3.1352% a day. A weekend gap is a move from the last close before the market shuts for two days or more to the next open, also in centi-basis-points. Correlation is in basis points (1e-4), and positive: every pair among the launch assets has a floor above zero, and an asset that moves against the others needs a new program.
+- **Units.** Volatility is the standard deviation of daily log returns, in centi-basis-points (1e-6): NVDA's 31,352 is 3.1352% a day. A weekend gap is a move from the last close before the market shuts for two days or more to the next open, also in centi-basis-points. Correlation is in basis points (1e-4), and positive: every pair among the launch assets has a floor above zero, and an asset that moves against the others needs a new program. A depth is in whole USD.
 - **Floors.** They are set in the constructor and never change. They are modelled on the anti-procyclicality tools EMIR gives clearing houses for margin requirements (RTS 153/2013, Article 28), applied here to the parameters beneath the margin.
   - A volatility floor is the asset's 10-year volatility, after the Article's 10-year volatility floor.
   - A correlation floor gives 25% weight to stressed observations, after the Article's second option: 75% the pair's 10-year correlation and 25% its correlation over the 60 sessions with SPY's worst return in those 10 years, 26 December 2019 to 23 March 2020 (SPY −30.2%). Correlations rise in a crash, so a floor keeps a calm year from granting a diversification benefit that disappears when it is needed.
   - A weekend-gap floor is the mean of the largest 1% of the asset's 521 such moves in the ten years, up or down, from adjusted closes and opens: 11.86% for NVDA, 5.48% for SPY. Weekend gaps are not a fixed multiple of daily volatility: their 99th percentile runs from 2.1 daily standard deviations for GOOGL to 3.2 for AAPL.
   - The first values are the floors, or, for volatility and correlation, the last 252 sessions' figures where those are higher. All come from Yahoo Finance's daily adjusted closes over the ten years to 25 September 2026, and are in `stylus/contracts/margin/parameters.json`.
-- **How the parameters move.** The owner replaces them all at once with `setParameters`. Each value stays at or above its floor and moves by at most ×1.5 or ÷1.5, modelled on the factor of about 1.5 OCC uses when it reviews day-over-day changes in its margin coverage; a bound on each parameter is not by itself a bound on a portfolio's margin. An update comes at least a day after the one before; the first may come at any time.
-- **Events.** Every value the constructor sets and every value an update changes emits `VolatilitySet`, `CorrelationSet` or `GapSet`, so the values' history rebuilds from events alone. The floors never change and are read with the views.
+- **How the parameters move.** The owner replaces them all at once with `setParameters`. Each value stays at or above its floor, or for a depth above zero and at or below its ceiling. Each moves by at most ×1.5 or ÷1.5, but a depth may fall by any amount, since a smaller depth only raises requirements; modelled on the factor of about 1.5 OCC uses when it reviews day-over-day changes in its margin coverage; a bound on each parameter is not by itself a bound on a portfolio's margin. An update comes at least a day after the one before; the first may come at any time.
+- **Events.** Every value the constructor sets and every value an update changes emits `VolatilitySet`, `CorrelationSet`, `GapSet` or `DepthSet`, so the values' history rebuilds from events alone. The floors and ceilings never change and are read with the views.
 - **Valid matrices only.** The correlation matrix must stay positive definite, as the correlation matrix of assets that are not linear combinations of one another is. The check is exact: Bareiss's fraction-free elimination yields every leading principal minor as an integer, and Sylvester's criterion asks that each be positive. Hadamard's inequality keeps every intermediate within 256 bits for up to 9 assets; the engine takes at most 8.
 - **Ownership** follows OpenZeppelin's `Ownable2Step`, from the same `stylus/crates/ownable` as the band's, with an explicit `initialOwner`: the registry's owner, as for the band.
 
-Reads: `assets()`, `volatility(symbol)`, `correlation(symbol, other)` and `weekendGap(symbol)`, each with its floor, `market()` and `lastUpdate()`.
+Reads: `assets()`, `volatility(symbol)`, `correlation(symbol, other)` and `weekendGap(symbol)`, each with its floor, `depth(symbol)` with its ceilings, `pool(symbol)`, `ethUsdFeed()`, `market()` and `lastUpdate()`.
 
 ### Scenarios
 
@@ -269,12 +269,52 @@ How closely the joint draws track the model, over 200 long-only portfolios of th
 | 128 | 0.865 | 0.936 | 1.011 |
 | 256 | 0.934 | 0.978 | 1.033 |
 
+### Requirement
+
+`requirement(quantities, prices, horizon, spansClosure)` returns the margin a portfolio needs, in USD with 18 decimals, and a bit for every asset whose liquidity input is missing. It takes any portfolio: signed token amounts with 18 decimals, negative for a short, and prices in USD with 8 decimals, both in the order of `assets()`. The caller gives the horizon in seconds and says whether it spans a market closure.
+
+| Part | What it is |
+|---|---|
+| Expected shortfall | The mean loss in the worst 1% of the 256 joint draws, or of the 256 draws with every correlation 0 where that is larger. 1% of 256 is 2.56 scenarios: the two worst count in full and the third at 0.56. |
+| Diversification cap | Diversification takes off at most 80% of the gap between that and the sum of each asset's own expected shortfall over the draws with every correlation 1, after EMIR's cap on margin offsets (RTS 153/2013, Article 27). |
+| Stress | The loss when the market moves down or up and, across a closure, when every asset gaps at once or one asset gaps alone. |
+| Single-position floor | The loss when one asset alone moves by the range of FINRA Rule 4210(g)'s portfolio margin, ∓15% for a stock and −8% or +6% for the market asset, whichever asset loses most. FINRA adds up every underlying's greatest loss; this floor takes the largest one alone, so it never overrides the diversification the expected shortfall allows. |
+| Liquidity | What liquidating each position in its pool costs beyond its value. |
+
+The requirement is the largest of the first four, plus the liquidity add-on.
+
+- **Liquidity.** Each asset is liquidated in its deepest Uniswap v3 pool on Robinhood Chain: SPY's is SPY/WETH, priced in USD with Chainlink's ETH/USD, and USDG counts at par. The second swap, from WETH to USDG, is left out.
+  - The add-on is the pool's fee, the pool's discount to the valuation price when it works against the position, and the price impact.
+  - The discount counts up to the asset's weekend gap: whoever moves a pool's 30-minute mean price cannot push requirements further than the asset's largest weekend move.
+  - The impact grows linearly to a 10% move at the pool's depth, the USD it absorbs within that move on the liquidation's side, and whatever lies beyond the depth counts in full. Up to a 50% move the pools absorb only 1.01 to 1.61 times what they absorb within 10%.
+  - The pool's price and liquidity are its own oracle's over the last 30 minutes, the time-weighted mean tick and harmonic-mean liquidity. The constructor takes a pool only if it trades the asset's Stock Token against USDG or WETH and keeps more than 1,800 observations, so 30 minutes of history cannot be overwritten.
+- **Depth.** The engine takes the smaller of two depths.
+  - The governed one is set with the other parameters, and its first value is its ceiling. It is measured off chain by walking the pool's initialized ticks: a walk costs one read per tick, and the 0.05% pools hold one about every 10 ticks. The first values are the lower of a Monday and a Sunday in September 2026, below.
+  - The pool's own is the depth at its time-weighted liquidity, as if that liquidity held across the whole move. On these pools that gives 0.7 to 4.3 times the walked depth within a 2% move and 1.05 to 22 times at 10 to 20%, so it binds only when liquidity leaves a pool's current range.
+  - The pool's own lowers the governed one by half at most. A harmonic mean counts each second with no liquidity in range as a liquidity of one, so a pool pushed out of its liquidity for a single second would read as nearly empty for 30 minutes. A real withdrawal of more than half is followed by lowering the governed depth, which may fall at once.
+  - Linear impact to 10% held on every walked curve: within 1, 2 and 5% each pool absorbs at least its share of its 10% depth.
+  - Every account is charged as if it had the pool to itself.
+- **Missing input.** An asset held without a pool, as on Arbitrum One and the testnet, adds no liquidity add-on and sets its bit. One whose pool lacks 30 minutes of history, or needs an ETH/USD answer more than 86,460 s old, is charged its pool's fee and governed depth, with no discount, and sets its bit.
+
+| Asset | Pool | Sells within 10% | Buys within 10% |
+|---|---|---|---|
+| NVDA | NVDA/USDG 0.05% | 3,561,773 | 1,377,156 |
+| TSLA | TSLA/USDG 0.3% | 164,067 | 166,576 |
+| AAPL | AAPL/USDG 0.05% | 169,957 | 136,784 |
+| MSFT | MSFT/USDG 0.3% | 373,481 | 143,815 |
+| GOOGL | GOOGL/USDG 0.05% | 386,624 | 354,428 |
+| SPY | SPY/WETH 0.05% | 320,861 | 877,772 |
+
+Over the 200 portfolios above, at 100,000 USD per unit of weight and two days, the expected shortfall with the cap runs at a median 1.020 of the model's (5th percentile 0.976, 95th 1.064): the cap covers the joint draws' shortfall. The single-position floor sets 15 of the 200 requirements. Across a closure, over three days, the gap scenarios set 20.
+
+`stylus/contracts/margin/testdata/requirement-vectors.json` holds 120 requirements computed separately from this program, in Python, from the pools' state at Robinhood Chain block 75,093,578: with the pools read, unread and absent. The dev-node suite checks the program's requirement against one more.
+
 ```bash
 make deploy-stylus CHAIN=<chainId> SIGNER='--account <name> --password-file <file>' CONTRACT=margin
 stylus/scripts/check-margin.sh <rpc> <address> deployments/<chainId>.json
 ```
 
-`stylus/scripts/margin-args.sh` builds the constructor arguments: the assets the chain's band prices, in `band-args.sh`'s order, with their parameters from `parameters.json`, the file's market where the band prices it, and the registry's `.tapehouse.Owner`. It refuses an asset or a pair the file lacks. `check-margin.sh` checks the assets, the floors, the market and the owner, that the registry's band prices every asset, and the values themselves until the first update.
+`stylus/scripts/margin-args.sh` builds the constructor arguments: the assets the chain's band prices, in `band-args.sh`'s order, each with its parameters from `parameters.json`, its pool from the registry's `.uniswapV3` entry `parameters.json` names and its Stock Token, zero where absent; the correlations; the file's market where the band prices it; the registry's USDG, WETH and ETH/USD feed, zero where absent; and its `.tapehouse.Owner`. It refuses an asset, a pair or a pool name the file lacks. `check-margin.sh` checks the assets, the floors and ceilings, the market, the pools, the feed and the owner, that the registry's band prices every asset, and the values themselves until the first update.
 
 ## Verification
 

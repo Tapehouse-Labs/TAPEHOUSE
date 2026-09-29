@@ -35,6 +35,16 @@ sol! {
     error UnsupportedScenarioSize(uint16 size);
     #[derive(Debug, PartialEq, Eq)]
     error ScenarioOutOfRange(uint16 index);
+    #[derive(Debug, PartialEq, Eq)]
+    error InvalidDepth(bytes32 symbol, uint32 value, uint32 ceiling);
+    #[derive(Debug, PartialEq, Eq)]
+    error DepthStepTooLarge(bytes32 symbol, uint32 previous, uint32 value);
+    #[derive(Debug, PartialEq, Eq)]
+    error InvalidPool(bytes32 symbol, address pool);
+    #[derive(Debug, PartialEq, Eq)]
+    error InvalidFeed(address feed);
+    #[derive(Debug, PartialEq, Eq)]
+    error ExposureTooLarge(bytes32 symbol);
 }
 
 /// The errors of the margin program.
@@ -55,6 +65,11 @@ pub enum MarginError {
     UpdateTooSoon(UpdateTooSoon),
     UnsupportedScenarioSize(UnsupportedScenarioSize),
     ScenarioOutOfRange(ScenarioOutOfRange),
+    InvalidDepth(InvalidDepth),
+    DepthStepTooLarge(DepthStepTooLarge),
+    InvalidPool(InvalidPool),
+    InvalidFeed(InvalidFeed),
+    ExposureTooLarge(ExposureTooLarge),
     OwnableUnauthorizedAccount(OwnableUnauthorizedAccount),
     OwnableInvalidOwner(OwnableInvalidOwner),
 }

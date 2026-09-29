@@ -2,6 +2,7 @@
 pragma solidity 0.8.37;
 
 contract StubStockToken {
+    uint8 public constant decimals = 18;
     uint256 internal multiplier;
     uint256 public newUIMultiplier;
     uint256 public effectiveAt;

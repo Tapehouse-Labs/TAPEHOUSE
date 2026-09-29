@@ -113,5 +113,51 @@
       "floor": 54840,
       "initial": 54840
     }
+  },
+  "pool": {
+    "NVDA": "NVDA_USDG_500",
+    "TSLA": "TSLA_USDG_3000",
+    "AAPL": "AAPL_USDG_500",
+    "MSFT": "MSFT_USDG_3000",
+    "GOOGL": "GOOGL_USDG_500",
+    "SPY": "SPY_WETH_500"
+  },
+  "depth": {
+    "NVDA": {
+      "initial": [
+        3561773,
+        1377156
+      ]
+    },
+    "TSLA": {
+      "initial": [
+        164067,
+        166576
+      ]
+    },
+    "AAPL": {
+      "initial": [
+        169957,
+        136784
+      ]
+    },
+    "MSFT": {
+      "initial": [
+        373481,
+        143815
+      ]
+    },
+    "GOOGL": {
+      "initial": [
+        386624,
+        354428
+      ]
+    },
+    "SPY": {
+      "initial": [
+        320861,
+        877772
+      ]
+    }
   }
 }

@@ -14,3 +14,10 @@ Every case was classified twice, independently of this crate: by exact integer e
 - two matrices outside it, which the program refuses but the set is still defined for: one whose factor clamps an entry to ±1, and a singular one whose last pivot falls below the floor.
 
 For each configuration it gives the set's keccak-256 at horizons of 0, 1, 2 and 3.5 days and for 32, 64, 128 and 256 lattice points: 144 digests. It also gives fourteen scenarios of the launch set, one from each family and its edges. Every value was computed in unbounded integer arithmetic, independently of this crate. The launch assets and their reordering have the same digest.
+
+`requirement-vectors.json` holds what the engine reads from Robinhood Chain for the six launch assets at block 75,093,578 (28 September 2026): each asset's pool from `parameters.json`, its tokens, fee and decimals, its 30-minute observation (`observe([1800, 0])`), and the ETH/USD round. From that state it gives 120 requirements:
+- ten portfolios: one token, long and short positions, a hedge, all six assets, and positions past their pool's depth;
+- at horizons of 2 and 3.5 days, with and without a closure;
+- with the pools read; with them unread, where each asset held is still charged its pool's fee and governed depth and sets its bit; and without them, as on Arbitrum One, where every asset held sets its bit.
+
+It also gives the requirement the dev-node suite expects from its three assets, with NVDA's stub pool repeating the real pool's mean tick and liquidity. Every value was computed in unbounded integer arithmetic, independently of this crate.

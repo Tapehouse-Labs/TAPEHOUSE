@@ -1,0 +1,2024 @@
+{
+ "block": 75093578,
+ "timestamp": 1790628224,
+ "symbols": [
+  "NVDA",
+  "TSLA",
+  "AAPL",
+  "MSFT",
+  "GOOGL",
+  "SPY"
+ ],
+ "prices": [
+  22886000000,
+  35802000000,
+  33874000000,
+  51047000000,
+  34251000000,
+  76779000000
+ ],
+ "tokens": {
+  "NVDA": "0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC",
+  "TSLA": "0x322F0929c4625eD5bAd873c95208D54E1c003b2d",
+  "AAPL": "0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9",
+  "MSFT": "0xe93237C50D904957Cf27E7B1133b510C669c2e74",
+  "GOOGL": "0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3",
+  "SPY": "0x117cc2133c37B721F49dE2A7a74833232B3B4C0C"
+ },
+ "usdg": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+ "weth": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+ "ethUsd": "0x78F3556b67E17Df817D51Ef5a990cDaF09E8d3A9",
+ "ethUsdRound": "0x00000000000000000000000000000000000000000000000100000000000009ab0000000000000000000000000000000000000000000000000000003e79bf42f0000000000000000000000000000000000000000000000000000000006abac908000000000000000000000000000000000000000000000000000000006abac91400000000000000000000000000000000000000000000000100000000000009ab",
+ "pools": {
+  "NVDA": {
+   "pool": "0xd4EB21209C4D6093f80B5b84f5C45cc093EA14a3",
+   "token0": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+   "token1": "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+   "fee": 500,
+   "observe": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000001368bb032c800000000000000000000000000000000000000000000000000000136a38152fc00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000382558a2cf7859ea63ba9db000000000000000000000000000000000000000003825642ba847a37443228d38",
+   "decimals0": 6,
+   "decimals1": 18
+  },
+  "TSLA": {
+   "pool": "0xf4ACdAEEB7022862A763C9B1B885e11191c889E3",
+   "token0": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+   "token1": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+   "fee": 3000,
+   "observe": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000002fffffffffffffffffffffffffffffffffffffffffffffffffffffe9952ab333dfffffffffffffffffffffffffffffffffffffffffffffffffffffe993b54f1dd0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000fa276000000d592d861d4b9779c2582f63577000000000000000000000000000fa276000000d592d9d1745a62d6c58567cd71",
+   "decimals0": 18,
+   "decimals1": 6
+  },
+  "AAPL": {
+   "pool": "0xAae0d815EE56e4092a5E5C2911E676Fea50B2d6D",
+   "token0": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+   "token1": "0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+   "fee": 500,
+   "observe": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000011822d840f7000000000000000000000000000000000000000000000000000001183a3daded000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000029496000003f5ae580e14aef592865cf93f1b00000000000000000000000000029496000003f5ae58d4811372a2a430c5d2ac",
+   "decimals0": 6,
+   "decimals1": 18
+  },
+  "MSFT": {
+   "pool": "0xeb60bCD1D920ad6E102690CCFC6fB488899E1510",
+   "token0": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+   "token1": "0xe93237c50d904957cf27e7b1133b510c669c2e74",
+   "fee": 3000,
+   "observe": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000012c91f427df0000000000000000000000000000000000000000000000000000012ca8e8ef5700000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000157fbdc702c8ee3bd2806506f6f0000000000000000000000000000000000000157fbdd10fe8f4d62838f53313f",
+   "decimals0": 6,
+   "decimals1": 18
+  },
+  "GOOGL": {
+   "pool": "0x34D0dC122CF9A8Eb296fC5e0D3A233625D7d19b7",
+   "token0": "0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3",
+   "token1": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+   "fee": 500,
+   "observe": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000002fffffffffffffffffffffffffffffffffffffffffffffffffffffea1e2cc0bd0fffffffffffffffffffffffffffffffffffffffffffffffffffffea1cb69bd750000000000000000000000000000000000000000000000000000000000000002000000000000000000000000001e409300000002d8b518f26f61ecc8d9eec560000000000000000000000000001e409300000002d8b5aa36fa2faa61568f33cb",
+   "decimals0": 18,
+   "decimals1": 6
+  },
+  "SPY": {
+   "pool": "0xDDCBBa3666f578E3F09516f21Ff85BFee859AB5e",
+   "token0": "0x0bd7d308f8e1639fab988df18a8011f41eacad73",
+   "token1": "0x117cc2133c37b721f49de2a7a74833232b3b4c0c",
+   "fee": 500,
+   "observe": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000c7b1cc3a40000000000000000000000000000000000000000000000000000000c7c74782e000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000003bfc1335244a72c047d7900000000000000000000000000000000000000000003bfc3517f1f6efdbed2d4",
+   "decimals0": 18,
+   "decimals1": 18
+  }
+ },
+ "vectors": [
+  {
+   "label": "one NVDA",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "1000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "34444165264425891262",
+   "missing": 0
+  },
+  {
+   "label": "300k NVDA",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "1311000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "46419051139332256715967",
+   "missing": 0
+  },
+  {
+   "label": "100k each of NVDA, TSLA and SPY",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "0",
+    "0",
+    "0",
+    "130000000000000000000"
+   ],
+   "requirement": "32828151125431008226532",
+   "missing": 0
+  },
+  {
+   "label": "100k each of the six",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "295000000000000000000",
+    "196000000000000000000",
+    "292000000000000000000",
+    "130000000000000000000"
+   ],
+   "requirement": "54014782586507846230090",
+   "missing": 0
+  },
+  {
+   "label": "short 50k TSLA",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "-140000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "8422887153673998655268",
+   "missing": 0
+  },
+  {
+   "label": "long NVDA, short SPY",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-130000000000000000000"
+   ],
+   "requirement": "15814681894937186528580",
+   "missing": 0
+  },
+  {
+   "label": "5M NVDA, past its pool",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "21848000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "2368968988640000000000000",
+   "missing": 0
+  },
+  {
+   "label": "1M MSFT, past its pool",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "1959000000000000000000",
+    "0",
+    "0"
+   ],
+   "requirement": "798205421690000000000000",
+   "missing": 0
+  },
+  {
+   "label": "short 1M SPY",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-1302000000000000000000"
+   ],
+   "requirement": "226309761758360000000000",
+   "missing": 0
+  },
+  {
+   "label": "a fraction of a token",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "1000000000000000",
+    "0"
+   ],
+   "requirement": "51547770171471520",
+   "missing": 0
+  },
+  {
+   "label": "one NVDA",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "1000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "34444165264425891262",
+   "missing": 0
+  },
+  {
+   "label": "300k NVDA",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "1311000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "46419051139332256715967",
+   "missing": 0
+  },
+  {
+   "label": "100k each of NVDA, TSLA and SPY",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "0",
+    "0",
+    "0",
+    "130000000000000000000"
+   ],
+   "requirement": "35995678455764383226532",
+   "missing": 0
+  },
+  {
+   "label": "100k each of the six",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "295000000000000000000",
+    "196000000000000000000",
+    "292000000000000000000",
+    "130000000000000000000"
+   ],
+   "requirement": "62858438342911096230090",
+   "missing": 0
+  },
+  {
+   "label": "short 50k TSLA",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "-140000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "8422887153673998655268",
+   "missing": 0
+  },
+  {
+   "label": "long NVDA, short SPY",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-130000000000000000000"
+   ],
+   "requirement": "15814681894937186528580",
+   "missing": 0
+  },
+  {
+   "label": "5M NVDA, past its pool",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "21848000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "2368968988640000000000000",
+   "missing": 0
+  },
+  {
+   "label": "1M MSFT, past its pool",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "1959000000000000000000",
+    "0",
+    "0"
+   ],
+   "requirement": "798205421690000000000000",
+   "missing": 0
+  },
+  {
+   "label": "short 1M SPY",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-1302000000000000000000"
+   ],
+   "requirement": "226309761758360000000000",
+   "missing": 0
+  },
+  {
+   "label": "a fraction of a token",
+   "pools": "read",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "1000000000000000",
+    "0"
+   ],
+   "requirement": "51547770171471520",
+   "missing": 0
+  },
+  {
+   "label": "one NVDA",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "1000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "38732104104113391262",
+   "missing": 0
+  },
+  {
+   "label": "300k NVDA",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "1311000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "52040538958162569215967",
+   "missing": 0
+  },
+  {
+   "label": "100k each of NVDA, TSLA and SPY",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "0",
+    "0",
+    "0",
+    "130000000000000000000"
+   ],
+   "requirement": "41767718108067195726532",
+   "missing": 0
+  },
+  {
+   "label": "100k each of the six",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "295000000000000000000",
+    "196000000000000000000",
+    "292000000000000000000",
+    "130000000000000000000"
+   ],
+   "requirement": "67866866131872471230090",
+   "missing": 0
+  },
+  {
+   "label": "short 50k TSLA",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "-140000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "10235194462986498655268",
+   "missing": 0
+  },
+  {
+   "label": "long NVDA, short SPY",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-130000000000000000000"
+   ],
+   "requirement": "17284096371370624028580",
+   "missing": 0
+  },
+  {
+   "label": "5M NVDA, past its pool",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "21848000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "2462651876409492500000000",
+   "missing": 0
+  },
+  {
+   "label": "1M MSFT, past its pool",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "1959000000000000000000",
+    "0",
+    "0"
+   ],
+   "requirement": "798205421690000000000000",
+   "missing": 0
+  },
+  {
+   "label": "short 1M SPY",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-1302000000000000000000"
+   ],
+   "requirement": "226309761758360000000000",
+   "missing": 0
+  },
+  {
+   "label": "a fraction of a token",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "1000000000000000",
+    "0"
+   ],
+   "requirement": "51547770171471520",
+   "missing": 0
+  },
+  {
+   "label": "one NVDA",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "1000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "38732104104113391262",
+   "missing": 0
+  },
+  {
+   "label": "300k NVDA",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "1311000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "52040538958162569215967",
+   "missing": 0
+  },
+  {
+   "label": "100k each of NVDA, TSLA and SPY",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "0",
+    "0",
+    "0",
+    "130000000000000000000"
+   ],
+   "requirement": "41767718108067195726532",
+   "missing": 0
+  },
+  {
+   "label": "100k each of the six",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "295000000000000000000",
+    "196000000000000000000",
+    "292000000000000000000",
+    "130000000000000000000"
+   ],
+   "requirement": "67866866131872471230090",
+   "missing": 0
+  },
+  {
+   "label": "short 50k TSLA",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "-140000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "10235194462986498655268",
+   "missing": 0
+  },
+  {
+   "label": "long NVDA, short SPY",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-130000000000000000000"
+   ],
+   "requirement": "17284096371370624028580",
+   "missing": 0
+  },
+  {
+   "label": "5M NVDA, past its pool",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "21848000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "2462651876409492500000000",
+   "missing": 0
+  },
+  {
+   "label": "1M MSFT, past its pool",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "1959000000000000000000",
+    "0",
+    "0"
+   ],
+   "requirement": "798205421690000000000000",
+   "missing": 0
+  },
+  {
+   "label": "short 1M SPY",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-1302000000000000000000"
+   ],
+   "requirement": "226309761758360000000000",
+   "missing": 0
+  },
+  {
+   "label": "a fraction of a token",
+   "pools": "read",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "1000000000000000",
+    "0"
+   ],
+   "requirement": "51547770171471520",
+   "missing": 0
+  },
+  {
+   "label": "one NVDA",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "1000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "34444165264425891262",
+   "missing": 1
+  },
+  {
+   "label": "300k NVDA",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "1311000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "46419051139332256715967",
+   "missing": 1
+  },
+  {
+   "label": "100k each of NVDA, TSLA and SPY",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "0",
+    "0",
+    "0",
+    "130000000000000000000"
+   ],
+   "requirement": "32820137687431008226532",
+   "missing": 35
+  },
+  {
+   "label": "100k each of the six",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "295000000000000000000",
+    "196000000000000000000",
+    "292000000000000000000",
+    "130000000000000000000"
+   ],
+   "requirement": "54006769148507846230090",
+   "missing": 63
+  },
+  {
+   "label": "short 50k TSLA",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "-140000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "8422887153673998655268",
+   "missing": 2
+  },
+  {
+   "label": "long NVDA, short SPY",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-130000000000000000000"
+   ],
+   "requirement": "15809590161537186528580",
+   "missing": 33
+  },
+  {
+   "label": "5M NVDA, past its pool",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "21848000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "2368968988640000000000000",
+   "missing": 1
+  },
+  {
+   "label": "1M MSFT, past its pool",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "1959000000000000000000",
+    "0",
+    "0"
+   ],
+   "requirement": "798205421690000000000000",
+   "missing": 8
+  },
+  {
+   "label": "short 1M SPY",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-1302000000000000000000"
+   ],
+   "requirement": "226258766090000000000000",
+   "missing": 32
+  },
+  {
+   "label": "a fraction of a token",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "1000000000000000",
+    "0"
+   ],
+   "requirement": "51547770171471520",
+   "missing": 16
+  },
+  {
+   "label": "one NVDA",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "1000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "34444165264425891262",
+   "missing": 1
+  },
+  {
+   "label": "300k NVDA",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "1311000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "46419051139332256715967",
+   "missing": 1
+  },
+  {
+   "label": "100k each of NVDA, TSLA and SPY",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "0",
+    "0",
+    "0",
+    "130000000000000000000"
+   ],
+   "requirement": "35987665017764383226532",
+   "missing": 35
+  },
+  {
+   "label": "100k each of the six",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "295000000000000000000",
+    "196000000000000000000",
+    "292000000000000000000",
+    "130000000000000000000"
+   ],
+   "requirement": "62850424904911096230090",
+   "missing": 63
+  },
+  {
+   "label": "short 50k TSLA",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "-140000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "8422887153673998655268",
+   "missing": 2
+  },
+  {
+   "label": "long NVDA, short SPY",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-130000000000000000000"
+   ],
+   "requirement": "15809590161537186528580",
+   "missing": 33
+  },
+  {
+   "label": "5M NVDA, past its pool",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "21848000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "2368968988640000000000000",
+   "missing": 1
+  },
+  {
+   "label": "1M MSFT, past its pool",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "1959000000000000000000",
+    "0",
+    "0"
+   ],
+   "requirement": "798205421690000000000000",
+   "missing": 8
+  },
+  {
+   "label": "short 1M SPY",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-1302000000000000000000"
+   ],
+   "requirement": "226258766090000000000000",
+   "missing": 32
+  },
+  {
+   "label": "a fraction of a token",
+   "pools": "unread",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "1000000000000000",
+    "0"
+   ],
+   "requirement": "51547770171471520",
+   "missing": 16
+  },
+  {
+   "label": "one NVDA",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "1000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "38732104104113391262",
+   "missing": 1
+  },
+  {
+   "label": "300k NVDA",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "1311000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "52040538958162569215967",
+   "missing": 1
+  },
+  {
+   "label": "100k each of NVDA, TSLA and SPY",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "0",
+    "0",
+    "0",
+    "130000000000000000000"
+   ],
+   "requirement": "41759704670067195726532",
+   "missing": 35
+  },
+  {
+   "label": "100k each of the six",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "295000000000000000000",
+    "196000000000000000000",
+    "292000000000000000000",
+    "130000000000000000000"
+   ],
+   "requirement": "67858852693872471230090",
+   "missing": 63
+  },
+  {
+   "label": "short 50k TSLA",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "-140000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "10235194462986498655268",
+   "missing": 2
+  },
+  {
+   "label": "long NVDA, short SPY",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-130000000000000000000"
+   ],
+   "requirement": "17279004637970624028580",
+   "missing": 33
+  },
+  {
+   "label": "5M NVDA, past its pool",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "21848000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "2462651876409492500000000",
+   "missing": 1
+  },
+  {
+   "label": "1M MSFT, past its pool",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "1959000000000000000000",
+    "0",
+    "0"
+   ],
+   "requirement": "798205421690000000000000",
+   "missing": 8
+  },
+  {
+   "label": "short 1M SPY",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-1302000000000000000000"
+   ],
+   "requirement": "226258766090000000000000",
+   "missing": 32
+  },
+  {
+   "label": "a fraction of a token",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "1000000000000000",
+    "0"
+   ],
+   "requirement": "51547770171471520",
+   "missing": 16
+  },
+  {
+   "label": "one NVDA",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "1000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "38732104104113391262",
+   "missing": 1
+  },
+  {
+   "label": "300k NVDA",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "1311000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "52040538958162569215967",
+   "missing": 1
+  },
+  {
+   "label": "100k each of NVDA, TSLA and SPY",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "0",
+    "0",
+    "0",
+    "130000000000000000000"
+   ],
+   "requirement": "41759704670067195726532",
+   "missing": 35
+  },
+  {
+   "label": "100k each of the six",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "295000000000000000000",
+    "196000000000000000000",
+    "292000000000000000000",
+    "130000000000000000000"
+   ],
+   "requirement": "67858852693872471230090",
+   "missing": 63
+  },
+  {
+   "label": "short 50k TSLA",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "-140000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "10235194462986498655268",
+   "missing": 2
+  },
+  {
+   "label": "long NVDA, short SPY",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-130000000000000000000"
+   ],
+   "requirement": "17279004637970624028580",
+   "missing": 33
+  },
+  {
+   "label": "5M NVDA, past its pool",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "21848000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "2462651876409492500000000",
+   "missing": 1
+  },
+  {
+   "label": "1M MSFT, past its pool",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "1959000000000000000000",
+    "0",
+    "0"
+   ],
+   "requirement": "798205421690000000000000",
+   "missing": 8
+  },
+  {
+   "label": "short 1M SPY",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-1302000000000000000000"
+   ],
+   "requirement": "226258766090000000000000",
+   "missing": 32
+  },
+  {
+   "label": "a fraction of a token",
+   "pools": "unread",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "1000000000000000",
+    "0"
+   ],
+   "requirement": "51547770171471520",
+   "missing": 16
+  },
+  {
+   "label": "one NVDA",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "1000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "34329000000000000000",
+   "missing": 1
+  },
+  {
+   "label": "300k NVDA",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "1311000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "45005319000000000000000",
+   "missing": 1
+  },
+  {
+   "label": "100k each of NVDA, TSLA and SPY",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "0",
+    "0",
+    "0",
+    "130000000000000000000"
+   ],
+   "requirement": "27686987516586625000000",
+   "missing": 35
+  },
+  {
+   "label": "100k each of the six",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "295000000000000000000",
+    "196000000000000000000",
+    "292000000000000000000",
+    "130000000000000000000"
+   ],
+   "requirement": "42902056186736750000000",
+   "missing": 63
+  },
+  {
+   "label": "short 50k TSLA",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "-140000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "7518420000000000000000",
+   "missing": 2
+  },
+  {
+   "label": "long NVDA, short SPY",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-130000000000000000000"
+   ],
+   "requirement": "15001773000000000000000",
+   "missing": 33
+  },
+  {
+   "label": "5M NVDA, past its pool",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "21848000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "750019992000000000000000",
+   "missing": 1
+  },
+  {
+   "label": "1M MSFT, past its pool",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "1959000000000000000000",
+    "0",
+    "0"
+   ],
+   "requirement": "150001609500000000000000",
+   "missing": 8
+  },
+  {
+   "label": "short 1M SPY",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-1302000000000000000000"
+   ],
+   "requirement": "59979754800000000000000",
+   "missing": 32
+  },
+  {
+   "label": "a fraction of a token",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "1000000000000000",
+    "0"
+   ],
+   "requirement": "51376500000000000",
+   "missing": 16
+  },
+  {
+   "label": "one NVDA",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "1000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "34329000000000000000",
+   "missing": 1
+  },
+  {
+   "label": "300k NVDA",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "1311000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "45005319000000000000000",
+   "missing": 1
+  },
+  {
+   "label": "100k each of NVDA, TSLA and SPY",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "0",
+    "0",
+    "0",
+    "130000000000000000000"
+   ],
+   "requirement": "30854514846920000000000",
+   "missing": 35
+  },
+  {
+   "label": "100k each of the six",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "295000000000000000000",
+    "196000000000000000000",
+    "292000000000000000000",
+    "130000000000000000000"
+   ],
+   "requirement": "51745711943140000000000",
+   "missing": 63
+  },
+  {
+   "label": "short 50k TSLA",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "-140000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "7518420000000000000000",
+   "missing": 2
+  },
+  {
+   "label": "long NVDA, short SPY",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-130000000000000000000"
+   ],
+   "requirement": "15001773000000000000000",
+   "missing": 33
+  },
+  {
+   "label": "5M NVDA, past its pool",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "21848000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "750019992000000000000000",
+   "missing": 1
+  },
+  {
+   "label": "1M MSFT, past its pool",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "1959000000000000000000",
+    "0",
+    "0"
+   ],
+   "requirement": "150001609500000000000000",
+   "missing": 8
+  },
+  {
+   "label": "short 1M SPY",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-1302000000000000000000"
+   ],
+   "requirement": "59979754800000000000000",
+   "missing": 32
+  },
+  {
+   "label": "a fraction of a token",
+   "pools": "absent",
+   "horizon": 172800,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "1000000000000000",
+    "0"
+   ],
+   "requirement": "51376500000000000",
+   "missing": 16
+  },
+  {
+   "label": "one NVDA",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "1000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "38616938839687500000",
+   "missing": 1
+  },
+  {
+   "label": "300k NVDA",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "1311000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "50626806818830312500000",
+   "missing": 1
+  },
+  {
+   "label": "100k each of NVDA, TSLA and SPY",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "0",
+    "0",
+    "0",
+    "130000000000000000000"
+   ],
+   "requirement": "36626554499222812500000",
+   "missing": 35
+  },
+  {
+   "label": "100k each of the six",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "295000000000000000000",
+    "196000000000000000000",
+    "292000000000000000000",
+    "130000000000000000000"
+   ],
+   "requirement": "56754139732101375000000",
+   "missing": 63
+  },
+  {
+   "label": "short 50k TSLA",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "-140000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "9330727309312500000000",
+   "missing": 2
+  },
+  {
+   "label": "long NVDA, short SPY",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "437000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-130000000000000000000"
+   ],
+   "requirement": "16471187476433437500000",
+   "missing": 33
+  },
+  {
+   "label": "5M NVDA, past its pool",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "21848000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "843702879769492500000000",
+   "missing": 1
+  },
+  {
+   "label": "1M MSFT, past its pool",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "1959000000000000000000",
+    "0",
+    "0"
+   ],
+   "requirement": "150001609500000000000000",
+   "missing": 8
+  },
+  {
+   "label": "short 1M SPY",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-1302000000000000000000"
+   ],
+   "requirement": "59979754800000000000000",
+   "missing": 32
+  },
+  {
+   "label": "a fraction of a token",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": false,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "1000000000000000",
+    "0"
+   ],
+   "requirement": "51376500000000000",
+   "missing": 16
+  },
+  {
+   "label": "one NVDA",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "1000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "38616938839687500000",
+   "missing": 1
+  },
+  {
+   "label": "300k NVDA",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "1311000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "50626806818830312500000",
+   "missing": 1
+  },
+  {
+   "label": "100k each of NVDA, TSLA and SPY",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "0",
+    "0",
+    "0",
+    "130000000000000000000"
+   ],
+   "requirement": "36626554499222812500000",
+   "missing": 35
+  },
+  {
+   "label": "100k each of the six",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "279000000000000000000",
+    "295000000000000000000",
+    "196000000000000000000",
+    "292000000000000000000",
+    "130000000000000000000"
+   ],
+   "requirement": "56754139732101375000000",
+   "missing": 63
+  },
+  {
+   "label": "short 50k TSLA",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "-140000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "9330727309312500000000",
+   "missing": 2
+  },
+  {
+   "label": "long NVDA, short SPY",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "437000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-130000000000000000000"
+   ],
+   "requirement": "16471187476433437500000",
+   "missing": 33
+  },
+  {
+   "label": "5M NVDA, past its pool",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "21848000000000000000000",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ],
+   "requirement": "843702879769492500000000",
+   "missing": 1
+  },
+  {
+   "label": "1M MSFT, past its pool",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "1959000000000000000000",
+    "0",
+    "0"
+   ],
+   "requirement": "150001609500000000000000",
+   "missing": 8
+  },
+  {
+   "label": "short 1M SPY",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-1302000000000000000000"
+   ],
+   "requirement": "59979754800000000000000",
+   "missing": 32
+  },
+  {
+   "label": "a fraction of a token",
+   "pools": "absent",
+   "horizon": 302400,
+   "spansClosure": true,
+   "quantities": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "1000000000000000",
+    "0"
+   ],
+   "requirement": "51376500000000000",
+   "missing": 16
+  }
+ ],
+ "devnode": {
+  "quantities": [
+   "437000000000000000000",
+   "279000000000000000000",
+   "-130000000000000000000"
+  ],
+  "prices": [
+   22886000000,
+   35802000000,
+   76779000000
+  ],
+  "requirement": "21753341012280311528580",
+  "missing": 2
+ }
+}
