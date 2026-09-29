@@ -193,9 +193,9 @@ snapshot-stylus-devnode:
 	@LC_ALL=C sort stylus/target/devnode-gas.txt > stylus/.gas-devnode && cat stylus/.gas-devnode
 
 deploy-stylus: check-docker check-foundry
-	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
-		{ echo "Usage: make deploy-stylus CHAIN=<4663|46630|42161|412346> SIGNER='<signer flags>' [REGISTRY=<file>]"; exit 1; }
-	@set -f; args=$$(stylus/scripts/band-args.sh $(or $(REGISTRY),deployments/$(CHAIN).json)) && \
+	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" && test -x stylus/scripts/$(CONTRACT)-args.sh || \
+		{ echo "Usage: make deploy-stylus CHAIN=<4663|46630|42161|412346> SIGNER='<signer flags>' [CONTRACT=<band|margin>] [REGISTRY=<file>]"; exit 1; }
+	@set -f; args=$$(stylus/scripts/$(CONTRACT)-args.sh $(or $(REGISTRY),deployments/$(CHAIN).json)) && \
 		CARGO_STYLUS_VERSION=$(CARGO_STYLUS_VERSION) stylus/scripts/reproducible.sh deploy $(RPC_URL_$(CHAIN)) $(CONTRACT) \
 		$(SIGNER) -- $$args
 
@@ -211,7 +211,7 @@ verify-band-feeds: check-foundry submodules
 
 verify-stylus: check-docker
 	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(TX)" || \
-		{ echo "Usage: make verify-stylus CHAIN=<4663|46630|42161|412346> TX=<deployment tx> [CONTRACT=band]"; exit 1; }
+		{ echo "Usage: make verify-stylus CHAIN=<4663|46630|42161|412346> TX=<deployment tx> [CONTRACT=<band|margin>]"; exit 1; }
 	@CARGO_STYLUS_VERSION=$(CARGO_STYLUS_VERSION) stylus/scripts/reproducible.sh verify $(RPC_URL_$(CHAIN)) $(TX) $(CONTRACT)
 
 devnode: check-docker check-foundry
@@ -239,3 +239,5 @@ deploy-stylus-devnode: check-stylus check-foundry submodules
 test-stylus-devnode: check-stylus check-foundry submodules
 	stylus/scripts/devnode-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) \
 		$$(cat stylus/target/devnode-band) stylus/target/devnode-registry.json
+	stylus/scripts/devnode-margin-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) \
+		$$(cat stylus/target/devnode-margin) stylus/target/devnode-registry.json

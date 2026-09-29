@@ -1,0 +1,848 @@
+{
+ "cases": [
+  {
+   "name": "identity 1",
+   "n": 1,
+   "upper": [],
+   "positiveDefinite": true
+  },
+  {
+   "name": "identity 2",
+   "n": 2,
+   "upper": [
+    0
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "identity 3",
+   "n": 3,
+   "upper": [
+    0,
+    0,
+    0
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "identity 4",
+   "n": 4,
+   "upper": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "identity 5",
+   "n": 5,
+   "upper": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "identity 6",
+   "n": 6,
+   "upper": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "identity 7",
+   "n": 7,
+   "upper": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "identity 8",
+   "n": 8,
+   "upper": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "launch floors",
+   "n": 6,
+   "upper": [
+    4637,
+    6077,
+    6729,
+    6212,
+    7203,
+    4541,
+    4473,
+    4326,
+    5178,
+    7113,
+    6629,
+    7934,
+    7222,
+    8082,
+    7679
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "launch initial values",
+   "n": 6,
+   "upper": [
+    4637,
+    6077,
+    6729,
+    6212,
+    7203,
+    4541,
+    4473,
+    4326,
+    6232,
+    7113,
+    6629,
+    7934,
+    7222,
+    8082,
+    7679
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "launch initial values without SPY",
+   "n": 5,
+   "upper": [
+    4637,
+    6077,
+    6729,
+    6212,
+    4541,
+    4473,
+    4326,
+    7113,
+    6629,
+    7222
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "two assets moving as one",
+   "n": 2,
+   "upper": [
+    10000
+   ],
+   "positiveDefinite": false
+  },
+  {
+   "name": "two assets almost as one",
+   "n": 2,
+   "upper": [
+    9999
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "three assets moving as one",
+   "n": 3,
+   "upper": [
+    10000,
+    10000,
+    10000
+   ],
+   "positiveDefinite": false
+  },
+  {
+   "name": "two close pairs and a loose one",
+   "n": 3,
+   "upper": [
+    9000,
+    9000,
+    1000
+   ],
+   "positiveDefinite": false
+  },
+  {
+   "name": "constant 0.9999 over 8 assets",
+   "n": 8,
+   "upper": [
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999,
+    9999
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "constant 1 bp over 8 assets",
+   "n": 8,
+   "upper": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "one pair moving as one among 8",
+   "n": 8,
+   "upper": [
+    10000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000,
+    5000
+   ],
+   "positiveDefinite": false
+  },
+  {
+   "name": "random factor model 8",
+   "n": 8,
+   "upper": [
+    7927,
+    5705,
+    8164,
+    7340,
+    6684,
+    7368,
+    8128,
+    6209,
+    9036,
+    8586,
+    8040,
+    7988,
+    9100,
+    6363,
+    5799,
+    5318,
+    5714,
+    6352,
+    8539,
+    7906,
+    8199,
+    9215,
+    8016,
+    7440,
+    8666,
+    6807,
+    8074,
+    8178
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "random factor model 8",
+   "n": 8,
+   "upper": [
+    7378,
+    8040,
+    6502,
+    6507,
+    7767,
+    7128,
+    8201,
+    8730,
+    8185,
+    8080,
+    8507,
+    5962,
+    8847,
+    8092,
+    8028,
+    8858,
+    6955,
+    9267,
+    7912,
+    7915,
+    4788,
+    8177,
+    7847,
+    4874,
+    8116,
+    6665,
+    8997,
+    7138
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "random factor model 3",
+   "n": 3,
+   "upper": [
+    8588,
+    9010,
+    8741
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "random factor model 4",
+   "n": 4,
+   "upper": [
+    7164,
+    7502,
+    4832,
+    8257,
+    7200,
+    7951
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "random factor model 7",
+   "n": 7,
+   "upper": [
+    6977,
+    7318,
+    6807,
+    4729,
+    6087,
+    7797,
+    9316,
+    9131,
+    8405,
+    8971,
+    8129,
+    9078,
+    8090,
+    8814,
+    8383,
+    8182,
+    8737,
+    7928,
+    8454,
+    6085,
+    7314
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "random factor model 4",
+   "n": 4,
+   "upper": [
+    5333,
+    8855,
+    7195,
+    5242,
+    7812,
+    7027
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "random factor model 3",
+   "n": 3,
+   "upper": [
+    6003,
+    8415,
+    7014
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "random factor model 6",
+   "n": 6,
+   "upper": [
+    8843,
+    9533,
+    8484,
+    5941,
+    8168,
+    8528,
+    8781,
+    7134,
+    8547,
+    8217,
+    5680,
+    7904,
+    6343,
+    7873,
+    6208
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "random factor model 4",
+   "n": 4,
+   "upper": [
+    7356,
+    6897,
+    6707,
+    9010,
+    8733,
+    8205
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "random factor model 6",
+   "n": 6,
+   "upper": [
+    8719,
+    7947,
+    8233,
+    6858,
+    8948,
+    8371,
+    8566,
+    7116,
+    9397,
+    7738,
+    6369,
+    8740,
+    6803,
+    8747,
+    7228
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "random factor model 6",
+   "n": 6,
+   "upper": [
+    7506,
+    7171,
+    6382,
+    7191,
+    7900,
+    6319,
+    5320,
+    6618,
+    7963,
+    7739,
+    7558,
+    7010,
+    7073,
+    6072,
+    7185
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "random factor model 4",
+   "n": 4,
+   "upper": [
+    6752,
+    8353,
+    7420,
+    7883,
+    8318,
+    8661
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "random entries 3",
+   "n": 3,
+   "upper": [
+    6998,
+    9118,
+    801
+   ],
+   "positiveDefinite": false
+  },
+  {
+   "name": "random entries 3",
+   "n": 3,
+   "upper": [
+    885,
+    4674,
+    7010
+   ],
+   "positiveDefinite": true
+  },
+  {
+   "name": "random entries 5",
+   "n": 5,
+   "upper": [
+    45,
+    1736,
+    978,
+    7879,
+    7849,
+    1570,
+    8638,
+    4422,
+    5291,
+    3694
+   ],
+   "positiveDefinite": false
+  },
+  {
+   "name": "random entries 7",
+   "n": 7,
+   "upper": [
+    2589,
+    9151,
+    302,
+    2929,
+    6779,
+    8677,
+    8524,
+    5449,
+    7880,
+    6944,
+    8381,
+    1869,
+    6267,
+    5064,
+    9277,
+    1474,
+    6372,
+    9777,
+    618,
+    1914,
+    3658
+   ],
+   "positiveDefinite": false
+  },
+  {
+   "name": "random entries 8",
+   "n": 8,
+   "upper": [
+    1724,
+    999,
+    6112,
+    4156,
+    9211,
+    4851,
+    4301,
+    9532,
+    307,
+    8553,
+    704,
+    8332,
+    9508,
+    2191,
+    1139,
+    3859,
+    4434,
+    6891,
+    8961,
+    2939,
+    170,
+    8939,
+    4906,
+    3360,
+    7870,
+    1863,
+    3901,
+    4297
+   ],
+   "positiveDefinite": false
+  },
+  {
+   "name": "random entries 8",
+   "n": 8,
+   "upper": [
+    4331,
+    7485,
+    8613,
+    5004,
+    6005,
+    6153,
+    1955,
+    9212,
+    3190,
+    5478,
+    4870,
+    7634,
+    3989,
+    6676,
+    2539,
+    7660,
+    4192,
+    6209,
+    7091,
+    6595,
+    9074,
+    379,
+    8015,
+    8105,
+    8038,
+    8269,
+    7446,
+    9552
+   ],
+   "positiveDefinite": false
+  },
+  {
+   "name": "random entries 5",
+   "n": 5,
+   "upper": [
+    8114,
+    4892,
+    8985,
+    3773,
+    9586,
+    106,
+    9068,
+    9650,
+    7492,
+    1106
+   ],
+   "positiveDefinite": false
+  },
+  {
+   "name": "random entries 6",
+   "n": 6,
+   "upper": [
+    4597,
+    8680,
+    5471,
+    683,
+    2891,
+    8988,
+    8653,
+    8501,
+    1315,
+    6787,
+    4948,
+    271,
+    9992,
+    8222,
+    7313
+   ],
+   "positiveDefinite": false
+  },
+  {
+   "name": "random entries 8",
+   "n": 8,
+   "upper": [
+    4269,
+    7164,
+    5192,
+    8827,
+    5838,
+    3678,
+    5308,
+    9305,
+    6915,
+    8910,
+    5011,
+    2165,
+    389,
+    3451,
+    9261,
+    6024,
+    5297,
+    750,
+    4961,
+    9038,
+    9861,
+    936,
+    1982,
+    2997,
+    9106,
+    7960,
+    9874,
+    2474
+   ],
+   "positiveDefinite": false
+  },
+  {
+   "name": "random entries 8",
+   "n": 8,
+   "upper": [
+    8527,
+    4640,
+    8760,
+    4919,
+    9257,
+    6062,
+    8113,
+    143,
+    2852,
+    9251,
+    2961,
+    7708,
+    5832,
+    8713,
+    9669,
+    7987,
+    8059,
+    678,
+    1728,
+    3399,
+    9536,
+    1470,
+    9030,
+    5140,
+    3757,
+    2099,
+    2253,
+    8809
+   ],
+   "positiveDefinite": false
+  },
+  {
+   "name": "random entries 4",
+   "n": 4,
+   "upper": [
+    3782,
+    9564,
+    5672,
+    8289,
+    3223,
+    8990
+   ],
+   "positiveDefinite": false
+  },
+  {
+   "name": "random entries 3",
+   "n": 3,
+   "upper": [
+    6001,
+    8103,
+    9537
+   ],
+   "positiveDefinite": true
+  }
+ ]
+}

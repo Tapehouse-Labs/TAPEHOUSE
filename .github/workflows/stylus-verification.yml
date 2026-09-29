@@ -21,7 +21,7 @@ on:
       contract:
         description: Program the deployment transaction deployed
         type: choice
-        options: ["band"]
+        options: ["band", "margin"]
         default: band
 
 concurrency:

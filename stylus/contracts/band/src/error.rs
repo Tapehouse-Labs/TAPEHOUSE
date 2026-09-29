@@ -1,5 +1,6 @@
 //! Errors of the band program. RedStone errors keep the reference contract's names and selectors.
 
+use ownable::{OwnableInvalidOwner, OwnableUnauthorizedAccount};
 use stylus_sdk::alloy_sol_types::sol;
 use stylus_sdk::prelude::*;
 
@@ -58,10 +59,6 @@ sol! {
     error HaltOutsideWindow(uint64 issuedAt, uint64 expiresAt, uint64 blockTimestamp);
     #[derive(Debug, PartialEq, Eq)]
     error HaltNotNewer(bytes32 symbol, uint64 storedIssuedAt, uint64 issuedAt);
-    #[derive(Debug, PartialEq, Eq)]
-    error OwnableUnauthorizedAccount(address account);
-    #[derive(Debug, PartialEq, Eq)]
-    error OwnableInvalidOwner(address owner);
 }
 
 #[derive(SolidityError, Debug, PartialEq, Eq)]

@@ -2,8 +2,8 @@
 # Usage: devnode-deploy.sh RPC_URL PRIVATE_KEY
 # Deploys stub Chainlink aggregators for NVDA, TSLA and SPY and stub Stock Tokens for NVDA and SPY, writes
 # them to stylus/target/devnode-registry.json with Anvil's second test account as the halt signer and the
-# deploying account as the owner, and deploys the band program configured from that file through
-# StylusDeployer. Writes the program's address to stylus/target/devnode-band.
+# deploying account as the owner, and deploys the band and margin programs configured from that file through
+# StylusDeployer. Writes each program's address to stylus/target/devnode-<program>.
 set -euo pipefail
 
 rpc=$1 key=$2
@@ -29,15 +29,21 @@ jq -n --arg nvda "$(stub 22900000000 "NVDA / USD")" --arg tsla "$(stub 378000000
     tapehouse: {HaltSigner: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8", Owner: $owner}}' \
   > "$target/devnode-registry.json"
 
-words=$(BAND_ASSETS="NVDA TSLA SPY" "$root/stylus/scripts/band-args.sh" "$target/devnode-registry.json")
-read -r -a args <<<"$words"
-(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
-  --constructor-args "${args[@]}") > "$target/devnode-band.log"
-cast to-check-sum-address "$(grep 'deployed code at address' "$target/devnode-band.log" | grep -o '0x[0-9a-f]\{40\}')" \
-  > "$target/devnode-band"
-tx=$(grep 'deployment tx hash' "$target/devnode-band.log" | grep -o '0x[0-9a-f]\{64\}')
-logged=$(cast receipt --rpc-url "$rpc" "$tx" --json | jq -r --arg topic "$(cast keccak 'ContractDeployed(address)')" \
-  '.logs[] | select(.address == "0xcecba2f1dc234f70dd89f2041029807f8d03a990" and .topics[0] == $topic) | .data')
-[ "$(cast to-check-sum-address "0x${logged: -40}")" = "$(cat "$target/devnode-band")" ] ||
-  { echo "StylusDeployer's ContractDeployed log names 0x${logged: -40}, not $(cat "$target/devnode-band")" >&2; exit 1; }
-echo "band deployed on the dev node at $(cat "$target/devnode-band")."
+deploy() {
+  local program=$1 words args logged tx
+  words=$(BAND_ASSETS="NVDA TSLA SPY" "$root/stylus/scripts/$program-args.sh" "$target/devnode-registry.json")
+  read -r -a args <<<"$words"
+  (cd "$root/stylus/contracts/$program" && cargo stylus deploy --no-verify -e "$rpc" --private-key "$key" \
+    --constructor-args "${args[@]}") > "$target/devnode-$program.log"
+  cast to-check-sum-address "$(grep 'deployed code at address' "$target/devnode-$program.log" | grep -o '0x[0-9a-f]\{40\}')" \
+    > "$target/devnode-$program"
+  tx=$(grep 'deployment tx hash' "$target/devnode-$program.log" | grep -o '0x[0-9a-f]\{64\}')
+  logged=$(cast receipt --rpc-url "$rpc" "$tx" --json | jq -r --arg topic "$(cast keccak 'ContractDeployed(address)')" \
+    '.logs[] | select(.address == "0xcecba2f1dc234f70dd89f2041029807f8d03a990" and .topics[0] == $topic) | .data')
+  [ "$(cast to-check-sum-address "0x${logged: -40}")" = "$(cat "$target/devnode-$program")" ] ||
+    { echo "StylusDeployer's ContractDeployed log names 0x${logged: -40}, not $(cat "$target/devnode-$program")" >&2; exit 1; }
+  echo "$program deployed on the dev node at $(cat "$target/devnode-$program")."
+}
+
+deploy band
+deploy margin

@@ -16,6 +16,7 @@ pub mod token;
 
 use alloc::vec::Vec;
 
+use ownable::{IOwnable2Step, Ownable2Step};
 use stylus_sdk::abi::Bytes;
 use stylus_sdk::alloy_primitives::{Address, B256, U64, U128, U256, address};
 use stylus_sdk::alloy_sol_types::sol;
@@ -27,9 +28,8 @@ use stylus_sdk::storage::{
 
 use crate::error::{
     AmbiguousLeg, BandError, DuplicateAsset, IncompleteStatus, IndexInUse, IndexWithoutChainlink,
-    InvalidFeed, InvalidHaltSigner, InvalidToken, LengthMismatch, NoLegs, NoToken,
-    OwnableInvalidOwner, OwnableUnauthorizedAccount, PackageNotNewer, SignerNotAuthorised,
-    UnknownAsset, ZeroSymbol,
+    InvalidFeed, InvalidHaltSigner, InvalidToken, LengthMismatch, NoLegs, NoToken, PackageNotNewer,
+    SignerNotAuthorised, UnknownAsset, ZeroSymbol,
 };
 use crate::halt::Halt;
 use crate::index::Anchor;
@@ -45,8 +45,6 @@ sol! {
     event MultiplierConfirmed(bytes32 indexed symbol, uint64 effectiveAt);
     event HaltWritten(bytes32 indexed symbol, bool halted, uint64 issuedAt, uint64 expiresAt);
     event HaltSignerUpdated(address indexed previousSigner, address indexed newSigner);
-    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 }
 
 #[storage]
@@ -96,11 +94,11 @@ pub struct Band {
     sequencer_uptime_feed: StorageAddress,
     chainlink_regular_hours: StorageBool,
     halt_signer: StorageAddress,
-    owner: StorageAddress,
-    pending_owner: StorageAddress,
+    ownable: Ownable2Step,
 }
 
 #[public]
+#[implements(IOwnable2Step<Error = BandError>)]
 impl Band {
     /// Sets the per-asset configuration once. A zero feed or feed ID means the asset has no such leg.
     /// An asset takes its 24/7 leg from its own RedStone feed or from an index feed, never both; an
@@ -127,13 +125,8 @@ impl Band {
         if halt_signer == Address::ZERO {
             return Err(BandError::InvalidHaltSigner(InvalidHaltSigner {}));
         }
-        if initial_owner == Address::ZERO {
-            return Err(BandError::OwnableInvalidOwner(OwnableInvalidOwner {
-                owner: Address::ZERO,
-            }));
-        }
+        self.ownable.initialize::<BandError>(initial_owner)?;
         self.halt_signer.set(halt_signer);
-        self.transfer_ownership_to(initial_owner);
         self.sequencer_uptime_feed.set(sequencer_uptime_feed);
         self.chainlink_regular_hours.set(chainlink_regular_hours);
         let n = symbols.len();
@@ -400,50 +393,9 @@ impl Band {
         Ok(())
     }
 
-    /// The address that may rotate the halt signer.
-    pub fn owner(&self) -> Address {
-        self.owner.get()
-    }
-
-    /// The address that may accept ownership; zero when no transfer is pending.
-    pub fn pending_owner(&self) -> Address {
-        self.pending_owner.get()
-    }
-
-    /// Starts transferring ownership to `new_owner`, who must accept it. Zero cancels a pending
-    /// transfer. Owner only.
-    pub fn transfer_ownership(&mut self, new_owner: Address) -> Result<(), BandError> {
-        self.only_owner()?;
-        self.pending_owner.set(new_owner);
-        self.vm().log(OwnershipTransferStarted {
-            previousOwner: self.owner.get(),
-            newOwner: new_owner,
-        });
-        Ok(())
-    }
-
-    /// Accepts a pending ownership transfer. Pending owner only.
-    pub fn accept_ownership(&mut self) -> Result<(), BandError> {
-        let sender = self.vm().msg_sender();
-        if sender != self.pending_owner.get() {
-            return Err(BandError::OwnableUnauthorizedAccount(
-                OwnableUnauthorizedAccount { account: sender },
-            ));
-        }
-        self.transfer_ownership_to(sender);
-        Ok(())
-    }
-
-    /// Leaves the band without an owner, so the halt signer can never be rotated again. Owner only.
-    pub fn renounce_ownership(&mut self) -> Result<(), BandError> {
-        self.only_owner()?;
-        self.transfer_ownership_to(Address::ZERO);
-        Ok(())
-    }
-
     /// Replaces the halt signer. Owner only; never zero.
     pub fn set_halt_signer(&mut self, new_signer: Address) -> Result<(), BandError> {
-        self.only_owner()?;
+        self.ownable.only_owner::<BandError>()?;
         if new_signer == Address::ZERO {
             return Err(BandError::InvalidHaltSigner(InvalidHaltSigner {}));
         }
@@ -538,6 +490,31 @@ struct Legs {
     ms_247: u64,
 }
 
+#[public]
+impl IOwnable2Step for Band {
+    type Error = BandError;
+
+    fn owner(&self) -> Address {
+        self.ownable.owner()
+    }
+
+    fn pending_owner(&self) -> Address {
+        self.ownable.pending_owner()
+    }
+
+    fn transfer_ownership(&mut self, new_owner: Address) -> Result<(), BandError> {
+        self.ownable.transfer_ownership(new_owner)
+    }
+
+    fn accept_ownership(&mut self) -> Result<(), BandError> {
+        self.ownable.accept_ownership()
+    }
+
+    fn renounce_ownership(&mut self) -> Result<(), BandError> {
+        self.ownable.renounce_ownership()
+    }
+}
+
 impl Band {
     fn priced_legs(&self, symbol: B256, now: u64) -> (Legs, Change) {
         let asset = self.assets.getter(symbol);
@@ -607,26 +584,6 @@ impl Band {
             basis_bps,
         };
         (inputs, change, session)
-    }
-
-    fn only_owner(&self) -> Result<(), BandError> {
-        let sender = self.vm().msg_sender();
-        if sender != self.owner.get() {
-            return Err(BandError::OwnableUnauthorizedAccount(
-                OwnableUnauthorizedAccount { account: sender },
-            ));
-        }
-        Ok(())
-    }
-
-    fn transfer_ownership_to(&mut self, new_owner: Address) {
-        let previous = self.owner.get();
-        self.owner.set(new_owner);
-        self.pending_owner.set(Address::ZERO);
-        self.vm().log(OwnershipTransferred {
-            previousOwner: previous,
-            newOwner: new_owner,
-        });
     }
 
     fn halt_of(&self, symbol: B256) -> Halt {
@@ -887,6 +844,10 @@ fn ecrecover(host: &impl Host, hash: B256, v: u8, r: B256, s: B256) -> Option<Ad
 mod tests {
     use super::*;
     use crate::error::CalldataMustHaveValidPayload;
+    use ownable::{
+        OwnableInvalidOwner, OwnableUnauthorizedAccount, OwnershipTransferStarted,
+        OwnershipTransferred,
+    };
     use stylus_sdk::alloy_primitives::{I256, b256};
     use stylus_sdk::alloy_sol_types::{SolEvent, SolValue};
     use stylus_sdk::testing::*;

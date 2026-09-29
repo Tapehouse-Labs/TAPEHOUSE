@@ -3,12 +3,14 @@
 #        reproducible.sh verify RPC_URL DEPLOYMENT_TX CONTRACT
 # Runs cargo-stylus in the image that `cargo stylus deploy` and `cargo stylus verify` build for
 # reproducible builds, on the staged content of stylus/, mounted at /source as they mount the
-# workspace. `deploy` deploys, activates and constructs the program through StylusDeployer, in as
-# many code fragments as it needs, and prints the deployment transaction and the program's address.
+# workspace. Both run in the program's own directory, where cargo-stylus's constructor check, a
+# `cargo run`, finds that program's binary alone. `deploy` deploys, activates and constructs the
+# program through StylusDeployer, in as many code fragments as it needs, and prints the deployment
+# transaction and the program's address.
 # SIGNER is `--private-key-path FILE`, or `--account NAME --password-file FILE` for a Foundry keystore;
 # the files are mounted read-only.
-# MAX_FEE_PER_GAS_GWEI caps `deploy`'s fee per gas; without it, cargo-stylus uses the current gas price with no
-# margin, and a transaction is rejected if the base fee rises before it lands.
+# MAX_FEE_PER_GAS_GWEI caps `deploy`'s fee per gas; without it, cargo-stylus uses the current gas price
+# with no margin, and a transaction is rejected if the base fee rises before it lands.
 # `verify` succeeds only when cargo-stylus prints "Verification successful".
 set -euo pipefail
 
@@ -63,15 +65,17 @@ fi
 
 source=$(mktemp -d)
 run() {
-  docker run --rm --network host --workdir /source --volume "$source:/source" ${keys[@]+"${keys[@]}"} "$image" "$@"
+  local dir=$1
+  shift
+  docker run --rm --network host --workdir "/source$dir" --volume "$source:/source" ${keys[@]+"${keys[@]}"} "$image" "$@"
 }
-trap 'run rm -rf /source/target > /dev/null 2>&1 || true; rm -rf "$source"' EXIT
+trap 'run "" rm -rf /source/target > /dev/null 2>&1 || true; rm -rf "$source"' EXIT
 git -C "$stylus/.." archive "$(git -C "$stylus/.." write-tree)" stylus | tar -xf - -C "$source" --strip-components 1
 
 if [ "$1" = deploy ]; then
   rpc=$2 contract=$3
   shift "$next"
-  run cargo stylus deploy --no-verify --contract "$contract" -e "$rpc" "${signer[@]}" \
+  run "/contracts/$contract" cargo stylus deploy --no-verify -e "$rpc" "${signer[@]}" \
     ${MAX_FEE_PER_GAS_GWEI:+--max-fee-per-gas-gwei "$MAX_FEE_PER_GAS_GWEI"} --constructor-args "$@" |
     perl -pe 's/\e\[[0-9;]*m//g' | tee "$source/deploy.log" >&2
   tx=$(grep -o 'deployment tx hash: 0x[0-9a-f]\{64\}' "$source/deploy.log" | grep -o '0x.*')
@@ -79,6 +83,6 @@ if [ "$1" = deploy ]; then
   address=$(cast to-check-sum-address "$address")
   echo "$tx $address"
 else
-  run cargo stylus verify --no-verify --contract "$4" -e "$2" --deployment-tx "$3" | tee "$source/verify.log"
+  run "/contracts/$4" cargo stylus verify --no-verify -e "$2" --deployment-tx "$3" | tee "$source/verify.log"
   grep -q '^Verification successful$' "$source/verify.log"
 fi

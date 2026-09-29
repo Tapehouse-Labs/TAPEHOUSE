@@ -793,6 +793,7 @@ version = "0.1.0"
 dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
+ "ownable",
  "proptest",
  "serde_json",
  "stylus-sdk",
@@ -2439,6 +2440,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "margin"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-sol-types",
+ "ownable",
+ "proptest",
+ "serde_json",
+ "stylus-sdk",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2561,6 +2574,15 @@ name = "openssl-probe"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
+
+[[package]]
+name = "ownable"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-sol-types",
+ "stylus-sdk",
+]
 
 [[package]]
 name = "parity-scale-codec"

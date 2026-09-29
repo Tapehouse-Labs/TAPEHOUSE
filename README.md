@@ -8,7 +8,7 @@ Portfolio margin for Stock Tokens on Robinhood Chain.
 
 - `apps/landing` — the website at tapehouse.xyz (Next.js)
 - `contracts` — Solidity contracts (Foundry)
-- `stylus` — Stylus programs (Rust), starting with `band`, the price band
+- `stylus` — Stylus programs (Rust): `band`, the price band, and `margin`, the portfolio margin engine, with the code they share in `stylus/crates`
 - `deployments` — contract addresses per chain, one JSON file per chain ID
 
 ## Requirements
@@ -50,10 +50,10 @@ make test
 | `make build-stylus` · `test-stylus` · `lint-stylus` · `gas-stylus` · `snapshot-stylus` | Stylus programs only |
 | `make check-activation` | `cargo stylus check` of every program against Robinhood Chain, its testnet and Arbitrum One |
 | `make build-apps` · `test-apps` · `lint-apps` | Apps only |
-| `make devnode deploy-stylus-devnode test-stylus-devnode` | Deploys `band` to a local dev node, writes live RedStone prices through it and reads it through a `BandFeed` |
+| `make devnode deploy-stylus-devnode test-stylus-devnode` | Deploys `band` and `margin` to a local dev node, writes live RedStone prices through the band, reads it through a `BandFeed`, and updates the margin engine's parameters |
 | `make gas-stylus-devnode` · `snapshot-stylus-devnode` | Compares the dev-node suite's L2 gas with `stylus/.gas-devnode`, failing on a move over 0.5%, or regenerates it |
-| `make deploy-stylus CHAIN=<id> SIGNER='<flags>'` | Deploys `band` reproducibly, configured from `deployments/<id>.json`, and prints the transaction and address |
-| `make verify-stylus CHAIN=<id> TX=<hash>` | Verifies a deployment against the checked-out source |
+| `make deploy-stylus CHAIN=<id> SIGNER='<flags>' [CONTRACT=margin]` | Deploys `band`, or the program `CONTRACT` names, reproducibly, configured from `deployments/<id>.json`, and prints the transaction and address |
+| `make verify-stylus CHAIN=<id> TX=<hash> [CONTRACT=margin]` | Verifies a deployment of `band`, or of the program `CONTRACT` names, against the checked-out source |
 | `make deploy-band-feeds CHAIN=<id> SIGNER='<flags>'` | Deploys a `BandFeed` for every launch asset the chain's band configures and prints each address |
 | `make verify-band-feeds CHAIN=<id>` | Verifies every feed in the registry's `.bandFeeds` on Sourcify |
 
@@ -174,7 +174,7 @@ Robinhood Chain has no sequencer-uptime feed, and its Chainlink feeds follow the
 
 ### Ownership and redeploys
 
-The owner is the constructor's `initialOwner`, the registry's `.tapehouse.Owner`, not `msg.sender`, which is StylusDeployer. Ownership moves in two steps, and `check-band.sh` checks the owner, because verification covers the code, not the constructor's arguments. The per-asset configuration can never change; a new configuration is a new band.
+The owner is the constructor's `initialOwner`, the registry's `.tapehouse.Owner`, not `msg.sender`, which is StylusDeployer. Ownership moves in two steps, through `stylus/crates/ownable`, which every program shares, and `check-band.sh` checks the owner, because verification covers the code, not the constructor's arguments. The per-asset configuration can never change; a new configuration is a new band.
 
 A redeployed band is a new address, and every consumer holding the old one is re-pointed. Before that, a new band needs:
 - an hour of keeper writes, because its variance starts at zero;
@@ -222,6 +222,29 @@ make verify-band-feeds CHAIN=<chainId>
 
 `make deploy-band-feeds` deploys a low-side feed for every launch asset the registry's band configures, with the asset's `<ASSET>_USDG_*` pool from `.uniswapV3` when it has a Stock Token (it stops if the registry names two), and names each launch asset it skips. `BAND_ASSETS='<ASSET> …'` limits it to the assets named, for example to finish a deployment that stopped partway. Record each address in the registry's `.bandFeeds` group; fork tests check every entry against its band. `make verify-band-feeds` rebuilds each feed's constructor arguments from the chain and verifies the feed on [Sourcify](https://sourcify.dev), which supports all three chains and the compiler this repository pins.
 
+## The margin engine
+
+`margin` is the Stylus program that margins a portfolio of Stock Tokens as one position. It starts with the risk parameters it generates its scenarios from: each asset's daily volatility, each pair's correlation, and a hard floor under every one of them.
+
+- **Units.** Volatility is the standard deviation of daily log returns, in centi-basis-points (1e-6): NVDA's 31,352 is 3.1352% a day. Correlation is in basis points (1e-4), and positive: every pair among the launch assets has a floor above zero, and an asset that moves against the others needs a new program.
+- **Floors.** They are set in the constructor and never change. They are modelled on the anti-procyclicality tools EMIR gives clearing houses for margin requirements (RTS 153/2013, Article 28), applied here to the parameters beneath the margin.
+  - A volatility floor is the asset's 10-year volatility, after the Article's 10-year volatility floor.
+  - A correlation floor gives 25% weight to stressed observations, after the Article's second option: 75% the pair's 10-year correlation and 25% its correlation over the 60 sessions with SPY's worst return in those 10 years, 26 December 2019 to 23 March 2020 (SPY −30.2%). Correlations rise in a crash, so a floor keeps a calm year from granting a diversification benefit that disappears when it is needed.
+  - The first values are the floors, or the last 252 sessions' figures where those are higher. All come from Yahoo Finance's daily adjusted closes over the ten years to 25 September 2026, and are in `stylus/contracts/margin/parameters.json`.
+- **How the parameters move.** The owner replaces them all at once with `setParameters`. Each value stays at or above its floor and moves by at most ×1.5 or ÷1.5, modelled on the factor of about 1.5 OCC uses when it reviews day-over-day changes in its margin coverage; a bound on each parameter is not by itself a bound on a portfolio's margin. An update comes at least a day after the one before; the first may come at any time. Later values come from an off-chain calibrator, through this same path.
+- **Events.** Every value the constructor sets and every value an update changes emits `VolatilitySet` or `CorrelationSet`, so the values' history rebuilds from events alone. The floors never change and are read with the views.
+- **Valid matrices only.** The correlation matrix must stay positive definite, as the correlation matrix of assets that are not linear combinations of one another is. The check is exact: Bareiss's fraction-free elimination yields every leading principal minor as an integer, and Sylvester's criterion asks that each be positive. Hadamard's inequality keeps every intermediate within 256 bits for up to 9 assets; the engine takes at most 8.
+- **Ownership** follows OpenZeppelin's `Ownable2Step`, from the same `stylus/crates/ownable` as the band's, with an explicit `initialOwner`. It moves to the timelock with the band's.
+
+Reads: `assets()`, `volatility(symbol)` and `correlation(symbol, other)`, each with its floor, and `lastUpdate()`.
+
+```bash
+make deploy-stylus CHAIN=<chainId> SIGNER='--account <name> --password-file <file>' CONTRACT=margin
+stylus/scripts/check-margin.sh <rpc> <address> deployments/<chainId>.json
+```
+
+`stylus/scripts/margin-args.sh` builds the constructor arguments: the assets the chain's band prices, in `band-args.sh`'s order, with their parameters from `parameters.json`, and the registry's `.tapehouse.Owner`. It refuses an asset or a pair the file lacks. `check-margin.sh` checks the assets, the floors and the owner, that the registry's band prices every asset, and the values themselves until the first update.
+
 ## Verification
 
 Every deployed Stylus program can be rebuilt from this repository and compared byte for byte with the code on chain, fragment by fragment. `make deploy-stylus` and `make verify-stylus` run `cargo-stylus` in the Docker image that `cargo stylus deploy` and `cargo stylus verify` use for reproducible builds (`offchainlabs/cargo-stylus-base` plus the toolchain in `stylus/rust-toolchain.toml`, linux/amd64), on the staged content of `stylus/`, so untracked files and unstaged edits never enter the build.
@@ -233,9 +256,9 @@ git checkout <commit>
 make verify-stylus CHAIN=<chainId> TX=<deployment tx>
 ```
 
-It passes only when `cargo-stylus` prints `Verification successful`. Running `cargo stylus verify` directly also works, from `stylus/contracts/band`, but it exits 0 even when verification fails: read its last line. The *Stylus verification* workflow runs the same check on GitHub for any commit and deployment.
+It passes only when `cargo-stylus` prints `Verification successful`. Both targets run `cargo-stylus` in the program's own directory, `stylus/contracts/<program>`: in a workspace with more than one program, `cargo stylus verify` finds the constructor there and nowhere else. Running `cargo stylus verify` directly also works, from that directory, but it exits 0 even when verification fails: read its last line. The *Stylus verification* workflow runs the same check on GitHub for any commit and deployment.
 
-Verification covers the program's code. The configuration it was constructed with is checked by `stylus/scripts/check-band.sh`, which only reads the chain.
+Verification covers the program's code. The configuration it was constructed with is checked by `stylus/scripts/check-band.sh` and `stylus/scripts/check-margin.sh`, which only read the chain.
 
 Each deployment below verifies from the commit that added its row: `git log --reverse --format=%H -S <address> -- README.md | head -n 1`.
 
@@ -249,3 +272,4 @@ Each deployment below verifies from the commit that added its row: `git log --re
 | 46630 | band | `0xA5896f75679F3D7c3aAe31FAd94C5C1B7FfB9A3f` | `0x4a5d7f7c48174bce43c1d3788720546a86901282cf3accc7f0e3afffbd7cc3c1` |
 | 46630 | band | `0xa70118d3324D90532E7D2854627b13CacE305641` | `0x7f003392328803b2fd7331f6dcc2d96f387e8e9b811cdc74b01e9c77ba5e1310` |
 | 42161 | band | `0xa0c0Cb25F5504395fB977DA7186a7B68cBcfa8Eb` | `0x48f8a4eb8629970093c70e250c14037f360b2f380282d11f6e113a17bd408a12` |
+| 46630 | margin | `0x0FB6856c36c25e01190d6a8f2eBbE28aCA05a341` | `0xb6192ef3b615fdc2254eb718178ea74c0d83e7670b4301bd0fabf1c980eb0a38` |

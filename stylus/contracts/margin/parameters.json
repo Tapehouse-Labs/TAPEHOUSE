@@ -1,0 +1,90 @@
+{
+  "volatility": {
+    "NVDA": {
+      "floor": 31352,
+      "initial": 31352
+    },
+    "TSLA": {
+      "floor": 37436,
+      "initial": 37436
+    },
+    "AAPL": {
+      "floor": 18333,
+      "initial": 18333
+    },
+    "MSFT": {
+      "floor": 17459,
+      "initial": 20362
+    },
+    "GOOGL": {
+      "floor": 18652,
+      "initial": 19815
+    },
+    "SPY": {
+      "floor": 11335,
+      "initial": 11335
+    }
+  },
+  "correlation": {
+    "NVDA/TSLA": {
+      "floor": 4637,
+      "initial": 4637
+    },
+    "NVDA/AAPL": {
+      "floor": 6077,
+      "initial": 6077
+    },
+    "NVDA/MSFT": {
+      "floor": 6729,
+      "initial": 6729
+    },
+    "NVDA/GOOGL": {
+      "floor": 6212,
+      "initial": 6212
+    },
+    "NVDA/SPY": {
+      "floor": 7203,
+      "initial": 7203
+    },
+    "TSLA/AAPL": {
+      "floor": 4541,
+      "initial": 4541
+    },
+    "TSLA/MSFT": {
+      "floor": 4473,
+      "initial": 4473
+    },
+    "TSLA/GOOGL": {
+      "floor": 4326,
+      "initial": 4326
+    },
+    "TSLA/SPY": {
+      "floor": 5178,
+      "initial": 6232
+    },
+    "AAPL/MSFT": {
+      "floor": 7113,
+      "initial": 7113
+    },
+    "AAPL/GOOGL": {
+      "floor": 6629,
+      "initial": 6629
+    },
+    "AAPL/SPY": {
+      "floor": 7934,
+      "initial": 7934
+    },
+    "MSFT/GOOGL": {
+      "floor": 7222,
+      "initial": 7222
+    },
+    "MSFT/SPY": {
+      "floor": 8082,
+      "initial": 8082
+    },
+    "GOOGL/SPY": {
+      "floor": 7679,
+      "initial": 7679
+    }
+  }
+}
