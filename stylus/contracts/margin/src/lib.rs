@@ -29,6 +29,9 @@ use crate::scenario::{Parameters, SIZES, Set, count};
 
 /// Most assets the engine takes: the exact positive-definiteness check stays within 256 bits up to 9.
 pub const MAX_ASSETS: usize = 8;
+/// First bit of the weekend gaps in `set_parameters`'s mask of changed values, after the volatilities' and the
+/// correlations'.
+const GAP_BITS: usize = MAX_ASSETS + MAX_ASSETS * (MAX_ASSETS - 1) / 2;
 /// Highest daily volatility, in centi-basis-points: 100% a day.
 pub const MAX_VOLATILITY: u32 = 1_000_000;
 /// Largest weekend gap, in centi-basis-points: 100%.
@@ -64,9 +67,10 @@ pub struct Margin {
 #[implements(IOwnable2Step<Error = MarginError>)]
 impl Margin {
     /// Sets the assets, their risk parameters and the hard floors under them, which never change.
-    /// Volatilities are daily, and weekend gaps a Friday close to Monday open move, both in centi-basis-points;
-    /// correlations are in basis points, listed for each pair `(i, j)`, `i < j`, row by row. Every floor is
-    /// positive, every value sits at or above its floor, and the correlation matrix is positive definite.
+    /// Volatilities are daily, and each weekend gap is the move from the last close before a closure to the next
+    /// open, both in centi-basis-points; correlations are in basis points, listed for each pair `(i, j)`, `i < j`,
+    /// row by row. Every floor is positive, every value sits at or above its floor, and the correlation matrix is
+    /// positive definite.
     /// `market` is the asset that stands for the market, or zero for the equal-weighted portfolio of the
     /// assets. `initial_owner` may update the parameters.
     #[constructor]
@@ -193,8 +197,10 @@ impl Margin {
             return Err(MarginError::LengthMismatch(LengthMismatch {}));
         }
         self.check(&symbols, &volatilities, &correlations, &gaps)?;
+        let mut changed = 0u64;
         for (i, &value) in volatilities.iter().enumerate() {
             let previous = self.volatilities.get(i).unwrap().to::<u32>();
+            changed |= u64::from(previous != value) << i;
             if !within_step(previous.into(), value.into()) {
                 return Err(MarginError::VolatilityStepTooLarge(
                     VolatilityStepTooLarge {
@@ -209,6 +215,7 @@ impl Margin {
             for j in i + 1..n {
                 let k = pair(n, i, j);
                 let previous = self.correlations.get(k).unwrap().to::<u16>();
+                changed |= u64::from(previous != correlations[k]) << (MAX_ASSETS + k);
                 if !within_step(previous.into(), correlations[k].into()) {
                     return Err(MarginError::CorrelationStepTooLarge(
                         CorrelationStepTooLarge {
@@ -223,6 +230,7 @@ impl Margin {
         }
         for (i, &value) in gaps.iter().enumerate() {
             let previous = self.gaps.get(i).unwrap().to::<u32>();
+            changed |= u64::from(previous != value) << (GAP_BITS + i);
             if !within_step(previous.into(), value.into()) {
                 return Err(MarginError::GapStepTooLarge(GapStepTooLarge {
                     symbol: symbols[i],
@@ -232,7 +240,7 @@ impl Margin {
             }
         }
         for (i, &value) in volatilities.iter().enumerate() {
-            if self.volatilities.get(i).unwrap().to::<u32>() != value {
+            if changed >> i & 1 == 1 {
                 self.volatilities.setter(i).unwrap().set(U32::from(value));
                 self.vm().log(VolatilitySet {
                     symbol: symbols[i],
@@ -244,7 +252,7 @@ impl Margin {
             for j in i + 1..n {
                 let k = pair(n, i, j);
                 let value = correlations[k];
-                if self.correlations.get(k).unwrap().to::<u16>() != value {
+                if changed >> (MAX_ASSETS + k) & 1 == 1 {
                     self.correlations.setter(k).unwrap().set(U16::from(value));
                     self.vm().log(CorrelationSet {
                         symbol: symbols[i],
@@ -255,7 +263,7 @@ impl Margin {
             }
         }
         for (i, &value) in gaps.iter().enumerate() {
-            if self.gaps.get(i).unwrap().to::<u32>() != value {
+            if changed >> (GAP_BITS + i) & 1 == 1 {
                 self.gaps.setter(i).unwrap().set(U32::from(value));
                 self.vm().log(GapSet {
                     symbol: symbols[i],

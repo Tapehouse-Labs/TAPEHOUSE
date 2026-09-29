@@ -19,7 +19,11 @@ update="setParameters(uint32[],uint16[],uint32[])"
 gaps="[118601,135345,54840]"
 
 fail() { echo "FAIL: $*"; exit 1; }
-record() { echo "$1 $2" >> "$gas_log"; echo "$2"; }
+record() {
+  echo "$1 $2" >> "$gas_log"
+  [[ $2 =~ ^[0-9]+$ ]] || { echo "FAIL: no L2 gas for $1" >&2; exit 1; }
+  echo "$2"
+}
 l2_gas() {
   cast call --rpc-url "$rpc" --from "$owner" $node_interface \
     "gasEstimateComponents(address,bool,bytes)(uint64,uint64,uint256,uint256)" "${2:-$margin}" false "$1" |
@@ -104,7 +108,9 @@ read -r -a args <<<"$words"
 if out=$(deploy_margin "${args[0]}" "${args[1]}" "${args[2]}" "[1000,1000,1000]" "[9000,9000,1000]" "${args[@]:5}"); then
   fail "a correlation matrix that is not positive definite was accepted"
 fi
-if ! grep -q 0x88d8f57d <<<"$out" || ! grep -q "$(cast sig "NotPositiveDefinite()" | cut -c3-)" <<<"$out"; then
+if ! grep -q "$(cast sig "ContractInitializationError(address,bytes)")" <<<"$out" || ! grep -q "$(cast sig "NotPositiveDefinite()" | cut -c3-)" <<<"$out"; then
   fail "expected NotPositiveDefinite inside ContractInitializationError, got: $(tail -n 1 <<<"$out")"
 fi
+unmeasured=$(grep -v ' [0-9][0-9]*$' "$gas_log" || true)
+[ -z "$unmeasured" ] || fail "no L2 gas for: $unmeasured"
 echo "PASS"

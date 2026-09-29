@@ -4,12 +4,13 @@
 
 Every case was classified twice, independently of this crate: by exact integer elimination, and by the smallest eigenvalue in floating point. They agree on every case; where the smallest eigenvalue is zero, the matrix is singular and the exact elimination finds a leading minor of exactly zero.
 
-`scenario-vectors.json` holds the scenario sets of seven configurations:
+`scenario-vectors.json` holds the scenario sets of nine configurations:
 - the launch assets at their first values, and the same assets in another order;
 - the testnet's five, without SPY, so with the equal-weighted market;
 - the dev node's three;
 - SPY alone;
 - eight synthetic assets;
-- three assets whose correlation matrix is at the edge of positive definiteness.
+- three assets whose correlation matrix is at the edge of positive definiteness;
+- two matrices outside it, which the program refuses but the set is still defined for: one whose factor clamps an entry to ±1, and a singular one whose last pivot falls below the floor.
 
-For each configuration it gives the set's keccak-256 at horizons of 0, 1, 2 and 3.5 days and for 32, 64, 128 and 256 lattice points: 112 digests. It also gives fourteen scenarios of the launch set, one from each family and its edges. Every value was computed in unbounded integer arithmetic, independently of this crate. The launch assets and their reordering have the same digest.
+For each configuration it gives the set's keccak-256 at horizons of 0, 1, 2 and 3.5 days and for 32, 64, 128 and 256 lattice points: 144 digests. It also gives fourteen scenarios of the launch set, one from each family and its edges. Every value was computed in unbounded integer arithmetic, independently of this crate. The launch assets and their reordering have the same digest.

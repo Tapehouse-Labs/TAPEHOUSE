@@ -245,6 +245,52 @@
     70000
    ],
    "market": null
+  },
+  "factor clamped, not positive definite": {
+   "names": [
+    "X",
+    "Y",
+    "Z"
+   ],
+   "volatilities": [
+    20000,
+    30000,
+    40000
+   ],
+   "correlations": [
+    9000,
+    9000,
+    1000
+   ],
+   "gaps": [
+    50000,
+    60000,
+    70000
+   ],
+   "market": null
+  },
+  "pivot below the floor, singular": {
+   "names": [
+    "X",
+    "Y",
+    "Z"
+   ],
+   "volatilities": [
+    20000,
+    30000,
+    40000
+   ],
+   "correlations": [
+    15,
+    15,
+    10000
+   ],
+   "gaps": [
+    50000,
+    60000,
+    70000
+   ],
+   "market": null
   }
  },
  "digests": [
@@ -919,6 +965,198 @@
    "horizon": 302400,
    "size": 256,
    "digest": "0xf1e17c6cd708e0040fb10b2f52c9a4e6ac1f27bbf8f7523104b0ad3235fed990"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 0,
+   "size": 32,
+   "digest": "0x575e1d856c8ca06690469b5840e8782495278d0357d89aa18de7ef0d34a49e9d"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 0,
+   "size": 64,
+   "digest": "0x53c8daa35690444d67a9f98e230cbbd40c3a887585c7ff62354e0829c1158796"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 0,
+   "size": 128,
+   "digest": "0x201f27184fb66bfed91636e326b1bb6156c2b702f9ceee880a1598453a22bf92"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 0,
+   "size": 256,
+   "digest": "0xca092c7f8278cf0fbda0d65dee15f6824ecd825248fd05101e01ea2352d84cdd"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 86400,
+   "size": 32,
+   "digest": "0x55260251e4f994319c810bfa6b44853feb82ab427f26400afa567598906f08fc"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 86400,
+   "size": 64,
+   "digest": "0xb553a3a6427b2a198800cb0375999b6c02ded04fd21cc5df76a477f617cc0369"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 86400,
+   "size": 128,
+   "digest": "0x0092b3908d97bcffd4a2fda5c7ba1249cdb5d3d3737cc3ca0e2ffacda9dd3b0b"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 86400,
+   "size": 256,
+   "digest": "0xabcc82f2a5dd8160ee75753ce606c3f1fe36e243659b62c5ab035b8a96029d1e"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 172800,
+   "size": 32,
+   "digest": "0x9ef68de7f03528acac6999e5b3cae61a8c043703f4b82407dcca68c4b8d30205"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 172800,
+   "size": 64,
+   "digest": "0x8388d206b4fb23dd0d5991e868bdc0d96c8bde6b77008b1efaea0faec559167a"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 172800,
+   "size": 128,
+   "digest": "0xf13b197d7735c19009ce74f29bd4e15605c8d2b26b20aa02df019206743eb3df"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 172800,
+   "size": 256,
+   "digest": "0x26a0a5653a76e9853a00c4491a6e35085ddc896090429bb2d2b9c9c2c10b12e7"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 302400,
+   "size": 32,
+   "digest": "0x281077686a0ca78c66b91077ff86bc9ec0bcbfcc65e33f72f8c9a4159ec758b9"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 302400,
+   "size": 64,
+   "digest": "0xf0b1d62b12823a562782eb2cc1c281596be1f3f6804e07fa912dbf5e3d6fdc82"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 302400,
+   "size": 128,
+   "digest": "0xe27fd82c5dfbff9cf1642a58b66ddbb43dcdfede5259435a8c2227d9ddbdf6b4"
+  },
+  {
+   "config": "factor clamped, not positive definite",
+   "horizon": 302400,
+   "size": 256,
+   "digest": "0x098ee8f074975c51ea898406637a7b9306c29a85214c1c650d896838463d2423"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 0,
+   "size": 32,
+   "digest": "0x575e1d856c8ca06690469b5840e8782495278d0357d89aa18de7ef0d34a49e9d"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 0,
+   "size": 64,
+   "digest": "0x53c8daa35690444d67a9f98e230cbbd40c3a887585c7ff62354e0829c1158796"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 0,
+   "size": 128,
+   "digest": "0x201f27184fb66bfed91636e326b1bb6156c2b702f9ceee880a1598453a22bf92"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 0,
+   "size": 256,
+   "digest": "0xca092c7f8278cf0fbda0d65dee15f6824ecd825248fd05101e01ea2352d84cdd"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 86400,
+   "size": 32,
+   "digest": "0x81432e8b6cae255760abd5a4701b4704e8f8339ffa189bea5c0978d8e555b396"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 86400,
+   "size": 64,
+   "digest": "0xdd1202a890ae5e3d72282e83d397b5edc85ead02c1ba9fcd962a71a770c70c3c"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 86400,
+   "size": 128,
+   "digest": "0xe556a2e5516d288e3fb2a1d7ecb13b03fbfb5651fd9beadeb56e7a1691adf101"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 86400,
+   "size": 256,
+   "digest": "0xf54fc294e82e2a720d11c3b66e8e4b70d7991fd1cf778824fe116640af6e6090"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 172800,
+   "size": 32,
+   "digest": "0x1cd869e0d682845263f501e9e72e5c919b5e3a2b4615af23adab119bf41f1758"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 172800,
+   "size": 64,
+   "digest": "0x4b144c6692aae1ded00f3bb9d31acac311550ba7df12fdc6117e31c640b76fd3"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 172800,
+   "size": 128,
+   "digest": "0xbc4f849fd37b8cd005930cd99378aec94e0f6571cac705ac6bd9c11bc149d76b"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 172800,
+   "size": 256,
+   "digest": "0x16a29ce4bd2db5c5b72f073c6f7374dd861125cfc19dc816fb822b4b0960dd73"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 302400,
+   "size": 32,
+   "digest": "0x8caef7c359e5ec027706aa4ce765d8cae712a26f0076e55114f95a6ead7e93cf"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 302400,
+   "size": 64,
+   "digest": "0x5239f08f86785af5807a4158b15f3bc1ecd160dcef31ab088c7199b9716313ef"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 302400,
+   "size": 128,
+   "digest": "0xccb3d7ae85470ea5ccc5e1bdd13b1b9a3c9259c5c23ec665cfe4d09c28f9800a"
+  },
+  {
+   "config": "pivot below the floor, singular",
+   "horizon": 302400,
+   "size": 256,
+   "digest": "0xf2f88ccbd62d707e0b47209f033d9504ab2472ea504473001dbd7d0e32e8be21"
   }
  ],
  "launchRows": {

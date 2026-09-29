@@ -22,6 +22,9 @@ case ${1:-} in
 esac || { echo "$usage" >&2; exit 2; }
 
 stylus=$(cd "$(dirname "$0")/.." && pwd)
+contract=$([ "$1" = deploy ] && echo "$3" || echo "$4")
+[[ $contract =~ ^[a-z][a-z0-9_-]*$ ]] && [ -f "$stylus/contracts/$contract/Cargo.toml" ] ||
+  { echo "No program $contract in stylus/contracts. $usage" >&2; exit 2; }
 version=${CARGO_STYLUS_VERSION:?Set CARGO_STYLUS_VERSION, as the Makefile does}
 toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' "$stylus/rust-toolchain.toml")
 binaryen=$(awk '/^\[/ { table = $0 } table == "[wasm-opt]" && $1 == "version" { gsub(/"/, "", $3); print $3 }' "$stylus/Stylus.toml")
@@ -73,7 +76,7 @@ trap 'run "" rm -rf /source/target > /dev/null 2>&1 || true; rm -rf "$source"' E
 git -C "$stylus/.." archive "$(git -C "$stylus/.." write-tree)" stylus | tar -xf - -C "$source" --strip-components 1
 
 if [ "$1" = deploy ]; then
-  rpc=$2 contract=$3
+  rpc=$2
   shift "$next"
   run "/contracts/$contract" cargo stylus deploy --no-verify -e "$rpc" "${signer[@]}" \
     ${MAX_FEE_PER_GAS_GWEI:+--max-fee-per-gas-gwei "$MAX_FEE_PER_GAS_GWEI"} --constructor-args "$@" |
@@ -83,6 +86,6 @@ if [ "$1" = deploy ]; then
   address=$(cast to-check-sum-address "$address")
   echo "$tx $address"
 else
-  run "/contracts/$4" cargo stylus verify --no-verify -e "$2" --deployment-tx "$3" | tee "$source/verify.log"
+  run "/contracts/$contract" cargo stylus verify --no-verify -e "$2" --deployment-tx "$3" | tee "$source/verify.log"
   grep -q '^Verification successful$' "$source/verify.log"
 fi

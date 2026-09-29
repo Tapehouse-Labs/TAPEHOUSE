@@ -53,12 +53,19 @@ const MEANS_256: [i32; 128] = [
     -4896,
 ];
 
-/// The parameters scenarios are drawn from, in the stored order of the assets.
+/// The parameters scenarios are drawn from, in the stored order of the assets. The program's own bounds keep
+/// every intermediate within `i128`: at most 8 assets, volatilities and gaps of at most 1,000,000, and a positive
+/// definite correlation matrix.
 pub struct Parameters<'a> {
+    /// The assets' symbols, distinct.
     pub symbols: &'a [[u8; 32]],
+    /// Each asset's daily volatility, in millionths.
     pub volatilities: &'a [u32],
+    /// Each pair's correlation in basis points, for each pair `(i, j)`, `i < j`, row by row.
     pub correlations: &'a [u16],
+    /// Each asset's weekend gap, in millionths.
     pub gaps: &'a [u32],
+    /// The position of the market asset, or `None` for the equal-weighted portfolio.
     pub market: Option<usize>,
 }
 
@@ -134,6 +141,7 @@ pub fn isqrt(n: u128) -> u128 {
 impl<'a> Set<'a> {
     /// Prepares the set for lattice size `size` (one of [`SIZES`]) over a horizon of `horizon` seconds.
     pub fn new(parameters: &'a Parameters<'a>, size: usize, horizon: u64) -> Self {
+        debug_assert!(SIZES.contains(&size), "unsupported lattice size {size}");
         let n = parameters.symbols.len();
         let mut order: Vec<usize> = (0..n).collect();
         for i in 1..n {
@@ -338,7 +346,7 @@ mod tests {
     fn every_set_is_the_reference_set() {
         let v = vectors();
         let digests = v["digests"].as_array().unwrap();
-        assert_eq!(digests.len(), 112);
+        assert_eq!(digests.len(), 144);
         for d in digests {
             let c = config(&v["configs"][d["config"].as_str().unwrap()]);
             let p = c.parameters();
@@ -379,6 +387,19 @@ mod tests {
                 assert_eq!(means.iter().sum::<i128>(), 0);
             }
         }
+    }
+
+    #[test]
+    #[should_panic]
+    fn a_lattice_size_outside_the_supported_ones_is_refused() {
+        let c = Config {
+            symbols: vec![symbol("SPY")],
+            volatilities: vec![11_335],
+            correlations: vec![],
+            gaps: vec![54_840],
+            market: Some(0),
+        };
+        Set::new(&c.parameters(), 100, 172_800);
     }
 
     #[test]

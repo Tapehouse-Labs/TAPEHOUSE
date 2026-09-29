@@ -36,7 +36,11 @@ l2_gas() {
 
 gas_log=$root/stylus/target/devnode-gas.txt
 : > "$gas_log"
-record() { echo "$1 $2" >> "$gas_log"; echo "$2"; }
+record() {
+  echo "$1 $2" >> "$gas_log"
+  [[ $2 =~ ^[0-9]+$ ]] || { echo "FAIL: no L2 gas for $1" >&2; exit 1; }
+  echo "$2"
+}
 measure() { record "$1" "$(l2_gas "$(cast calldata "$2" "${@:3}")")"; }
 
 legs() {
@@ -587,4 +591,6 @@ read -r _ tsla_ms _ <<<"$(cast call --rpc-url "$rpc" "$band" "price(bytes32)(uin
 [ $((tsla_ms - tsla_first_ms)) -lt 50000 ] || fail "the gateway gave no TSLA---24_7 package within 50 s"
 [ "$(sample_ms "$tsla")" = "$tsla_first_ms" ] || fail "a write within 50 s was sampled"
 echo "TSLA---24_7 written again within 50 s of its first sample: not a sample, L2 gas $((gas - l1))"
+unmeasured=$(grep -v ' [0-9][0-9]*$' "$gas_log" || true)
+[ -z "$unmeasured" ] || fail "no L2 gas for: $unmeasured"
 echo "PASS"
