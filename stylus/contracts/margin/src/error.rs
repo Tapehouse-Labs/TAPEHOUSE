@@ -24,9 +24,17 @@ sol! {
     #[derive(Debug, PartialEq, Eq)]
     error CorrelationStepTooLarge(bytes32 symbol, bytes32 other, uint16 previous, uint16 value);
     #[derive(Debug, PartialEq, Eq)]
+    error InvalidGap(bytes32 symbol, uint32 value, uint32 floor);
+    #[derive(Debug, PartialEq, Eq)]
+    error GapStepTooLarge(bytes32 symbol, uint32 previous, uint32 value);
+    #[derive(Debug, PartialEq, Eq)]
     error NotPositiveDefinite();
     #[derive(Debug, PartialEq, Eq)]
     error UpdateTooSoon(uint64 nextUpdateAt);
+    #[derive(Debug, PartialEq, Eq)]
+    error UnsupportedScenarioSize(uint16 size);
+    #[derive(Debug, PartialEq, Eq)]
+    error ScenarioOutOfRange(uint16 index);
 }
 
 /// The errors of the margin program.
@@ -41,8 +49,12 @@ pub enum MarginError {
     InvalidCorrelation(InvalidCorrelation),
     VolatilityStepTooLarge(VolatilityStepTooLarge),
     CorrelationStepTooLarge(CorrelationStepTooLarge),
+    InvalidGap(InvalidGap),
+    GapStepTooLarge(GapStepTooLarge),
     NotPositiveDefinite(NotPositiveDefinite),
     UpdateTooSoon(UpdateTooSoon),
+    UnsupportedScenarioSize(UnsupportedScenarioSize),
+    ScenarioOutOfRange(ScenarioOutOfRange),
     OwnableUnauthorizedAccount(OwnableUnauthorizedAccount),
     OwnableInvalidOwner(OwnableInvalidOwner),
 }

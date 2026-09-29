@@ -6,6 +6,7 @@ extern crate alloc;
 
 pub mod error;
 pub mod matrix;
+pub mod scenario;
 
 use alloc::vec::Vec;
 
@@ -18,22 +19,29 @@ use stylus_sdk::storage::{
 };
 
 use crate::error::{
-    AssetCount, CorrelationStepTooLarge, DuplicateAsset, InvalidCorrelation, InvalidVolatility,
-    LengthMismatch, MarginError, NotPositiveDefinite, UnknownAsset, UpdateTooSoon,
+    AssetCount, CorrelationStepTooLarge, DuplicateAsset, GapStepTooLarge, InvalidCorrelation,
+    InvalidGap, InvalidVolatility, LengthMismatch, MarginError, NotPositiveDefinite,
+    ScenarioOutOfRange, UnknownAsset, UnsupportedScenarioSize, UpdateTooSoon,
     VolatilityStepTooLarge, ZeroSymbol,
 };
 use crate::matrix::{ONE, pair, positive_definite};
+use crate::scenario::{Parameters, SIZES, Set, count};
 
 /// Most assets the engine takes: the exact positive-definiteness check stays within 256 bits up to 9.
 pub const MAX_ASSETS: usize = 8;
 /// Highest daily volatility, in centi-basis-points: 100% a day.
 pub const MAX_VOLATILITY: u32 = 1_000_000;
+/// Largest weekend gap, in centi-basis-points: 100%.
+pub const MAX_GAP: u32 = 1_000_000;
 /// Shortest time between two updates, in seconds.
 pub const UPDATE_INTERVAL: u64 = 86_400;
+/// Lattice size of the scenario set the engine margins with.
+pub const SCENARIO_SIZE: usize = 256;
 
 sol! {
     event VolatilitySet(bytes32 indexed symbol, uint32 value);
     event CorrelationSet(bytes32 indexed symbol, bytes32 indexed other, uint16 value);
+    event GapSet(bytes32 indexed symbol, uint32 value);
 }
 
 #[storage]
@@ -46,6 +54,9 @@ pub struct Margin {
     volatility_floors: StorageVec<StorageU32>,
     correlations: StorageVec<StorageU16>,
     correlation_floors: StorageVec<StorageU16>,
+    gaps: StorageVec<StorageU32>,
+    gap_floors: StorageVec<StorageU32>,
+    market: StorageU8,
     last_update: StorageU64,
 }
 
@@ -53,10 +64,13 @@ pub struct Margin {
 #[implements(IOwnable2Step<Error = MarginError>)]
 impl Margin {
     /// Sets the assets, their risk parameters and the hard floors under them, which never change.
-    /// Volatilities are daily, in centi-basis-points; correlations are in basis points, listed for each
-    /// pair `(i, j)`, `i < j`, row by row. Every floor is positive, every value sits at or above its floor,
-    /// and the correlation matrix is positive definite. `initial_owner` may update the parameters.
+    /// Volatilities are daily, and weekend gaps a Friday close to Monday open move, both in centi-basis-points;
+    /// correlations are in basis points, listed for each pair `(i, j)`, `i < j`, row by row. Every floor is
+    /// positive, every value sits at or above its floor, and the correlation matrix is positive definite.
+    /// `market` is the asset that stands for the market, or zero for the equal-weighted portfolio of the
+    /// assets. `initial_owner` may update the parameters.
     #[constructor]
+    #[allow(clippy::too_many_arguments)]
     pub fn constructor(
         &mut self,
         symbols: Vec<B256>,
@@ -64,6 +78,9 @@ impl Margin {
         volatilities: Vec<u32>,
         correlation_floors: Vec<u16>,
         correlations: Vec<u16>,
+        gap_floors: Vec<u32>,
+        gaps: Vec<u32>,
+        market: B256,
         initial_owner: Address,
     ) -> Result<(), MarginError> {
         self.ownable.initialize::<MarginError>(initial_owner)?;
@@ -78,6 +95,8 @@ impl Margin {
             || volatilities.len() != n
             || correlation_floors.len() != pairs
             || correlations.len() != pairs
+            || gap_floors.len() != n
+            || gaps.len() != n
         {
             return Err(MarginError::LengthMismatch(LengthMismatch {}));
         }
@@ -112,7 +131,17 @@ impl Margin {
                 self.correlation_floors.push(U16::from(floor));
             }
         }
-        self.check(&symbols, &volatilities, &correlations)?;
+        for i in 0..n {
+            if gap_floors[i] == 0 {
+                return Err(invalid_gap(symbols[i], gaps[i], gap_floors[i]));
+            }
+            self.gap_floors.push(U32::from(gap_floors[i]));
+        }
+        if market != B256::ZERO {
+            let i = self.position(market)?;
+            self.market.set(U8::from(i + 1));
+        }
+        self.check(&symbols, &volatilities, &correlations, &gaps)?;
         for (i, &value) in volatilities.iter().enumerate() {
             self.volatilities.push(U32::from(value));
             self.vm().log(VolatilitySet {
@@ -131,6 +160,13 @@ impl Margin {
                 });
             }
         }
+        for (i, &value) in gaps.iter().enumerate() {
+            self.gaps.push(U32::from(value));
+            self.vm().log(GapSet {
+                symbol: symbols[i],
+                value,
+            });
+        }
         Ok(())
     }
 
@@ -141,6 +177,7 @@ impl Margin {
         &mut self,
         volatilities: Vec<u32>,
         correlations: Vec<u16>,
+        gaps: Vec<u32>,
     ) -> Result<(), MarginError> {
         self.ownable.only_owner::<MarginError>()?;
         let now = self.vm().block_timestamp();
@@ -152,10 +189,10 @@ impl Margin {
         }
         let symbols = self.assets();
         let n = symbols.len();
-        if volatilities.len() != n || correlations.len() != n * (n - 1) / 2 {
+        if volatilities.len() != n || correlations.len() != n * (n - 1) / 2 || gaps.len() != n {
             return Err(MarginError::LengthMismatch(LengthMismatch {}));
         }
-        self.check(&symbols, &volatilities, &correlations)?;
+        self.check(&symbols, &volatilities, &correlations, &gaps)?;
         for (i, &value) in volatilities.iter().enumerate() {
             let previous = self.volatilities.get(i).unwrap().to::<u32>();
             if !within_step(previous.into(), value.into()) {
@@ -184,6 +221,16 @@ impl Margin {
                 }
             }
         }
+        for (i, &value) in gaps.iter().enumerate() {
+            let previous = self.gaps.get(i).unwrap().to::<u32>();
+            if !within_step(previous.into(), value.into()) {
+                return Err(MarginError::GapStepTooLarge(GapStepTooLarge {
+                    symbol: symbols[i],
+                    previous,
+                    value,
+                }));
+            }
+        }
         for (i, &value) in volatilities.iter().enumerate() {
             if self.volatilities.get(i).unwrap().to::<u32>() != value {
                 self.volatilities.setter(i).unwrap().set(U32::from(value));
@@ -205,6 +252,15 @@ impl Margin {
                         value,
                     });
                 }
+            }
+        }
+        for (i, &value) in gaps.iter().enumerate() {
+            if self.gaps.get(i).unwrap().to::<u32>() != value {
+                self.gaps.setter(i).unwrap().set(U32::from(value));
+                self.vm().log(GapSet {
+                    symbol: symbols[i],
+                    value,
+                });
             }
         }
         self.last_update.set(U64::from(now));
@@ -241,9 +297,68 @@ impl Margin {
         ))
     }
 
+    /// The weekend gap of `symbol` and its floor, in centi-basis-points.
+    pub fn weekend_gap(&self, symbol: B256) -> Result<(u32, u32), MarginError> {
+        let i = self.position(symbol)?;
+        Ok((
+            self.gaps.get(i).unwrap().to::<u32>(),
+            self.gap_floors.get(i).unwrap().to::<u32>(),
+        ))
+    }
+
+    /// The asset that stands for the market; zero for the equal-weighted portfolio of the assets.
+    pub fn market(&self) -> B256 {
+        match self.market.get().to::<usize>() {
+            0 => B256::ZERO,
+            p => self.assets.get(p - 1).unwrap(),
+        }
+    }
+
     /// When the parameters were last updated; zero before the first update, which may come at any time.
     pub fn last_update(&self) -> u64 {
         self.last_update.get().to::<u64>()
+    }
+
+    /// Scenario `index` of the engine's set over a horizon of `horizon` seconds: returns in millionths, in
+    /// the order of `assets()`. The set holds 256 joint draws with the stored correlations, 256 with every
+    /// correlation 1, 256 with every correlation 0, the market down and up, every asset's weekend gap down
+    /// and up, then each asset's gap alone, down and up, in the ascending order of the symbols.
+    pub fn scenario(&self, index: u16, horizon: u64) -> Result<Vec<i32>, MarginError> {
+        if usize::from(index) >= count(SCENARIO_SIZE, self.assets.len()) {
+            return Err(MarginError::ScenarioOutOfRange(ScenarioOutOfRange {
+                index,
+            }));
+        }
+        let (symbols, volatilities, correlations, gaps, market) = self.parameters();
+        let parameters = Parameters {
+            symbols: &symbols,
+            volatilities: &volatilities,
+            correlations: &correlations,
+            gaps: &gaps,
+            market,
+        };
+        Ok(Set::new(&parameters, SCENARIO_SIZE, horizon).row(index.into()))
+    }
+
+    /// Keccak-256 of every scenario of a set with `size` lattice points (32, 64, 128 or 256) over a
+    /// horizon of `horizon` seconds, each as int32 returns in the ascending order of the symbols. It does
+    /// not depend on the order the assets were given in.
+    pub fn scenario_digest(&self, size: u16, horizon: u64) -> Result<B256, MarginError> {
+        if !SIZES.contains(&usize::from(size)) {
+            return Err(MarginError::UnsupportedScenarioSize(
+                UnsupportedScenarioSize { size },
+            ));
+        }
+        let (symbols, volatilities, correlations, gaps, market) = self.parameters();
+        let parameters = Parameters {
+            symbols: &symbols,
+            volatilities: &volatilities,
+            correlations: &correlations,
+            gaps: &gaps,
+            market,
+        };
+        let encoded = Set::new(&parameters, size.into(), horizon).encoded();
+        Ok(self.vm().native_keccak256(&encoded))
     }
 }
 
@@ -280,11 +395,29 @@ impl Margin {
         }
     }
 
+    #[allow(clippy::type_complexity)]
+    fn parameters(&self) -> (Vec<[u8; 32]>, Vec<u32>, Vec<u16>, Vec<u32>, Option<usize>) {
+        let n = self.assets.len();
+        let pairs = n * (n - 1) / 2;
+        (
+            (0..n).map(|i| self.assets.get(i).unwrap().0).collect(),
+            (0..n)
+                .map(|i| self.volatilities.get(i).unwrap().to())
+                .collect(),
+            (0..pairs)
+                .map(|k| self.correlations.get(k).unwrap().to())
+                .collect(),
+            (0..n).map(|i| self.gaps.get(i).unwrap().to()).collect(),
+            self.market.get().to::<usize>().checked_sub(1),
+        )
+    }
+
     fn check(
         &self,
         symbols: &[B256],
         volatilities: &[u32],
         correlations: &[u16],
+        gaps: &[u32],
     ) -> Result<(), MarginError> {
         let n = symbols.len();
         for (i, &value) in volatilities.iter().enumerate() {
@@ -307,6 +440,12 @@ impl Margin {
                 }
             }
         }
+        for (i, &value) in gaps.iter().enumerate() {
+            let floor = self.gap_floors.get(i).unwrap().to::<u32>();
+            if value < floor || value > MAX_GAP {
+                return Err(invalid_gap(symbols[i], value, floor));
+            }
+        }
         if !positive_definite(n, correlations) {
             return Err(MarginError::NotPositiveDefinite(NotPositiveDefinite {}));
         }
@@ -316,6 +455,14 @@ impl Margin {
 
 fn invalid_volatility(symbol: B256, value: u32, floor: u32) -> MarginError {
     MarginError::InvalidVolatility(InvalidVolatility {
+        symbol,
+        value,
+        floor,
+    })
+}
+
+fn invalid_gap(symbol: B256, value: u32, floor: u32) -> MarginError {
+    MarginError::InvalidGap(InvalidGap {
         symbol,
         value,
         floor,
@@ -340,12 +487,13 @@ fn within_step(previous: u64, value: u64) -> bool {
 mod tests {
     use super::*;
     use crate::error::{
-        AssetCount, CorrelationStepTooLarge, DuplicateAsset, InvalidCorrelation, InvalidVolatility,
-        LengthMismatch, NotPositiveDefinite, UnknownAsset, UpdateTooSoon, VolatilityStepTooLarge,
-        ZeroSymbol,
+        AssetCount, CorrelationStepTooLarge, DuplicateAsset, GapStepTooLarge, InvalidCorrelation,
+        InvalidGap, InvalidVolatility, LengthMismatch, NotPositiveDefinite, ScenarioOutOfRange,
+        UnknownAsset, UnsupportedScenarioSize, UpdateTooSoon, VolatilityStepTooLarge, ZeroSymbol,
     };
     use ownable::{OwnableInvalidOwner, OwnableUnauthorizedAccount, OwnershipTransferred};
     use proptest::prelude::*;
+    use stylus_sdk::alloy_primitives::keccak256;
     use stylus_sdk::alloy_primitives::{U256, address, b256};
     use stylus_sdk::alloy_sol_types::{SolEvent, SolValue};
     use stylus_sdk::testing::*;
@@ -359,6 +507,8 @@ mod tests {
     const VOLATILITIES: [u32; 3] = [31_352, 37_436, 11_335];
     const CORRELATION_FLOORS: [u16; 3] = [4_637, 7_203, 5_178];
     const CORRELATIONS: [u16; 3] = [4_637, 7_203, 6_232];
+    const GAP_FLOORS: [u32; 3] = [118_601, 135_345, 54_840];
+    const GAPS: [u32; 3] = [118_601, 135_345, 54_840];
 
     struct Config {
         symbols: Vec<B256>,
@@ -366,6 +516,9 @@ mod tests {
         volatilities: Vec<u32>,
         correlation_floors: Vec<u16>,
         correlations: Vec<u16>,
+        gap_floors: Vec<u32>,
+        gaps: Vec<u32>,
+        market: B256,
         owner: Address,
     }
 
@@ -376,6 +529,9 @@ mod tests {
             volatilities: VOLATILITIES.to_vec(),
             correlation_floors: CORRELATION_FLOORS.to_vec(),
             correlations: CORRELATIONS.to_vec(),
+            gap_floors: GAP_FLOORS.to_vec(),
+            gaps: GAPS.to_vec(),
+            market: SPY,
             owner: OWNER,
         }
     }
@@ -388,6 +544,9 @@ mod tests {
             c.volatilities,
             c.correlation_floors,
             c.correlations,
+            c.gap_floors,
+            c.gaps,
+            c.market,
             c.owner,
         )?;
         Ok(margin)
@@ -410,6 +569,10 @@ mod tests {
             vec![VolatilitySet::SIGNATURE_HASH, symbol],
             value.abi_encode(),
         )
+    }
+
+    fn gap_set(symbol: B256, value: u32) -> (Vec<B256>, Vec<u8>) {
+        (vec![GapSet::SIGNATURE_HASH, symbol], value.abi_encode())
     }
 
     fn correlation_set(symbol: B256, other: B256, value: u16) -> (Vec<B256>, Vec<u8>) {
@@ -447,8 +610,13 @@ mod tests {
                 correlation_set(NVDA, TSLA, 4_637),
                 correlation_set(NVDA, SPY, 7_203),
                 correlation_set(TSLA, SPY, 6_232),
+                gap_set(NVDA, 118_601),
+                gap_set(TSLA, 135_345),
+                gap_set(SPY, 54_840),
             ]
         );
+        assert_eq!(margin.weekend_gap(TSLA), Ok((135_345, 135_345)));
+        assert_eq!(margin.market(), SPY);
     }
 
     #[test]
@@ -574,6 +742,9 @@ mod tests {
                 volatilities: vec![MAX_VOLATILITY; 8],
                 correlation_floors: vec![1; 28],
                 correlations: vec![9_999; 28],
+                gap_floors: vec![1; 8],
+                gaps: vec![MAX_GAP; 8],
+                market: B256::ZERO,
                 owner: OWNER,
             },
         )
@@ -593,6 +764,9 @@ mod tests {
                 volatilities: vec![11_335],
                 correlation_floors: vec![],
                 correlations: vec![],
+                gap_floors: vec![54_840],
+                gaps: vec![54_840],
+                market: SPY,
                 owner: OWNER,
             },
         )
@@ -605,19 +779,23 @@ mod tests {
         let vm = TestVM::default();
         let mut margin = deployed(&vm);
         margin
-            .set_parameters(VOLATILITIES.to_vec(), vec![4_700, 7_203, 6_232])
+            .set_parameters(
+                VOLATILITIES.to_vec(),
+                vec![4_700, 7_203, 6_232],
+                GAPS.to_vec(),
+            )
             .unwrap();
         assert_eq!(margin.last_update(), T0);
         vm.set_block_timestamp(T0 + UPDATE_INTERVAL - 1);
         assert_eq!(
-            margin.set_parameters(VOLATILITIES.to_vec(), CORRELATIONS.to_vec()),
+            margin.set_parameters(VOLATILITIES.to_vec(), CORRELATIONS.to_vec(), GAPS.to_vec()),
             Err(MarginError::UpdateTooSoon(UpdateTooSoon {
                 nextUpdateAt: T0 + UPDATE_INTERVAL
             }))
         );
         vm.set_block_timestamp(T0 + UPDATE_INTERVAL);
         margin
-            .set_parameters(VOLATILITIES.to_vec(), CORRELATIONS.to_vec())
+            .set_parameters(VOLATILITIES.to_vec(), CORRELATIONS.to_vec(), GAPS.to_vec())
             .unwrap();
         assert_eq!(margin.last_update(), T0 + UPDATE_INTERVAL);
         assert_eq!(margin.correlation(NVDA, TSLA), Ok((4_637, 4_637)));
@@ -628,7 +806,7 @@ mod tests {
         let rise = |vols: [u32; 3], corrs: [u16; 3]| {
             let vm = TestVM::default();
             let mut margin = deployed(&vm);
-            margin.set_parameters(vols.to_vec(), corrs.to_vec())
+            margin.set_parameters(vols.to_vec(), corrs.to_vec(), GAPS.to_vec())
         };
         assert_eq!(rise([47_028, 37_436, 11_335], CORRELATIONS), Ok(()));
         assert_eq!(
@@ -657,11 +835,19 @@ mod tests {
         let vm = TestVM::default();
         let mut margin = deployed(&vm);
         margin
-            .set_parameters(vec![31_352, 37_436, 17_002], vec![4_637, 7_203, 9_348])
+            .set_parameters(
+                vec![31_352, 37_436, 17_002],
+                vec![4_637, 7_203, 9_348],
+                GAPS.to_vec(),
+            )
             .unwrap();
         vm.set_block_timestamp(T0 + UPDATE_INTERVAL);
         assert_eq!(
-            margin.set_parameters(vec![31_352, 37_436, 11_334 + 1], vec![4_637, 7_203, 6_231]),
+            margin.set_parameters(
+                vec![31_352, 37_436, 11_334 + 1],
+                vec![4_637, 7_203, 6_231],
+                GAPS.to_vec()
+            ),
             Err(MarginError::CorrelationStepTooLarge(
                 CorrelationStepTooLarge {
                     symbol: TSLA,
@@ -672,7 +858,11 @@ mod tests {
             ))
         );
         assert_eq!(
-            margin.set_parameters(vec![31_352, 37_436, 11_334 + 1], vec![4_637, 7_203, 6_232]),
+            margin.set_parameters(
+                vec![31_352, 37_436, 11_334 + 1],
+                vec![4_637, 7_203, 6_232],
+                GAPS.to_vec()
+            ),
             Ok(())
         );
         assert_eq!(margin.volatility(SPY), Ok((11_335, 11_335)));
@@ -683,7 +873,11 @@ mod tests {
         let vm = TestVM::default();
         let mut margin = deployed(&vm);
         assert_eq!(
-            margin.set_parameters(vec![31_351, 37_436, 11_335], CORRELATIONS.to_vec()),
+            margin.set_parameters(
+                vec![31_351, 37_436, 11_335],
+                CORRELATIONS.to_vec(),
+                GAPS.to_vec()
+            ),
             Err(MarginError::InvalidVolatility(InvalidVolatility {
                 symbol: NVDA,
                 value: 31_351,
@@ -691,7 +885,11 @@ mod tests {
             }))
         );
         assert_eq!(
-            margin.set_parameters(VOLATILITIES.to_vec(), vec![4_637, 7_202, 6_232]),
+            margin.set_parameters(
+                VOLATILITIES.to_vec(),
+                vec![4_637, 7_202, 6_232],
+                GAPS.to_vec()
+            ),
             Err(MarginError::InvalidCorrelation(InvalidCorrelation {
                 symbol: NVDA,
                 other: SPY,
@@ -700,11 +898,15 @@ mod tests {
             }))
         );
         assert_eq!(
-            margin.set_parameters(VOLATILITIES.to_vec(), vec![4_637, 9_990, 5_178]),
+            margin.set_parameters(
+                VOLATILITIES.to_vec(),
+                vec![4_637, 9_990, 5_178],
+                GAPS.to_vec()
+            ),
             Err(MarginError::NotPositiveDefinite(NotPositiveDefinite {}))
         );
         assert_eq!(
-            margin.set_parameters(VOLATILITIES.to_vec(), vec![4_637; 2]),
+            margin.set_parameters(VOLATILITIES.to_vec(), vec![4_637; 2], GAPS.to_vec()),
             Err(MarginError::LengthMismatch(LengthMismatch {}))
         );
         assert_eq!(margin.last_update(), 0);
@@ -717,7 +919,11 @@ mod tests {
         let mut margin = deployed(&vm);
         let before = vm.get_emitted_logs().len();
         margin
-            .set_parameters(vec![31_352, 40_000, 11_335], vec![4_637, 7_203, 7_000])
+            .set_parameters(
+                vec![31_352, 40_000, 11_335],
+                vec![4_637, 7_203, 7_000],
+                GAPS.to_vec(),
+            )
             .unwrap();
         assert_eq!(
             vm.get_emitted_logs()[before..].to_vec(),
@@ -740,7 +946,7 @@ mod tests {
         };
         vm.set_sender(next);
         assert_eq!(
-            margin.set_parameters(VOLATILITIES.to_vec(), CORRELATIONS.to_vec()),
+            margin.set_parameters(VOLATILITIES.to_vec(), CORRELATIONS.to_vec(), GAPS.to_vec()),
             unauthorized(next)
         );
         assert_eq!(margin.transfer_ownership(next), unauthorized(next));
@@ -755,18 +961,148 @@ mod tests {
         );
         vm.set_sender(OWNER);
         assert_eq!(
-            margin.set_parameters(VOLATILITIES.to_vec(), CORRELATIONS.to_vec()),
+            margin.set_parameters(VOLATILITIES.to_vec(), CORRELATIONS.to_vec(), GAPS.to_vec()),
             unauthorized(OWNER)
         );
         vm.set_sender(next);
         margin
-            .set_parameters(VOLATILITIES.to_vec(), CORRELATIONS.to_vec())
+            .set_parameters(VOLATILITIES.to_vec(), CORRELATIONS.to_vec(), GAPS.to_vec())
             .unwrap();
         margin.renounce_ownership().unwrap();
         vm.set_block_timestamp(T0 + UPDATE_INTERVAL);
         assert_eq!(
-            margin.set_parameters(VOLATILITIES.to_vec(), CORRELATIONS.to_vec()),
+            margin.set_parameters(VOLATILITIES.to_vec(), CORRELATIONS.to_vec(), GAPS.to_vec()),
             unauthorized(next)
+        );
+    }
+
+    #[test]
+    fn the_weekend_gap_keeps_the_same_rules() {
+        let reject = |change: &dyn Fn(&mut Config), expected: MarginError| {
+            let vm = TestVM::default();
+            let mut c = config();
+            change(&mut c);
+            assert_eq!(deploy(&vm, c).err(), Some(expected));
+        };
+        let gap = |symbol, value, floor| {
+            MarginError::InvalidGap(InvalidGap {
+                symbol,
+                value,
+                floor,
+            })
+        };
+        reject(&|c| c.gap_floors[0] = 0, gap(NVDA, 118_601, 0));
+        reject(&|c| c.gaps[1] = 135_344, gap(TSLA, 135_344, 135_345));
+        reject(
+            &|c| {
+                c.gap_floors[2] = MAX_GAP;
+                c.gaps[2] = MAX_GAP + 1;
+            },
+            gap(SPY, MAX_GAP + 1, MAX_GAP),
+        );
+        reject(
+            &|c| c.gaps.push(1),
+            MarginError::LengthMismatch(LengthMismatch {}),
+        );
+
+        let vm = TestVM::default();
+        let mut margin = deployed(&vm);
+        let before = vm.get_emitted_logs().len();
+        assert_eq!(
+            margin.set_parameters(
+                VOLATILITIES.to_vec(),
+                CORRELATIONS.to_vec(),
+                vec![177_902, 135_345, 54_840]
+            ),
+            Err(MarginError::GapStepTooLarge(GapStepTooLarge {
+                symbol: NVDA,
+                previous: 118_601,
+                value: 177_902
+            }))
+        );
+        margin
+            .set_parameters(
+                VOLATILITIES.to_vec(),
+                CORRELATIONS.to_vec(),
+                vec![177_901, 135_345, 54_840],
+            )
+            .unwrap();
+        assert_eq!(
+            vm.get_emitted_logs()[before..].to_vec(),
+            vec![gap_set(NVDA, 177_901)]
+        );
+        assert_eq!(margin.weekend_gap(NVDA), Ok((177_901, 118_601)));
+    }
+
+    #[test]
+    fn the_market_is_one_of_the_assets_or_none() {
+        let vm = TestVM::default();
+        let mut c = config();
+        c.market = symbol("AMZN");
+        assert_eq!(
+            deploy(&vm, c).err(),
+            Some(MarginError::UnknownAsset(UnknownAsset {
+                symbol: symbol("AMZN")
+            }))
+        );
+        let vm = TestVM::default();
+        let mut c = config();
+        c.market = B256::ZERO;
+        assert_eq!(deploy(&vm, c).unwrap().market(), B256::ZERO);
+    }
+
+    #[test]
+    fn scenarios_come_by_index_and_as_a_digest_whatever_the_order_of_the_assets() {
+        let vm = TestVM::default();
+        let margin = deployed(&vm);
+        let symbols: Vec<[u8; 32]> = [NVDA, TSLA, SPY].iter().map(|s| s.0).collect();
+        let parameters = Parameters {
+            symbols: &symbols,
+            volatilities: &VOLATILITIES,
+            correlations: &CORRELATIONS,
+            gaps: &GAPS,
+            market: Some(2),
+        };
+        let set = Set::new(&parameters, SCENARIO_SIZE, 172_800);
+        for index in [0u16, 255, 256, 767, 768, 771, 772, 777] {
+            assert_eq!(margin.scenario(index, 172_800), Ok(set.row(index.into())));
+        }
+        assert_eq!(
+            margin.scenario(778, 172_800),
+            Err(MarginError::ScenarioOutOfRange(ScenarioOutOfRange {
+                index: 778
+            }))
+        );
+        assert_eq!(
+            margin.scenario_digest(100, 172_800),
+            Err(MarginError::UnsupportedScenarioSize(
+                UnsupportedScenarioSize { size: 100 }
+            ))
+        );
+        let digest = margin.scenario_digest(256, 172_800).unwrap();
+        assert_eq!(digest, keccak256(set.encoded()));
+
+        let vm = TestVM::default();
+        vm.set_sender(OWNER);
+        let reordered = deploy(
+            &vm,
+            Config {
+                symbols: vec![SPY, NVDA, TSLA],
+                volatility_floors: vec![11_335, 31_352, 37_436],
+                volatilities: vec![11_335, 31_352, 37_436],
+                correlation_floors: vec![7_203, 5_178, 4_637],
+                correlations: vec![7_203, 6_232, 4_637],
+                gap_floors: vec![54_840, 118_601, 135_345],
+                gaps: vec![54_840, 118_601, 135_345],
+                market: SPY,
+                owner: OWNER,
+            },
+        )
+        .unwrap();
+        assert_eq!(reordered.scenario_digest(256, 172_800), Ok(digest));
+        assert_eq!(
+            reordered.scenario(0, 172_800).unwrap()[1],
+            margin.scenario(0, 172_800).unwrap()[0]
         );
     }
 
@@ -808,7 +1144,7 @@ mod tests {
                     margin.correlation(NVDA, TSLA), margin.correlation(NVDA, SPY), margin.correlation(TSLA, SPY));
                 let previous: Vec<u32> = [NVDA, TSLA, SPY].iter().map(|&s| margin.volatility(s).unwrap().0).collect();
                 let last = margin.last_update();
-                match margin.set_parameters(volatilities.clone(), correlations.clone()) {
+                match margin.set_parameters(volatilities.clone(), correlations.clone(), GAPS.to_vec()) {
                     Ok(()) => {
                         for (i, &s) in [NVDA, TSLA, SPY].iter().enumerate() {
                             let (value, floor) = margin.volatility(s).unwrap();

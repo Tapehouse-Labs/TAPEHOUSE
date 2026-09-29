@@ -224,26 +224,57 @@ make verify-band-feeds CHAIN=<chainId>
 
 ## The margin engine
 
-`margin` is the Stylus program that margins a portfolio of Stock Tokens as one position. It starts with the risk parameters it generates its scenarios from: each asset's daily volatility, each pair's correlation, and a hard floor under every one of them.
+`margin` is the Stylus program that margins a portfolio of Stock Tokens as one position. It holds the risk parameters it generates its scenarios from: each asset's daily volatility and weekend gap, each pair's correlation, and a hard floor under every one of them.
 
-- **Units.** Volatility is the standard deviation of daily log returns, in centi-basis-points (1e-6): NVDA's 31,352 is 3.1352% a day. Correlation is in basis points (1e-4), and positive: every pair among the launch assets has a floor above zero, and an asset that moves against the others needs a new program.
+- **Units.** Volatility is the standard deviation of daily log returns, in centi-basis-points (1e-6): NVDA's 31,352 is 3.1352% a day. A weekend gap is a move from the last close before the market shuts for two days or more to the next open, also in centi-basis-points. Correlation is in basis points (1e-4), and positive: every pair among the launch assets has a floor above zero, and an asset that moves against the others needs a new program.
 - **Floors.** They are set in the constructor and never change. They are modelled on the anti-procyclicality tools EMIR gives clearing houses for margin requirements (RTS 153/2013, Article 28), applied here to the parameters beneath the margin.
   - A volatility floor is the asset's 10-year volatility, after the Article's 10-year volatility floor.
   - A correlation floor gives 25% weight to stressed observations, after the Article's second option: 75% the pair's 10-year correlation and 25% its correlation over the 60 sessions with SPY's worst return in those 10 years, 26 December 2019 to 23 March 2020 (SPY −30.2%). Correlations rise in a crash, so a floor keeps a calm year from granting a diversification benefit that disappears when it is needed.
-  - The first values are the floors, or the last 252 sessions' figures where those are higher. All come from Yahoo Finance's daily adjusted closes over the ten years to 25 September 2026, and are in `stylus/contracts/margin/parameters.json`.
+  - A weekend-gap floor is the mean of the largest 1% of the asset's 521 such moves in the ten years, up or down, from adjusted closes and opens: 11.86% for NVDA, 5.48% for SPY. Weekend gaps are not a fixed multiple of daily volatility: their 99th percentile runs from 2.1 daily standard deviations for GOOGL to 3.2 for AAPL.
+  - The first values are the floors, or, for volatility and correlation, the last 252 sessions' figures where those are higher. All come from Yahoo Finance's daily adjusted closes over the ten years to 25 September 2026, and are in `stylus/contracts/margin/parameters.json`.
 - **How the parameters move.** The owner replaces them all at once with `setParameters`. Each value stays at or above its floor and moves by at most ×1.5 or ÷1.5, modelled on the factor of about 1.5 OCC uses when it reviews day-over-day changes in its margin coverage; a bound on each parameter is not by itself a bound on a portfolio's margin. An update comes at least a day after the one before; the first may come at any time. Later values come from an off-chain calibrator, through this same path.
-- **Events.** Every value the constructor sets and every value an update changes emits `VolatilitySet` or `CorrelationSet`, so the values' history rebuilds from events alone. The floors never change and are read with the views.
+- **Events.** Every value the constructor sets and every value an update changes emits `VolatilitySet`, `CorrelationSet` or `GapSet`, so the values' history rebuilds from events alone. The floors never change and are read with the views.
 - **Valid matrices only.** The correlation matrix must stay positive definite, as the correlation matrix of assets that are not linear combinations of one another is. The check is exact: Bareiss's fraction-free elimination yields every leading principal minor as an integer, and Sylvester's criterion asks that each be positive. Hadamard's inequality keeps every intermediate within 256 bits for up to 9 assets; the engine takes at most 8.
 - **Ownership** follows OpenZeppelin's `Ownable2Step`, from the same `stylus/crates/ownable` as the band's, with an explicit `initialOwner`. It moves to the timelock with the band's.
 
-Reads: `assets()`, `volatility(symbol)` and `correlation(symbol, other)`, each with its floor, and `lastUpdate()`.
+Reads: `assets()`, `volatility(symbol)`, `correlation(symbol, other)` and `weekendGap(symbol)`, each with its floor, `market()` and `lastUpdate()`.
+
+### Scenarios
+
+The engine draws a deterministic scenario set from its parameters on every call. Nothing is signed off chain, and anyone can rebuild the set.
+
+| Scenarios | How each asset moves |
+|---|---|
+| 256 joint draws | Its daily volatility × √(horizon in days) × its row of the Cholesky factor of the correlation matrix, applied to 256 standard normal points |
+| 256 with every correlation 1 | Its volatility-scaled share of one normal draw |
+| 256 with every correlation 0 | Its volatility-scaled share of its own normal draw |
+| market down, market up | β × the market moving by its expected shortfall at 99% (2.665 σ) over the horizon |
+| weekend gap down, weekend gap up | Its weekend gap, together with every other asset |
+| each asset alone, gap down and up | Its own weekend gap while every other asset stays put, one asset at a time in symbol order |
+
+- **The normal points.** They come from a rank-1 Korobov lattice (generator 13 for 256 points), shifted in each dimension by ⌊256 · frac(d · φ)⌋, φ = (√5 − 1)/2, so the first point is not the corner of the cube. Each point stands for its 1/256 slice of the normal: it is the slice's mean, so the worst k points average exactly to the normal's expected shortfall at level k/256. Each dimension takes every slice once.
+- **The market.** It is SPY where the band prices it, and the equal-weighted portfolio of the assets where it does not, as on the testnet. β is each asset's covariance with the market over the market's variance.
+- **Order.** Scenarios are drawn in the ascending order of the symbols, so an asset's scenarios do not depend on where it sits in the list.
+- **Arithmetic.** It is integer: the factor in 1e12, returns in millionths, every division truncated toward zero. No return falls below −100%.
+- **Horizon.** It is in seconds and scales the draws and the market move by √(horizon / 1 day); the weekend gap does not scale.
+
+`scenario(index, horizon)` returns one scenario, and `scenarioDigest(size, horizon)` the keccak-256 of a whole set of 32, 64, 128 or 256 lattice points, in symbol order. The digest does not depend on the order of the assets. `stylus/contracts/margin/testdata/scenario-vectors.json` holds 112 digests computed independently of this program, and the dev-node suite checks the program's digest against one of them.
+
+How closely the joint draws track the model, over 200 long-only portfolios of the launch assets at their first values: the portfolio's expected shortfall at 99% across the joint draws, over the same figure for a normal distribution with the stored covariance.
+
+| Lattice points | 5th percentile | Median | 95th percentile |
+|---|---|---|---|
+| 32 | 0.698 | 0.814 | 0.948 |
+| 64 | 0.720 | 0.808 | 0.951 |
+| 128 | 0.865 | 0.936 | 1.011 |
+| 256 | 0.934 | 0.978 | 1.033 |
 
 ```bash
 make deploy-stylus CHAIN=<chainId> SIGNER='--account <name> --password-file <file>' CONTRACT=margin
 stylus/scripts/check-margin.sh <rpc> <address> deployments/<chainId>.json
 ```
 
-`stylus/scripts/margin-args.sh` builds the constructor arguments: the assets the chain's band prices, in `band-args.sh`'s order, with their parameters from `parameters.json`, and the registry's `.tapehouse.Owner`. It refuses an asset or a pair the file lacks. `check-margin.sh` checks the assets, the floors and the owner, that the registry's band prices every asset, and the values themselves until the first update.
+`stylus/scripts/margin-args.sh` builds the constructor arguments: the assets the chain's band prices, in `band-args.sh`'s order, with their parameters from `parameters.json`, the file's market where the band prices it, and the registry's `.tapehouse.Owner`. It refuses an asset or a pair the file lacks. `check-margin.sh` checks the assets, the floors, the market and the owner, that the registry's band prices every asset, and the values themselves until the first update.
 
 ## Verification
 
