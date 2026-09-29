@@ -8,6 +8,8 @@ pub const HORIZON: u64 = 172_800;
 /// How long before a weekend or holiday session close the requirement starts rising to the closed one, in
 /// milliseconds: the last three hours of the regular session and the four-hour post-market.
 pub const RAMP_MS: u64 = 25_200_000;
+/// The most gross exposure a requirement allows per unit of margin across a closure, in basis points: 5×.
+pub const WEEKEND_LEVERAGE: u32 = 50_000;
 
 sol_interface! {
     interface IBand {
@@ -73,13 +75,23 @@ pub fn regime(session: Option<Session>, now_ms: u64) -> Regime {
     }
 }
 
-/// The current requirement from the requirement over the open market, `open`, and across a closure,
-/// `closed`. The open market holds a 25% buffer, rounded up. A closure needs the larger of the buffered and the
-/// closed requirement, so the buffer covers the weekend first; the ramp before the close rises to it in a
-/// straight line, and a reopen only lowers it.
-pub fn current(open: U256, closed: U256, regime: Regime) -> U256 {
+/// The margin that holds `exposures`' gross value to [`WEEKEND_LEVERAGE`], rounded up.
+pub fn leverage_floor(exposures: &[i128]) -> U256 {
+    (exposures
+        .iter()
+        .map(|e| U256::from(e.unsigned_abs()))
+        .fold(U256::ZERO, |sum, e| sum + e)
+        * U256::from(10_000))
+    .div_ceil(U256::from(WEEKEND_LEVERAGE))
+}
+
+/// The current requirement from the requirement over the open market, `open`, across a closure, `closed`,
+/// and the [`leverage_floor`], `floor`. The open market holds a 25% buffer, rounded up. A closure needs the
+/// largest of the buffered requirement, the closed one and the floor, so the buffer covers the weekend first;
+/// the ramp before the close rises to it in a straight line, and a reopen only lowers it.
+pub fn current(open: U256, closed: U256, floor: U256, regime: Regime) -> U256 {
     let buffered = (open * U256::from(5)).div_ceil(U256::from(4));
-    let across = buffered.max(closed);
+    let across = buffered.max(closed).max(floor);
     match regime {
         Regime::Open => buffered,
         Regime::Closing { elapsed_ms } => {
@@ -173,25 +185,73 @@ mod tests {
     #[test]
     fn the_ramp_rises_in_a_straight_line_to_the_requirement_across_the_closure() {
         let (open, closed) = (dollars(1_000), dollars(1_400));
-        let at = |elapsed_ms| current(open, closed, Regime::Closing { elapsed_ms });
-        assert_eq!(current(open, closed, Regime::Open), dollars(1_250));
+        let at = |elapsed_ms| current(open, closed, U256::ZERO, Regime::Closing { elapsed_ms });
+        assert_eq!(
+            current(open, closed, U256::ZERO, Regime::Open),
+            dollars(1_250)
+        );
         assert_eq!(at(0), dollars(1_250));
         assert_eq!(at(RAMP_MS / 4), dollars(1_287) + dollars(1) / U256::from(2));
         assert_eq!(at(RAMP_MS), dollars(1_400));
-        assert_eq!(current(open, closed, Regime::Closed), dollars(1_400));
-        assert_eq!(current(open, closed, Regime::Unknown), dollars(1_400));
+        assert_eq!(
+            current(open, closed, U256::ZERO, Regime::Closed),
+            dollars(1_400)
+        );
+        assert_eq!(
+            current(open, closed, U256::ZERO, Regime::Unknown),
+            dollars(1_400)
+        );
         let covered = dollars(1_100);
         assert_eq!(
             current(
                 open,
                 covered,
+                U256::ZERO,
                 Regime::Closing {
                     elapsed_ms: RAMP_MS / 2
                 }
             ),
             dollars(1_250)
         );
-        assert_eq!(current(open, covered, Regime::Closed), dollars(1_250));
+        assert_eq!(
+            current(open, covered, U256::ZERO, Regime::Closed),
+            dollars(1_250)
+        );
+    }
+
+    #[test]
+    fn across_a_closure_gross_exposure_stays_within_five_times_the_requirement() {
+        let exposures = [
+            4_000 * DOLLAR as i128,
+            -2_000 * DOLLAR as i128,
+            4_000 * DOLLAR as i128,
+        ];
+        let floor = leverage_floor(&exposures);
+        assert_eq!(floor, dollars(2_000));
+        let (open, closed) = (dollars(1_000), dollars(1_400));
+        assert_eq!(current(open, closed, floor, Regime::Open), dollars(1_250));
+        assert_eq!(
+            current(
+                open,
+                closed,
+                floor,
+                Regime::Closing {
+                    elapsed_ms: RAMP_MS / 2
+                }
+            ),
+            dollars(1_625)
+        );
+        assert_eq!(current(open, closed, floor, Regime::Closed), dollars(2_000));
+        assert_eq!(
+            current(open, closed, floor, Regime::Unknown),
+            dollars(2_000)
+        );
+        assert_eq!(
+            current(open, dollars(2_500), floor, Regime::Closed),
+            dollars(2_500)
+        );
+        assert_eq!(leverage_floor(&[]), U256::ZERO);
+        assert_eq!(leverage_floor(&[-1, 5]), U256::from(2));
     }
 
     #[test]
@@ -226,8 +286,8 @@ mod tests {
                 (across - buffered) * U256::from(step) / U256::from(RAMP_MS) + U256::from(1);
             for pair in rows.windows(2) {
                 let (before, after) = (
-                    current(open, closed, pair[0].1),
-                    current(open, closed, pair[1].1),
+                    current(open, closed, U256::ZERO, pair[0].1),
+                    current(open, closed, U256::ZERO, pair[1].1),
                 );
                 if after > before {
                     let closing = |r: Regime| matches!(r, Regime::Closing { .. });
@@ -274,15 +334,15 @@ mod tests {
     #[test]
     fn the_buffer_rounds_up() {
         assert_eq!(
-            current(U256::from(1), U256::ZERO, Regime::Open),
+            current(U256::from(1), U256::ZERO, U256::ZERO, Regime::Open),
             U256::from(2)
         );
         assert_eq!(
-            current(U256::from(4), U256::ZERO, Regime::Open),
+            current(U256::from(4), U256::ZERO, U256::ZERO, Regime::Open),
             U256::from(5)
         );
         assert_eq!(
-            current(U256::from(5), U256::ZERO, Regime::Closed),
+            current(U256::from(5), U256::ZERO, U256::ZERO, Regime::Closed),
             U256::from(7)
         );
     }
@@ -304,10 +364,11 @@ mod tests {
         fn no_scheduled_change_of_regime_raises_the_requirement_at_once(
             open in 0u128..1_000_000_000_000_000_000_000_000_000,
             extra in 0u128..1_000_000_000_000_000_000_000_000_000,
+            floor in 0u128..2_000_000_000_000_000_000_000_000_000,
             elapsed in 0u64..RAMP_MS,
         ) {
-            let (open, closed) = (U256::from(open), U256::from(open + extra));
-            let value = |regime| current(open, closed, regime);
+            let (open, closed, floor) = (U256::from(open), U256::from(open + extra), U256::from(floor));
+            let value = |regime| current(open, closed, floor, regime);
             prop_assert_eq!(value(Regime::Closing { elapsed_ms: 0 }), value(Regime::Open));
             prop_assert_eq!(value(Regime::Closing { elapsed_ms: RAMP_MS }), value(Regime::Closed));
             let later = value(Regime::Closing { elapsed_ms: elapsed + 1 });

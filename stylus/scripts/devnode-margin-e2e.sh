@@ -5,8 +5,9 @@
 # bit a pool without history sets, the current requirement against the band's session and without a band, every
 # refused update, an accepted one and the day that must pass before the next, and a constructor that refuses a
 # matrix that is not positive definite. Measures the scenario set by lattice size, the requirement of three and
-# of six assets, the current requirement, and an update of every volatility on programs with the six launch
-# assets and with eight. Appends its L2 gas to stylus/target/devnode-gas.txt.
+# of six assets, the current requirement of three and of one position among six, and an update of every
+# volatility on programs with the six launch assets and with eight. Appends its L2 gas to
+# stylus/target/devnode-gas.txt.
 set -euo pipefail
 
 rpc=$1 key=$2 margin=$3 registry=$4
@@ -101,16 +102,21 @@ cast send --rpc-url "$rpc" --private-key "$key" "$feed" "setRound(int256,uint256
 band=$(jq -r '.tapehouse.Band' "$registry")
 read -r open_code nyse nyse_next change_ms boundary_ms <<<"$(cast call --rpc-url "$rpc" "$band" "session()(uint8,uint8,uint8,uint64,uint64)" | sed 's/ \[[^]]*\]//' | tr '\n' ' ')"
 now_ms=$(( $(cast block --rpc-url "$rpc" latest -f timestamp) * 1000 ))
-requirement_at() { cast call --rpc-url "$rpc" "$margin" "$requirement(uint256,uint8)" "$quantities" "$prices" 172800 "$1" | head -n 1 | cut -d' ' -f1; }
+requirement_at() { cast call --rpc-url "$rpc" "$margin" "$requirement(uint256,uint8)" "$quantities" "$prices" "$1" "$2" | head -n 1 | cut -d' ' -f1; }
 held=$(cast call --rpc-url "$rpc" "$margin" "currentRequirement(int256[],uint256[])(uint256,uint8,uint8)" "$quantities" "$prices" | sed 's/ \[[^]]*\]//' | tr '\n' ' ')
-expected=$(python3 -c '
-import sys
-open_, closed, code, boundary, now = map(int, sys.argv[1:])
+expected_current() {
+  python3 -c '
+import json, sys
+open_, closed, instant, code, boundary, now = map(int, sys.argv[1:7])
+values = [(1 if q * p >= 0 else -1) * (abs(q * p) // 10**8) for q, p in zip(json.loads(sys.argv[7]), json.loads(sys.argv[8]))]
+moves = [150_000, 150_000, 80_000 if values[2] > 0 else 60_000]
+addon = instant - max(abs(e) * m // 10**6 for e, m in zip(values, moves))
 ramp = 25_200_000
 buffered = -(-open_ * 5 // 4)
-across = max(buffered, closed)
+capped = -(-sum(abs(e) for e in values) * 10_000 // 50_000) + addon
+across = max(buffered, closed, capped)
 if code != 2:
-    print(across, code)
+    print(across, code, "cap" if capped > max(buffered, closed) else "model")
 elif boundary != 0 and boundary <= now:
     print(across, 1)
 elif boundary != 0 and boundary - now < ramp:
@@ -118,10 +124,32 @@ elif boundary != 0 and boundary - now < ramp:
     print(buffered + (across - buffered) * elapsed // ramp, 3)
 else:
     print(buffered, 2)
-' "$(requirement_at false)" "$(requirement_at true)" "$open_code" "$boundary_ms" "$now_ms")
+' "$@"
+}
+expected=$(expected_current "$(requirement_at 172800 false)" "$(requirement_at 172800 true)" "$(requirement_at 0 false)" \
+  "$open_code" "$boundary_ms" "$now_ms" "$quantities" "$prices")
+expected=${expected% cap}
+expected=${expected% model}
 read -r value _ code <<<"$held"
+[ "$(cast call --rpc-url "$rpc" "$margin" "weekendLeverage()(uint32)" | cut -d' ' -f1)" = 50000 ] ||
+  fail "the weekend leverage cap is not 5×"
 [ "$value $code" = "$expected" ] ||
   fail "the current requirement is $value in regime $code; from the band's session $open_code $nyse $nyse_next $change_ms $boundary_ms it is $expected"
+later=$((now_ms / 1000 + 7200))
+at_later() {
+  local signature=$1
+  shift
+  cast abi-decode "$signature" "$(cast rpc --rpc-url "$rpc" eth_call \
+    "{\"to\":\"$margin\",\"data\":\"$(cast calldata "${signature%%)(*})" "$@")\"}" latest '{}' \
+    "{\"time\":\"$(printf '0x%x' "$later")\"}" | tr -d '"')" | sed 's/ \[[^]]*\]//' | tr '\n' ' '
+}
+hedge=$(python3 -c 'import json, sys; q, p = json.loads(sys.argv[1]), json.loads(sys.argv[2]); print(f"[{q[0]},0,{-(q[0] * p[0] // p[2])}]")' \
+  "$quantities" "$prices")
+hedge_at() { at_later "$requirement(uint256,uint8)" "$hedge" "$prices" "$1" "$2" | cut -d' ' -f1; }
+read -r value _ code <<<"$(at_later "currentRequirement(int256[],uint256[])(uint256,uint8,uint8)" "$hedge" "$prices")"
+[ "$value $code cap" = "$(expected_current "$(hedge_at 172800 false)" "$(hedge_at 172800 true)" "$(hedge_at 0 false)" 0 0 \
+  "$now_ms" "$hedge" "$prices")" ] ||
+  fail "long NVDA against short SPY in an unknown session needs $value in regime $code, not a fifth of its gross plus its add-on"
 current_gas=$(measure "margin.currentRequirement(3)" "currentRequirement(int256[],uint256[])" "$quantities" "$prices")
 estimate_at() {
   cast rpc --rpc-url "$rpc" eth_estimateGas "{\"to\":\"$margin\",\"data\":\"$1\"}" latest '{}' \
@@ -131,7 +159,7 @@ call_data=$(cast calldata "currentRequirement(int256[],uint256[])" "$quantities"
 spread=$(($(estimate_at "$call_data" $((now_ms / 1000 + 7200))) - $(estimate_at "$call_data" $((now_ms / 1000)))))
 [ "${spread#-}" -le 200 ] ||
   fail "currentRequirement's gas moves by $spread from regime $code to an unknown session, beyond the gas gate's noise"
-echo "margin current requirement: regime $code from the band's session; L2 gas $current_gas, the same within ${spread#-} in an unknown session"
+echo "margin current requirement: regime $code from the band's session, at most 5× across a closure; L2 gas $current_gas, the same within ${spread#-} in an unknown session"
 echo "margin requirement: the requirement on chain is the reference requirement; a pool without history or a stale ether price sets its bit; L2 gas \
 $(measure "margin.requirement(3)" "$requirement" "$quantities" "$prices" 172800 false) for three assets"
 
@@ -199,6 +227,9 @@ echo "margin scenarios for the six launch assets: L2 gas $(record "margin.scenar
 launch_quantities=$(list '[.vectors[] | select(.label == "100k each of the six")][0].quantities')
 echo "margin requirement of the six launch assets: L2 gas $(record "margin.requirement(6)" \
   "$(l2_gas "$(cast calldata "$requirement" "$launch_quantities" "$(list .prices)" 172800 false)" "$six")")"
+isolated=$(list '[.vectors[] | select(.label == "100k each of the six")][0].quantities | [.[0]] + [range(5) | 0]')
+echo "margin current requirement of one position among the six launch assets: L2 gas $(record "margin.currentRequirement(1 of 6)" \
+  "$(l2_gas "$(cast calldata "currentRequirement(int256[],uint256[])" "$isolated" "$(list .prices)")" "$six")")"
 
 words=$(BAND_ASSETS="NVDA TSLA SPY" "$(dirname "$0")/margin-args.sh" "$registry")
 read -r -a args <<<"$words"

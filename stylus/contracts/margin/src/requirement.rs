@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 use stylus_sdk::alloy_primitives::{I256, U256};
 
 use crate::scenario::{Set, count};
+use crate::session::leverage_floor;
 
 const PPM: i128 = 1_000_000;
 /// Largest exposure to one asset: 10 billion USD, with 18 decimals.
@@ -168,11 +169,12 @@ pub fn requirement(
     depths: &[u32],
     pools: &[Pool],
 ) -> (U256, u8) {
-    let (open, closed, missing) = requirements(set, exposures, prices, depths, pools);
+    let (open, closed, _, missing) = requirements(set, exposures, prices, depths, pools);
     (if spans_closure { closed } else { open }, missing)
 }
 
-/// [`requirement`] over the open market and across a closure, and the missing bits.
+/// [`requirement`] over the open market and across a closure, the [`leverage_floor`] with the same
+/// [`liquidity`] add-on, and the missing bits.
 #[inline(never)]
 pub fn requirements(
     set: &Set,
@@ -180,12 +182,13 @@ pub fn requirements(
     prices: &[U256],
     depths: &[u32],
     pools: &[Pool],
-) -> (U256, U256, u8) {
+) -> (U256, U256, U256, u8) {
     let (open, closed) = scenario_requirements(set, exposures);
     let (addon, missing) = liquidity(exposures, prices, set.parameters().gaps, depths, pools);
     (
         U256::from(open) + addon,
         U256::from(closed) + addon,
+        leverage_floor(exposures) + addon,
         missing,
     )
 }
@@ -276,6 +279,7 @@ pub fn liquidity_addon(
 mod tests {
     use super::*;
     use crate::scenario::Parameters;
+    use crate::session::{RAMP_MS, Regime, current};
     use crate::uniswap::{classify, mean, terms};
     use proptest::prelude::*;
     use stylus_sdk::alloy_primitives::{Address, aliases::U160, hex};
@@ -588,6 +592,38 @@ mod tests {
     }
 
     #[test]
+    fn the_leverage_floor_comes_on_top_of_the_liquidity_addon() {
+        let parameters = three();
+        let set = Set::new(&parameters, 256, DAYS_2);
+        let exposures = [3_000_000 * DOLLAR, -1_000_000 * DOLLAR, 0];
+        let prices = [22_886_000_000u64, 35_802_000_000, 76_779_000_000].map(U256::from);
+        let depths = [
+            2_000_000, 1_500_000, 900_000, 700_000, 40_000_000, 30_000_000,
+        ];
+        let pools = [Pool::Unread { fee: 500 }; 3];
+        let (addon, _) = liquidity(&exposures, &prices, &GAPS, &depths, &pools);
+        assert!(addon > U256::ZERO);
+        let (_, _, floor, missing) = requirements(&set, &exposures, &prices, &depths, &pools);
+        assert_eq!(floor, U256::from(800_000 * DOLLAR) + addon);
+        assert_eq!(missing, 0b011);
+    }
+
+    #[test]
+    fn at_no_horizon_only_the_single_position_floor_and_the_addon_remain() {
+        let parameters = three();
+        let set = Set::new(&parameters, 256, 0);
+        let exposures = [100_000 * DOLLAR, 99_000 * DOLLAR, -99_000 * DOLLAR];
+        let prices = [22_886_000_000u64, 35_802_000_000, 76_779_000_000].map(U256::from);
+        let depths = [
+            2_000_000, 1_500_000, 900_000, 700_000, 40_000_000, 30_000_000,
+        ];
+        let pools = [Pool::Unread { fee: 500 }; 3];
+        let (addon, _) = liquidity(&exposures, &prices, &GAPS, &depths, &pools);
+        let (open, _, _, _) = requirements(&set, &exposures, &prices, &depths, &pools);
+        assert_eq!(open, U256::from(15_000 * DOLLAR) + addon);
+    }
+
+    #[test]
     fn a_hedge_still_pays_for_one_leg_gapping_alone_across_a_closure() {
         let gaps = [200_000, 135_345, 54_840];
         let parameters = Parameters {
@@ -801,6 +837,36 @@ mod tests {
             let set = Set::new(&parameters, 256, DAYS_2);
             let larger = exposures.map(|e| e * times);
             prop_assert!(scenario_requirement(&set, &larger, closure) >= scenario_requirement(&set, &exposures, closure));
+        }
+
+        #[test]
+        fn isolating_a_position_never_frees_margin(
+            exposures in proptest::array::uniform3(prop_oneof![-10_000_000 * DOLLAR..10_000_000 * DOLLAR, -1_000i128..1_000]),
+            code in 0u8..4,
+            elapsed in 0u64..RAMP_MS,
+            fee in prop_oneof![Just(None), Just(Some(500u32)), Just(Some(3_000u32))],
+        ) {
+            let parameters = three();
+            let set = Set::new(&parameters, 256, DAYS_2);
+            let prices = [22_886_000_000u64, 35_802_000_000, 76_779_000_000].map(U256::from);
+            let depths = [2_000_000, 1_500_000, 900_000, 700_000, 40_000_000, 30_000_000];
+            let pools = [fee.map_or(Pool::Absent, |fee| Pool::Unread { fee }); 3];
+            let regime = match code {
+                0 => Regime::Unknown,
+                1 => Regime::Closed,
+                2 => Regime::Open,
+                _ => Regime::Closing { elapsed_ms: elapsed },
+            };
+            let now = |e: &[i128; 3]| {
+                let (open, closed, floor, _) = requirements(&set, e, &prices, &depths, &pools);
+                current(open, closed, floor, regime)
+            };
+            let isolated = (0..3).fold(U256::ZERO, |sum, i| {
+                let mut alone = [0; 3];
+                alone[i] = exposures[i];
+                sum + now(&alone)
+            });
+            prop_assert!(now(&exposures) <= isolated + U256::from(8 * 3));
         }
 
         #[test]

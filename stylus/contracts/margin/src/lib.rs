@@ -32,7 +32,7 @@ use crate::error::{
 use crate::matrix::{ONE, pair, positive_definite};
 use crate::requirement::{Pool, PoolTerms, exposures, requirements};
 use crate::scenario::{Parameters, SIZES, Set, count};
-use crate::session::{HORIZON, current, regime, starved};
+use crate::session::{HORIZON, WEEKEND_LEVERAGE, current, regime, starved};
 
 /// Most assets the engine takes: the exact positive-definiteness check stays within 256 bits up to 9.
 pub const MAX_ASSETS: usize = 8;
@@ -500,15 +500,17 @@ impl Margin {
         horizon: u64,
         spans_closure: bool,
     ) -> Result<(U256, u8), MarginError> {
-        let (open, closed, missing) = self.requirements(&quantities, &prices, horizon)?;
+        let (open, closed, _, missing) = self.requirements(&quantities, &prices, horizon)?;
         Ok((if spans_closure { closed } else { open }, missing))
     }
 
     /// The margin a portfolio needs now, in USD with 18 decimals, the bits of `requirement`, and the regime
     /// the band's session puts it in: 0 unknown, 1 closed, 2 open, 3 closing. The horizon is two days in
     /// every regime. The open market adds a 25% buffer. A closure, or a session the band cannot tell,
-    /// needs the larger of that and the requirement across a closure, which counts the weekend-gap
-    /// scenarios; the seven hours before a weekend or holiday session close rise to it in a straight line.
+    /// needs the largest of that, the requirement across a closure, which counts the weekend-gap scenarios,
+    /// and the gross value over `weekendLeverage()` plus the liquidity add-on; the seven hours before a
+    /// weekend or holiday session close rise to it in a straight line. A position margined alone, as an
+    /// isolated one is, is the portfolio that holds only it.
     /// A call that leaves the band's `session()` too little gas reverts with `InsufficientGas` rather than
     /// read as an unknown session.
     pub fn current_requirement(
@@ -516,14 +518,20 @@ impl Margin {
         quantities: Vec<I256>,
         prices: Vec<U256>,
     ) -> Result<(U256, u8, u8), MarginError> {
-        let (open, closed, missing) = self.requirements(&quantities, &prices, HORIZON)?;
+        let (open, closed, floor, missing) = self.requirements(&quantities, &prices, HORIZON)?;
         let before = self.vm().evm_gas_left();
         let session = session::read(self.vm(), self.band.get());
         if session.is_none() && starved(before, self.vm().evm_gas_left()) {
             return Err(MarginError::InsufficientGas(InsufficientGas {}));
         }
         let regime = regime(session, self.vm().block_timestamp().saturating_mul(1_000));
-        Ok((current(open, closed, regime), missing, regime.code()))
+        Ok((current(open, closed, floor, regime), missing, regime.code()))
+    }
+
+    /// The most gross exposure the current requirement allows per unit of margin across a closure, in basis
+    /// points.
+    pub fn weekend_leverage(&self) -> u32 {
+        WEEKEND_LEVERAGE
     }
 }
 
@@ -553,14 +561,15 @@ impl IOwnable2Step for Margin {
 }
 
 impl Margin {
-    /// The requirement of a portfolio over the open market and across a closure, and its missing bits.
+    /// The requirement of a portfolio over the open market and across a closure, its leverage floor with the
+    /// liquidity add-on, and its missing bits.
     #[inline(never)]
     fn requirements(
         &self,
         quantities: &[I256],
         prices: &[U256],
         horizon: u64,
-    ) -> Result<(U256, U256, u8), MarginError> {
+    ) -> Result<(U256, U256, U256, u8), MarginError> {
         let (symbols, volatilities, correlations, gaps, market) = self.parameters();
         let n = symbols.len();
         if quantities.len() != n || prices.len() != n {
@@ -572,7 +581,7 @@ impl Margin {
             })
         })?;
         if exposures.iter().all(|&e| e == 0) {
-            return Ok((U256::ZERO, U256::ZERO, 0));
+            return Ok((U256::ZERO, U256::ZERO, U256::ZERO, 0));
         }
         let parameters = Parameters {
             symbols: &symbols,
@@ -1783,6 +1792,12 @@ mod tests {
             .unwrap();
         let buffered = (open * U256::from(5)).div_ceil(U256::from(4));
         assert!(closed > buffered);
+        assert_eq!(margin.weekend_leverage(), 50_000);
+        let gross = prices.iter().fold(U256::ZERO, |sum, &p| {
+            sum + p * U256::from(10_000_000_000u64)
+        });
+        let across = closed.max((gross * U256::from(10_000)).div_ceil(U256::from(50_000)));
+        assert!(across > closed);
         let now = 1_790_000_000u64;
         vm.set_block_timestamp(now);
         let call = hex::decode("5e3568b8").unwrap();
@@ -1796,17 +1811,17 @@ mod tests {
         assert_eq!(at((2, 1, 2, 0, 0)), (buffered, 0b111, 2));
         assert_eq!(
             at((1, 3, 1, 0, now * 1_000 + 3_600_000)),
-            (closed, 0b111, 1)
+            (across, 0b111, 1)
         );
         let (value, _, code) = at((2, 3, 1, 0, now * 1_000 + 12_600_000));
         assert_eq!(code, 3);
-        assert_eq!(value, buffered + (closed - buffered) / U256::from(2));
+        assert_eq!(value, buffered + (across - buffered) / U256::from(2));
         vm.mock_static_call(band, call.clone(), Err(vec![]));
         assert_eq!(
             margin
                 .current_requirement(holding.clone(), prices.clone())
                 .unwrap(),
-            (closed, 0b111, 0)
+            (across, 0b111, 0)
         );
         vm.set_gas_left(0);
         assert_eq!(
@@ -1820,7 +1835,7 @@ mod tests {
         assert_eq!(without.band(), Address::ZERO);
         assert_eq!(
             without.current_requirement(holding, prices).unwrap(),
-            (closed, 0b111, 0)
+            (across, 0b111, 0)
         );
     }
 }
