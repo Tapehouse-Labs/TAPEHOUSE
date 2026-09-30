@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: deploy-stylus-deployer.sh RPC_URL PRIVATE_KEY
 # Deploys the deterministic-deployment proxy and StylusDeployer at their canonical addresses on a
 # Nitro dev node whose chain owner is PRIVATE_KEY. Skips whatever is already deployed.

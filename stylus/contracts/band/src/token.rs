@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Reads of Robinhood Stock Tokens through their ERC-8056 multiplier interface.
 
 use stylus_sdk::alloy_primitives::Address;

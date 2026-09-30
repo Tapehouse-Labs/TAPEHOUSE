@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: band-args.sh DEPLOYMENTS_JSON
 # Prints the band constructor arguments as nine shell words: symbols, Chainlink feeds, RedStone feed IDs,
 # index feed IDs, Stock Tokens, the halt signer, the owner, the L2 sequencer-uptime feed and whether

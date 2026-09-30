@@ -1,2 +1,3 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # The scripts assert with `test && test || fail`, where fail exits.
 disable=SC2015

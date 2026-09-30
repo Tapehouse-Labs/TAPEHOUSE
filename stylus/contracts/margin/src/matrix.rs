@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Validity of a correlation matrix given in basis points, with 10 000 on the diagonal.
 
 use stylus_sdk::alloy_primitives::I256;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The portfolio requirement: expected shortfall at 99% over the scenario set, capped diversification,
 //! stress rows, reference floors and the liquidity add-on. Amounts are USD with 18 decimals.
 

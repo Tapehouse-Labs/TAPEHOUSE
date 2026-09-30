@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: Tapehouse contributors
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Reads of Uniswap v3 pools and Chainlink feeds, and the pool arithmetic the liquidity add-on needs.
 
 use stylus_sdk::alloy_primitives::{Address, U256, aliases::U160};
@@ -135,8 +137,11 @@ pub fn mean(
     Some((i32::try_from(tick).ok()?, u128::try_from(liquidity).ok()?))
 }
 
-/// √(1.0001^`tick`) as a Q64.96, exactly as Uniswap's `TickMath.getSqrtRatioAtTick`. `tick` lies within
-/// [`MIN_TICK`, `MAX_TICK`].
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2023 Universal Navigation Inc.
+// SPDX-License-Identifier: MIT
+/// √(1.0001^`tick`) as a Q64.96, exactly as Uniswap v4-core's `TickMath.getSqrtPriceAtTick`, whose factors
+/// this uses. `tick` lies within [`MIN_TICK`, `MAX_TICK`].
 pub fn sqrt_ratio_at_tick(tick: i32) -> U256 {
     const FACTORS: [u128; 19] = [
         0xfff97272373d413259a46990580e213a,
@@ -180,6 +185,7 @@ pub fn sqrt_ratio_at_tick(tick: i32) -> U256 {
     };
     (ratio >> 32) + U256::from(rounded)
 }
+// SPDX-SnippetEnd
 
 /// From a pool's mean `tick` and `liquidity`: the asset's price in USD with 8 decimals, and the USD with 18
 /// decimals the pool pays out for a 10% fall and takes in for a 10% rise at that liquidity. `usd` is the

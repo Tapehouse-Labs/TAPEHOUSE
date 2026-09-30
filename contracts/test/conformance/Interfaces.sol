@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT OR Apache-2.0
 pragma solidity 0.8.37;
 
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
@@ -149,6 +149,7 @@ interface IUSDG is IERC20 {
     error ContractPaused();
     error AddressFrozen();
     error FacetNotFound();
+    error AddressNotFrozen();
 
     function owner() external view returns (address);
     function defaultAdmin() external view returns (address);
@@ -163,6 +164,7 @@ interface IUSDG is IERC20 {
     function unpause() external;
     function isFrozen(address addr) external view returns (bool);
     function freeze(address addr) external;
+    function wipeFrozenAddress(address addr) external;
     function upgradeToAndCall(address newImplementation, bytes calldata data) external payable;
 }
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 import type { Metadata, Viewport } from "next";
 import { Archivo, Inter_Tight, Spline_Sans_Mono } from "next/font/google";
 import "./globals.css";

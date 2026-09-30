@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT OR Apache-2.0
 pragma solidity 0.8.37;
 
 /// @title Tapehouse band
@@ -18,6 +18,13 @@ interface IBand {
         external
         view
         returns (uint8 state, uint8 nyse, uint8 nyseNext, uint64 changeMs, uint64 boundaryMs);
+
+    /// @notice The multiplier change of `symbol`'s Stock Token as it affects the band now: its status (0 none,
+    /// 1 scheduled, 2 not yet confirmed by Chainlink), when it takes effect, and the multipliers before and after.
+    function corporateAction(bytes32 symbol)
+        external
+        view
+        returns (uint8 status, uint64 effectiveAt, uint128 multiplierBefore, uint128 multiplierAfter);
 
     /// @notice The trading halt of `symbol`: whether a halt signed by Tapehouse's halt signer holds, until
     /// when, when its last message was issued, and whether the issuer has paused the token's oracle.

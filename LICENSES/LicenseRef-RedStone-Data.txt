@@ -1,0 +1,9 @@
+RedStone data packages
+
+The files this identifier covers are data packages signed by RedStone Oracles' data providers, fetched
+unmodified from RedStone's public gateway (redstone-primary-prod) and kept as test vectors for the
+independent verification of RedStone's payload format in this repository.
+
+RedStone publishes no licence for its data packages. Tapehouse contributors claim no copyright in
+them and grant no licence to them: any use beyond this repository's tests is subject to RedStone's own
+terms.

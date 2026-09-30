@@ -19,6 +19,7 @@ Portfolio margin for Stock Tokens on Robinhood Chain.
 | pnpm | 12.5.1, from `packageManager` | `corepack enable pnpm` |
 | Foundry | 1.8.3 | `foundryup --install v1.8.3` |
 | Slither | 0.11.6 | `pipx install --force slither-analyzer==0.11.6` |
+| REUSE | 6.2.0 | `pipx install --force 'reuse[charset-normalizer]==6.2.0'` — for `make lint` |
 | Rust | 1.91.0, from `stylus/rust-toolchain.toml` | [rustup](https://rustup.rs) installs it on first use |
 | cargo-stylus | 0.10.9 | `cargo install --locked --force cargo-stylus@0.10.9` |
 | Binaryen | 133, from `stylus/Stylus.toml` | `make` downloads it on first use into `$XDG_CACHE_HOME/binaryen` (default `~/.cache/binaryen`), checked against a pinned SHA-256 |
@@ -42,7 +43,7 @@ make test
 |---|---|
 | `make build` | Builds every component |
 | `make test` | Runs every test suite |
-| `make lint` | Formatting, lint, static analysis and ShellCheck of the scripts |
+| `make lint` | Formatting, lint, static analysis, ShellCheck of the scripts and `reuse lint` |
 | `make coverage` | Solidity coverage, failing below 95% of lines or branches |
 | `make gas` | Contract sizes, gas snapshots and WASM sizes, failing on any change; the Stylus fragment count needs network access to Robinhood Chain |
 | `make snapshot` | Regenerates the gas snapshots and `stylus/.wasm-size`; commit the result |
@@ -57,6 +58,12 @@ make test
 | `make verify-stylus CHAIN=<id> TX=<hash> [CONTRACT=margin]` | Verifies a deployment of `band`, or of the program `CONTRACT` names, against the checked-out source |
 | `make deploy-band-feeds CHAIN=<id> SIGNER='<flags>'` | Deploys a `BandFeed` for every launch asset the chain's band configures and prints each address |
 | `make verify-band-feeds CHAIN=<id>` | Verifies every feed in the registry's `.bandFeeds` on Sourcify |
+| `make simulate-supply-vault` | Simulates the supply vault's deployment on a pinned fork of Robinhood Chain |
+| `make deploy-supply-vault CHAIN=<id> SIGNER='<flags>'` | Deploys the supply vault with `forge script`, configured from `deployments/<id>.json`, and records it there |
+| `make verify-supply-vault CHAIN=<id>` | Verifies the registry's supply vault on Sourcify |
+| `DEBT_CAP=<units> WEEKEND_DEBT_CAP=<units> PREMIUM_RATE=<bps a year> RESERVE_SHARE=<bps> make deploy-margin-accounts CHAIN=<id> SIGNER='<flags>'` | Deploys the margin accounts with `forge create`, each asset capped at its selling depth and with the weekend premium's rate and the reserve's share, records them in `deployments/<id>.json`, makes them the supply vault's borrower and the owner their guardian; the signer owns the vault |
+| `make verify-margin-accounts CHAIN=<id>` | Verifies the registry's margin accounts on Sourcify |
+| `make deploy-contracts-devnode test-contracts-devnode` | Deploys the supply vault and the margin accounts to the dev node and checks loans through them against the band and margin programs |
 
 ## Networks
 
@@ -373,6 +380,47 @@ The dev-node suite measures both on the same calls, in L2 gas. `make devnode dep
 - **A real pool read costs the same work from either side:** both run the pool's own Solidity. In the fork, at block 75,093,578, reading and pricing the six launch pools and ETH/USD adds 458,971 gas to the reference's requirement, 76,495 per pool. The dev node's stub pools cost far less.
 - **`wasm-opt` is worth 2% of size and 3% to 5% of gas.** Deployed without the `[wasm-opt]` tables on the dev node, `margin` compresses to 53,446 bytes against 52,282, and costs 294,039 for the three-asset requirement against 284,014, 219,433 for `scenarioDigest(256)` against 209,547, and 100,055 for `assets()` against 94,636.
 
+## The supply vault
+
+`SupplyVault` holds the USDG that margin accounts borrow. Lenders deposit USDG and receive `thUSDG` shares, an [ERC-4626](https://eips.ethereum.org/EIPS/eip-4626) vault built on OpenZeppelin Contracts 5.7.0, and earn all the interest the borrower pays.
+
+- **One borrower, set once.** The owner sets the borrower once, Tapehouse's margin accounts, and can never change it. The vault takes no deposit until then, so no lender's USDG can be lent to a borrower chosen after it was deposited. The vault lends only USDG that lenders deposited here.
+- **Its own count.** The vault's assets are the USDG it holds by its own count plus what the borrower owes, interest included. USDG sent to it directly changes no share's value, and shares carry six more decimals than USDG, OpenZeppelin's virtual offset, so a first depositor cannot inflate the share price against the next.
+- **Interest.** The debt grows by a borrow index with 27 decimals, compounded at every deposit, withdrawal, loan and repayment, so no amount of accruals rounds interest away. It is always rounded up, in lenders' favour.
+- **Liquidity.** A lender withdraws up to the USDG the vault holds; the rest returns as the borrower repays. Only the borrower repays, so what each of its accounts owes adds up to the vault's debt, but for the few units Morpho's virtual shares hold.
+- **Losses.** Lenders bear last whatever the borrower cannot repay and the Gap Backstop does not cover: the borrower writes that debt off, and every share loses its part.
+- **The rate.** The borrow rate rises with utilisation, the share of the vault's assets lent, in two straight lines: from 0% at no utilisation to 6% a year at 90%, then to 46% at full utilisation. Lenders earn the borrow rate on the share lent: 5.4% a year at 90%. The owner may change the model at once, until ownership moves to a timelock, within the bounds Aave v3.1 and later set for their own two-slope rates: the kink between 1% and 99% utilisation, the second slope at least the first, and at most 1,000% a year in all. Interest accrues at the old rate up to the change.
+- **Why these numbers.** On 29 September 2026, Morpho's four largest USDG markets against Stock Tokens on Robinhood Chain, about $700,000 in all and mostly one borrower's, ran at 99.98% to 100% utilisation and paid lenders 4.8% to 7.9%. USDG's largest vault, Steakhouse's, paid 3.7% on $507 million. 5.4% at 90% sits between the two and keeps a tenth of the vault liquid.
+- **USDG's issuer.** Paxos can pause USDG or freeze an address, and then wipe a frozen address's balance; one address holds all three powers, and USDG's timelock delays only upgrades (24 hours on Robinhood Chain, one on its testnet). While USDG is paused, the vault frozen, or its balance below its own count, every `max*` view returns zero, so deposits and withdrawals revert with ERC-4626's `ERC4626ExceededMax…`, and loans and repayments with USDG's own `ContractPaused()` or `AddressFrozen()`. If the issuer wipes the vault, it stays closed until `sync()`, which anyone may call, brings its count down to its balance: lenders' shares lose what was wiped, and no later deposit pays for it.
+- **Permits.** `depositWithPermit` deposits with a USDG permit. USDG's EIP-712 domain is "Global Dollar", version 1, and it has no `eip712Domain()`: wallets build the domain from those two values. A permit already spent, as by a front-runner, does not stop the deposit.
+
+Reads: `debt()`, `idle()`, `utilization()`, `borrowRate()`, `supplyRate()`, `borrowIndex()` and `rateModel()`, with the ERC-4626 views; rates are a year, with 18 decimals.
+
+`make deploy-supply-vault` deploys with `forge script`, then a separate `Register` script records the address in `deployments/<id>.json` from Foundry's broadcast files, only for a deployment whose transaction succeeded.
+
+## The margin accounts
+
+`MarginAccounts` is where a borrower holds collateral and borrows USDG from the supply vault, the vault's one borrower.
+
+- **Positions.** Each address has a cross position and, for any asset it chooses, an isolated position named by the asset's symbol. A position holds Stock Tokens, USDG and WETH and has its own debt. An asset sits in one position of an account at a time: in slices, it would pay less liquidity add-on than whole. An isolated position is margined alone, so it gets no diversification and its loss never reaches the cross position.
+- **Prices.** Stock Tokens are held in raw units and valued at the low edge of their band, which already carries the token's multiplier. A degraded band, such as the hours after a reopen before Chainlink prints, backs debt at its low edge like any other. A halted band counts for nothing. WETH counts for 80% of its Chainlink price, Aave v3's loan-to-value for WETH on Arbitrum, and for nothing when that price is over a day old. USDG counts at par, the unit debt is owed in.
+- **The requirement.** Borrowing, and withdrawing from a position in debt, need the position's equity, its collateral less its debt, to meet the engine's `currentRequirement` over its Stock Tokens at those prices. A position without Stock Tokens needs only non-negative equity. A position holding USDG does not borrow: it repays with that USDG first, with `repayWithCollateral`, so no position borrows against the currency it owes.
+- **What closes.** Deposits and repayments stay open whatever the band, the session and the guardian; a deposit still stops at its cap or the issuer's pause or blocklist, and a repayment while USDG is paused. Borrowing stops while USDG's issuer has frozen the accounts, since no repayment could come back. Borrowing and withdrawing from a position in debt close for a position holding an asset whose band is halted, whose Stock Token has a multiplier change pending, or whose liquidity the engine cannot read; for any position while the L2 sequencer is not settled; and for a position holding Stock Tokens while the band cannot tell the session.
+- **The weekend cap.** From the regular open on the last trading day before a weekend or holiday close until the reopening, a loan or withdrawal must leave the position's gross exposure to Stock Tokens at most five times its equity, `weekendLeverage`; a position holding only USDG and WETH has none. `leverage(account, position)` gives it, in basis points.
+- **Debt.** The vault holds all the accounts' debt as one. Each position owns borrow shares of it, with Morpho Blue's virtual offsets, so interest accrues once, in the vault. Only the accounts repay the vault, so its debt falls only as shares are retired; anyone may repay a position through the accounts. Collateral USDG is never lent.
+- **Liquidation price.** `liquidationPrice(account, position, symbol, borrowing)` searches, through the engine, for the price of one asset at which the position stops meeting its requirement once it owes `borrowing` more, every other price and pool fixed, to within a 2^14th of the current price, so a borrower sees it before signing. While the band cannot tell the session, the requirement it meets is the closed one: the price at which borrowing stops.
+- **Losses.** A liquidator, set once by the owner, seizes a position's collateral and writes off what the emptied position still owes: its borrow shares are retired and the vault writes the same amount off, so lenders bear it and no other position's debt moves.
+- **Authorization.** An account may let another address, such as a router, borrow, withdraw and repay with collateral for it, and deposit Stock Tokens and USDG into it (`setAuthorization`). Anyone may deposit WETH into an account and repay its debt.
+- **The issuer's controls.** Robinhood can pause every Stock Token at once, or one, blocklist an address, the accounts' included, and burn from any address. A paused Stock Token, or one whose issuer has blocklisted the accounts, makes its own deposits, withdrawals and seizures revert with the issuer's `IsPaused()` or `Blocked(address)`; it is still valued at its band, but since it could not be seized it backs no new risk: a position holding it borrows nothing and withdraws nothing while in debt (`AssetFrozen(symbol)`), as a frozen reserve takes no new loans in Aave. Other tokens, and positions without it, carry on. An account the issuer has blocklisted cannot move its Stock Tokens through the accounts either, nor borrow or withdraw in debt from a position holding them (`Blocked(account)`), though it can repay, and a liquidator can still seize them.
+- **Burns.** Each position's Stock Tokens are units of the accounts' holding of that asset. If the issuer burns from the accounts, `sync(symbol)`, which anyone may call and every call touching the asset calls first, brings every holding of it down in proportion: the accounts cannot tell whose tokens the issuer meant, so that asset's holders share the burn, rather than the last to withdraw bearing all of it. A position the burn leaves short goes through the loss cascade like any other: its collateral, then the backstop, then lenders; no other asset's holders are touched. A holding never rises: tokens sent to the accounts are credited to no one and only absorb a later burn. A holding a burn leaves worth nothing gates nothing, and anyone may clear it (`clear(account, position, symbol)`), as a write-off does; an asset burned entirely takes deposits again once every holding of it is cleared.
+- **Caps.** Set in the constructor: each asset's holding, at most its selling depth in the engine over the token's price when deployed, since the engine charges every position as if it had the pool to itself; the positions' total debt; and, from the regular open on the last trading day before a closure until the reopening, or while the band cannot tell the session, the total debt a new loan may reach; debt taken before then still crosses the closure, so `debtCap` is what bounds it. A cap in tokens moves with the token's price. `holding(symbol)`, `debtCap` and `weekendDebtCap` give them.
+- **The guardian,** set by the owner, can pause new borrowing and withdrawals from positions in debt; deposits, repayments, seizures and write-offs stay open.
+- **The weekend premium.** While the 24/5 session is closed, over weekends and holidays from the post-market's end to the reopening, each position's debt carries a premium of `premiumRate` basis points a year on top of the vault's interest. The vault never lends or sees it: it is owed to the accounts beside the debt, counts against the position's equity but not against the caps, and a position owing only premium is in debt like any other. A repayment pays the debt first and the premium after, so lenders are paid before the backstop. Of each premium paid, `reserveShare` goes to the fee reserve and the rest is set aside for the backstop, which the owner sets once and which claims it with `claimPremium`. The owner sets the rate, at most 100% a year, from the change on, closed time before it accruing at the old rate, and sends the reserve on with `withdrawReserve`. A write-off forgives the premium.
+- **Premium timing.** `accruePremium`, which anyone may call and every loan, repayment, write-off, withdrawal in debt and rate change calls first, records each closure from the band's `session()`: its close while ahead, from the regular open on the last trading day, and its reopening while closed. A closure recorded at both ends accrues exactly from its close to its reopening, whenever the accounts are called. Otherwise the premium counts only time seen closed: a closure first seen closed accrues from then, one whose reopening is never seen stops at its last accrual while closed, and a spell the band cannot tell the session counts only once the same closure is seen closed after it. A closed session is taken as the recorded closure only if it reopens within 72 hours of that closure's close, the longest a weekend and a holiday run; a longer closure accrues from when it is seen.
+- **Fixed at deployment.** The band, the engine, the vault, the caps and the reserve's share cannot be changed. A new band or engine, such as one with a new asset, means new accounts and, since the vault's borrower is set once, a new vault.
+
+Reads: `health(account, position)` (equity and requirement in USD with 18 decimals, the engine's missing bits and regime; the equity net of the premium), `stocks`, `debt`, `debtShares`, `totalDebtShares`, `premium`, `premiumIndex`, `collateral`, `leverage`, `liquidationPrice`, `isAuthorized`, `holding`, `debtCap`, `weekendDebtCap`, `liquidator`, `guardian`, `borrowingPaused`, `premiumRate`, `reserveShare`, `closure`, `reserve`, `backstopPremium` and `backstop`. The views count a burn once it is synced.
+
 ## Verification
 
 Every deployed Stylus program can be rebuilt from this repository and compared byte for byte with the code on chain, fragment by fragment. `make deploy-stylus` and `make verify-stylus` run `cargo-stylus` in the Docker image that `cargo stylus deploy` and `cargo stylus verify` use for reproducible builds (`offchainlabs/cargo-stylus-base` plus the toolchain in `stylus/rust-toolchain.toml`, linux/amd64), on the staged content of `stylus/`, so untracked files and unstaged edits never enter the build.
@@ -402,3 +450,18 @@ Each deployment below verifies from the commit that added its row: `git log --re
 | 42161 | band | `0xa0c0Cb25F5504395fB977DA7186a7B68cBcfa8Eb` | `0x48f8a4eb8629970093c70e250c14037f360b2f380282d11f6e113a17bd408a12` |
 | 46630 | margin | `0x0FB6856c36c25e01190d6a8f2eBbE28aCA05a341` | `0xb6192ef3b615fdc2254eb718178ea74c0d83e7670b4301bd0fabf1c980eb0a38` |
 | 46630 | margin | `0x9B2DB8135222d7B05aEA29B54aE0317E8640D6B0` | `0x311698b2648cf30aa5a1ab9fcca23aeb1f6fb8db0a780c83e844e4cbe66cd5db` |
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <https://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
+
+at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this repository by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+
+The repository follows the [REUSE](https://reuse.software) specification: every file states its license, in an SPDX header or in `REUSE.toml`, which also records the origin and license of the few files that come from others. The landing's generated images are CC0-1.0: machine-generated images may carry no copyright, and whatever rights the contributors hold are waived. `make lint` runs `reuse lint`.
+
+The libraries in `contracts/lib` keep their own licenses. `BandFeed` compiles in Uniswap v3's `OracleLibrary`, `TickMath` and `IUniswapV3Pool`, which are GPL-2.0-or-later. Taking `BandFeed.sol` under MIT, its deployed bytecode is a combined work under GPL-2.0-or-later, whose source is this repository; each deployed feed's exact source is the commit that deployed it.

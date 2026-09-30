@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 /** One piece of the still-life family: bone plaster, navy ground, window light. */
 export function Artwork({ src, alt, className = "" }: { src: string; alt: string; className?: string }) {
   return (

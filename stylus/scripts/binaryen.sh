@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: binaryen.sh VERSION DIR
 # Installs Binaryen VERSION into DIR from its GitHub release, checked against the SHA-256 pinned below,
 # unless DIR/bin/wasm-opt already reports VERSION. cargo-stylus runs that wasm-opt for every program whose

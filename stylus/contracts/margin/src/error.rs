@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Errors of the margin program.
 
 use ownable::{OwnableInvalidOwner, OwnableUnauthorizedAccount};

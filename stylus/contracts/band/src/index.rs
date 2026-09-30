@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! A 24/7 leg made from an index: the asset's last Chainlink print, moved by the index since.
 //!
 //! SPY has no 24/7 feed, but the S&P 500 index has one. The anchor pairs a Chainlink print with the

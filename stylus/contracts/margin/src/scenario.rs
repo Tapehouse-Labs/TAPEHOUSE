@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The scenario set: deterministic joint, comonotone and independent draws from the stored parameters,
 //! a common market shock, and weekend gap shocks for every asset at once and for each asset alone.
 

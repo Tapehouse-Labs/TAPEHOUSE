@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "./site";
 

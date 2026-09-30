@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! ERC-8056 multipliers. A Stock Token's price is its share's price times the token's multiplier, and
 //! a multiplier change is a step at `effectiveAt`. The token does not expose the multiplier it replaced,
 //! so the program records each change it sees.

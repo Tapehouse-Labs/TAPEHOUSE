@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT OR Apache-2.0
 pragma solidity 0.8.37;
 
 import {Test, Vm} from "forge-std/Test.sol";
@@ -131,6 +131,22 @@ contract UsdgForkTest is Test {
         vm.expectRevert(IUSDG.AddressFrozen.selector);
         vm.prank(morpho);
         usdg.transfer(holder, 1e6);
+    }
+
+    function test_UsdgWipesOnlyAFrozenAddressBalance() public {
+        address holder = makeAddr("holder");
+        vm.prank(morpho);
+        usdg.transfer(holder, 1_000e6);
+        uint256 supply = usdg.totalSupply();
+        vm.expectRevert(IUSDG.AddressNotFrozen.selector);
+        vm.prank(OPERATOR);
+        usdg.wipeFrozenAddress(holder);
+        vm.startPrank(OPERATOR);
+        usdg.freeze(holder);
+        usdg.wipeFrozenAddress(holder);
+        vm.stopPrank();
+        assertEq(usdg.balanceOf(holder), 0);
+        assertEq(usdg.totalSupply(), supply - 1_000e6);
     }
 
     function _signPermit(Vm.Wallet memory owner, address spender, uint256 value, uint256 deadline)

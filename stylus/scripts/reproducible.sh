@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: reproducible.sh deploy RPC_URL CONTRACT SIGNER -- CONSTRUCTOR_ARGS...
 #        reproducible.sh verify RPC_URL DEPLOYMENT_TX CONTRACT
 # Runs cargo-stylus in the image that `cargo stylus deploy` and `cargo stylus verify` build for

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The price band: centre, half-width, bounds and state from both legs, in integer arithmetic.
 //!
 //! Prices carry 8 decimals, widths are in basis points, and the variance is in centi-basis-points

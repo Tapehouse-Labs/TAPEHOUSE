@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Verification of RedStone signed data packages, matching
 //! `PrimaryProdDataServiceConsumerBase` in `@redstone-finance/evm-connector` 1.0.0.
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 #![cfg_attr(not(any(test, feature = "export-abi")), no_main)]
 
 #[cfg(not(any(test, feature = "export-abi")))]

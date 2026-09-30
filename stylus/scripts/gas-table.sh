@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: gas-table.sh [REPORT]
 # Prints, as a Markdown table, every call the dev-node suite measured on both the margin program and its Solidity
 # reference, from REPORT (stylus/.gas-devnode by default): the L2 gas of each and the reference's over the program's.

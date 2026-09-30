@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: devnode-reference-e2e.sh RPC_URL PRIVATE_KEY MARGIN_ADDRESS DEPLOYMENTS_JSON
 # Deploys the Solidity reference of the margin engine, contracts/test/reference/MarginReference.sol, with the margin
 # program's constructor arguments for NVDA, TSLA and SPY, checks that it answers every view the program answers to the

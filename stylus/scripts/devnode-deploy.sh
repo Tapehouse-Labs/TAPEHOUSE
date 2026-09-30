@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: devnode-deploy.sh RPC_URL PRIVATE_KEY
 # Deploys stub Chainlink aggregators for NVDA, TSLA, SPY and ETH, stub Stock Tokens for NVDA and SPY, a stub
 # USDG and WETH, and stub NVDA/USDG and SPY/WETH pools holding the real pools' mean ticks and liquidity on
 # 28 September 2026, the SPY pool with the Stock Token as token0, writes
 # them to stylus/target/devnode-registry.json with Anvil's second test account as the halt signer and the
 # deploying account as the owner, and deploys the band and margin programs configured from that file through
-# StylusDeployer, writing the band into the file before margin. Writes each program's address to
-# stylus/target/devnode-<program>.
+# StylusDeployer, writing each program's address into the file as it is deployed. Writes each program's address
+# to stylus/target/devnode-<program>.
 set -euo pipefail
 
 rpc=$1 key=$2
@@ -32,7 +33,8 @@ create() {
 now=$(cast block --rpc-url "$rpc" latest -f timestamp)
 nvda_token=$(token 1000775159164630595)
 spy_token=$(token 1001717991187472003)
-usdg=$(create StubToken 6)
+usdg=$(forge create --root "$root/contracts" test/devnode/StubUsdg.sol:StubUsdg --rpc-url "$rpc" --private-key "$key" \
+  --broadcast --json | jq -r .deployedTo)
 weth=$(create StubToken 18)
 jq -n --arg nvda "$(stub 22900000000 "NVDA / USD")" --arg tsla "$(stub 37800000000 "TSLA / USD")" \
   --arg spy "$(stub 77232802713 "SPY / USD")" --arg eth "$(stub 268330550000 "ETH / USD")" \
@@ -62,7 +64,12 @@ deploy() {
   echo "$program deployed on the dev node at $(cat "$target/devnode-$program")."
 }
 
+record() {
+  jq --arg address "$(cat "$target/devnode-$1")" ".tapehouse.$2 = \$address" "$target/devnode-registry.json" > "$target/registry.tmp"
+  mv "$target/registry.tmp" "$target/devnode-registry.json"
+}
+
 deploy band
-jq --arg band "$(cat "$target/devnode-band")" '.tapehouse.Band = $band' "$target/devnode-registry.json" > "$target/registry.tmp"
-mv "$target/registry.tmp" "$target/devnode-registry.json"
+record band Band
 deploy margin
+record margin Margin

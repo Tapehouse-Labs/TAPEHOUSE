@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 /**
  * The continuity mark: a support, and a line that crosses it and keeps rising.
  * Construction on a 120-unit grid: constant 11-unit stroke, 8° rise,

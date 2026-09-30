@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 import Link from "next/link";
 import { Footer } from "./Footer";
 import { Mark } from "./Mark";

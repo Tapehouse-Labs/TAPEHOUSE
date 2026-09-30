@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! The band's 24/5 session, and the regime the current requirement follows through it.
 
 use stylus_sdk::alloy_primitives::{Address, U256};

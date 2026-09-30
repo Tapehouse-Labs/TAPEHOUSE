@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Errors of the band program. RedStone errors keep the reference contract's names and selectors.
 
 use ownable::{OwnableInvalidOwner, OwnableUnauthorizedAccount};

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Signed trading halts. Tapehouse's halt signer signs an EIP-712 `HaltState` per asset from
 //! Robinhood's reported trading halt; anyone may write it to the band, which holds the asset halted
 //! until the message expires or a newer one lifts it.

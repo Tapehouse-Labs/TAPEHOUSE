@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT OR Apache-2.0
 pragma solidity 0.8.37;
 
 import {IBand} from "../../src/interfaces/IBand.sol";
@@ -28,6 +28,13 @@ contract BandDouble is IBand {
         bool oraclePaused;
     }
 
+    struct CorporateAction {
+        uint8 status;
+        uint64 effectiveAt;
+        uint128 multiplierBefore;
+        uint128 multiplierAfter;
+    }
+
     struct Asset {
         address chainlinkFeed;
         bytes32 redstoneFeedId;
@@ -39,6 +46,7 @@ contract BandDouble is IBand {
     mapping(bytes32 => Halt) public halts;
     mapping(bytes32 => Asset) public assets;
     mapping(bytes32 => uint128) public variances;
+    mapping(bytes32 => CorporateAction) public corporateActions;
     Session public currentSession;
     address public sequencer;
     bool public settled = true;
@@ -59,6 +67,10 @@ contract BandDouble is IBand {
         assets[symbol] = a;
     }
 
+    function setCorporateAction(bytes32 symbol, CorporateAction calldata c) external {
+        corporateActions[symbol] = c;
+    }
+
     function setVariance(bytes32 feedId, uint128 v) external {
         variances[feedId] = v;
     }
@@ -76,6 +88,11 @@ contract BandDouble is IBand {
     function session() external view returns (uint8, uint8, uint8, uint64, uint64) {
         Session memory s = currentSession;
         return (s.state, s.nyse, s.nyseNext, s.changeMs, s.boundaryMs);
+    }
+
+    function corporateAction(bytes32 symbol) external view returns (uint8, uint64, uint128, uint128) {
+        CorporateAction memory c = corporateActions[symbol];
+        return (c.status, c.effectiveAt, c.multiplierBefore, c.multiplierAfter);
     }
 
     function halt(bytes32 symbol) external view returns (bool, uint64, uint64, bool) {

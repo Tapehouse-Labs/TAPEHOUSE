@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Reads of Chainlink data feeds through `AggregatorV3Interface`.
 
 use stylus_sdk::alloy_primitives::{Address, I256, U256};

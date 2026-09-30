@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: Tapehouse contributors
+// SPDX-License-Identifier: MIT OR Apache-2.0
 import Link from "next/link";
 import { APP_URL, CONTACT_EMAIL, EXTERNAL, SECURITY_EMAIL } from "../site";
 import { Mark } from "./Mark";

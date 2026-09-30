@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! Chainlink's 24/5 session, derived from RedStone's signed New York market status.
 //!
 //! The session runs from 20:00 ET on the evening before each trading day to 20:00 ET on it. The

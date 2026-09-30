@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: check-margin.sh RPC_URL MARGIN_ADDRESS DEPLOYMENTS_JSON
 # Checks that a deployed margin program holds the assets, floors, depth ceilings, market, pools, ETH/USD feed,
 # band and owner margin-args.sh builds from DEPLOYMENTS_JSON, that each pool trades the file's Stock Token for

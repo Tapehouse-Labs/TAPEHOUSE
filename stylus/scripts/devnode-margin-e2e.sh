@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: devnode-margin-e2e.sh RPC_URL PRIVATE_KEY MARGIN_ADDRESS DEPLOYMENTS_JSON
 # Checks the margin program deployed by devnode-deploy.sh for NVDA, TSLA and SPY: its configuration against the
 # registry and the dev node's band, its scenario set and a requirement against the references in testdata, the

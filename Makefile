@@ -1,8 +1,11 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
 NODE_MAJOR := 24
 FOUNDRY_VERSION := 1.8.3
 FOUNDRY_VERSION_RE := $(subst .,\.,$(FOUNDRY_VERSION))
 SLITHER_VERSION := 0.11.6
 SLITHER_VERSION_RE := $(subst .,\.,$(SLITHER_VERSION))
+REUSE_VERSION := 6.2.0
+REUSE_VERSION_RE := $(subst .,\.,$(REUSE_VERSION))
 CARGO_STYLUS_VERSION := 0.10.9
 CARGO_STYLUS_VERSION_RE := $(subst .,\.,$(CARGO_STYLUS_VERSION))
 BINARYEN_VERSION := $(shell awk '/^\[/ { table = $$0 } table == "[wasm-opt]" && $$1 == "version" { gsub(/"/, "", $$3); print $$3 }' stylus/Stylus.toml)
@@ -21,6 +24,7 @@ RPC_URL_4663 = $(ROBINHOOD_RPC_URL)
 RPC_URL_46630 = $(ROBINHOOD_TESTNET_RPC_URL)
 RPC_URL_42161 = $(ARBITRUM_RPC_URL)
 RPC_URL_412346 = $(DEVNODE_RPC_URL)
+ROBINHOOD_FORK_BLOCK := 69922505
 SNAPSHOT_FILTER := --no-match-test '^(testFuzz|invariant|statefulFuzz)'
 ifeq ($(strip $(ROBINHOOD_RPC_URL)),)
 ROBINHOOD_RPC_URL := https://robinhood.drpc.org
@@ -37,12 +41,13 @@ endif
 export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LOGS_RPC_URL
 
 .PHONY: all build test lint coverage gas snapshot \
-	check-toolchains check-node check-foundry check-slither check-stylus check-docker submodules \
+	check-toolchains check-node check-foundry check-slither check-reuse check-stylus check-docker submodules \
 	build-apps test-apps lint-apps \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
-	deploy-band-feeds verify-band-feeds lint-scripts
+	deploy-band-feeds verify-band-feeds simulate-supply-vault deploy-supply-vault verify-supply-vault \
+	deploy-margin-accounts verify-margin-accounts deploy-contracts-devnode test-contracts-devnode lint-scripts lint-licenses
 
 all: build
 
@@ -50,7 +55,7 @@ build: build-contracts build-stylus build-apps
 
 test: test-contracts test-stylus test-apps
 
-lint: lint-contracts lint-stylus lint-apps lint-scripts
+lint: lint-contracts lint-stylus lint-apps lint-scripts lint-licenses
 
 coverage: coverage-contracts
 
@@ -58,7 +63,7 @@ gas: gas-contracts gas-stylus
 
 snapshot: snapshot-contracts snapshot-stylus
 
-check-toolchains: check-node check-foundry check-slither check-stylus
+check-toolchains: check-node check-foundry check-slither check-reuse check-stylus
 
 check-node:
 	@node --version | grep -Eq '^v$(NODE_MAJOR)\.' || \
@@ -75,6 +80,11 @@ check-slither:
 	@slither --version 2>/dev/null | grep -Eq '^$(SLITHER_VERSION_RE)$$' || \
 		{ echo "Slither $(SLITHER_VERSION) is required, found: $$(slither --version 2>/dev/null || echo none)."; \
 		  echo "Run: pipx install --force slither-analyzer==$(SLITHER_VERSION)"; exit 1; }
+
+check-reuse:
+	@reuse --version 2>/dev/null | head -n 1 | grep -Eq '^reuse, version $(REUSE_VERSION_RE)$$' || \
+		{ echo "REUSE $(REUSE_VERSION) is required, found: $$(reuse --version 2>/dev/null | head -n 1 || echo none)."; \
+		  echo "Run: pipx install --force 'reuse[charset-normalizer]==$(REUSE_VERSION)'"; exit 1; }
 
 check-stylus:
 	@command -v rustup >/dev/null || \
@@ -106,6 +116,9 @@ submodules:
 
 lint-scripts:
 	@shellcheck contracts/script/*.sh stylus/scripts/*.sh
+
+lint-licenses: check-reuse
+	reuse lint
 
 build-contracts: check-foundry submodules
 	cd contracts && forge build
@@ -211,6 +224,51 @@ deploy-band-feeds: check-foundry submodules
 	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
 		{ echo "Usage: make deploy-band-feeds CHAIN=<4663|46630|42161|412346> SIGNER='<forge wallet flags>' [REGISTRY=<file>]"; exit 1; }
 	@contracts/script/deploy-band-feeds.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
+
+simulate-supply-vault: check-foundry submodules
+	@mkdir -p stylus/target && jq --arg owner "$$(jq -r .tapehouse.Owner deployments/46630.json)" \
+		'.tapehouse.Owner //= $$owner' deployments/4663.json > stylus/target/4663-registry.json
+	cd contracts && REGISTRY=../stylus/target/4663-registry.json forge script script/DeploySupplyVault.s.sol \
+		--fork-url $(ROBINHOOD_RPC_URL) --fork-block-number $(ROBINHOOD_FORK_BLOCK)
+
+deploy-supply-vault: check-foundry submodules
+	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
+		{ echo "Usage: make deploy-supply-vault CHAIN=<4663|46630|412346> SIGNER='<forge wallet flags>' [REGISTRY=<file>]"; exit 1; }
+	cd contracts && REGISTRY=$(abspath $(or $(REGISTRY),deployments/$(CHAIN).json)) forge script script/DeploySupplyVault.s.sol \
+		--rpc-url $(RPC_URL_$(CHAIN)) $(SIGNER) --broadcast $(if $(filter 412346,$(CHAIN)),--skip-simulation)
+	cd contracts && REGISTRY=$(abspath $(or $(REGISTRY),deployments/$(CHAIN).json)) forge script script/Register.s.sol \
+		--rpc-url $(RPC_URL_$(CHAIN))
+
+deploy-margin-accounts: check-foundry submodules
+	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
+		{ echo "Usage: DEBT_CAP=<USDG units> WEEKEND_DEBT_CAP=<USDG units> PREMIUM_RATE=<bps a year> RESERVE_SHARE=<bps> make deploy-margin-accounts CHAIN=<4663|46630|412346> SIGNER='<forge wallet flags of the vault owner>' [REGISTRY=<file>]"; exit 1; }
+	@contracts/script/deploy-margin-accounts.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
+
+deploy-contracts-devnode:
+	rm -rf contracts/broadcast/*/412346
+	$(MAKE) deploy-supply-vault CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
+	DEBT_CAP=1000000000000 WEEKEND_DEBT_CAP=500000000000 PREMIUM_RATE=500 RESERVE_SHARE=1000 \
+		$(MAKE) deploy-margin-accounts CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" \
+		REGISTRY=stylus/target/devnode-registry.json
+
+test-contracts-devnode:
+	contracts/script/devnode-supply-vault-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
+	contracts/script/devnode-margin-accounts-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
+
+verify-supply-vault: check-foundry submodules
+	@case "$(CHAIN)" in 4663|46630) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
+		{ echo "Usage: make verify-supply-vault CHAIN=<4663|46630>, with the chain's RPC URL set"; exit 1; }
+	cd contracts && forge verify-contract --chain-id $(CHAIN) --verifier sourcify --rpc-url $(RPC_URL_$(CHAIN)) \
+		--creation-transaction-hash $$(jq -r --arg vault "$$(jq -r .tapehouse.SupplyVault ../deployments/$(CHAIN).json)" \
+			'.transactions[] | select((.contractAddress // "" | ascii_downcase) == ($$vault | ascii_downcase)) | .hash' \
+			broadcast/DeploySupplyVault.s.sol/$(CHAIN)/run-latest.json) \
+		--watch $$(jq -r .tapehouse.SupplyVault ../deployments/$(CHAIN).json) \
+		src/SupplyVault.sol:SupplyVault
+
+verify-margin-accounts: check-foundry submodules
+	@case "$(CHAIN)" in 4663|46630) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
+		{ echo "Usage: make verify-margin-accounts CHAIN=<4663|46630>, with the chain's RPC URL set"; exit 1; }
+	@contracts/script/verify-margin-accounts.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
 
 verify-band-feeds: check-foundry submodules
 	@case "$(CHAIN)" in 4663|46630|42161) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \

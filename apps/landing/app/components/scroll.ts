@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 /** Run `fn` once per animation frame while the page scrolls or resizes. */
 export function onScrollFrame(fn: () => void) {
   let frame = 0;

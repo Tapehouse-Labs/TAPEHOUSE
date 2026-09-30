@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: margin-args.sh DEPLOYMENTS_JSON
 # Prints the margin program's constructor arguments as nine shell words: the assets, correlation floors,
 # correlations, the market, USDG, WETH, the ETH/USD feed, the band and the owner. Each asset is a tuple of its

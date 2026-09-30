@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: check-band.sh RPC_URL BAND_ADDRESS DEPLOYMENTS_JSON
 # Checks that a deployed band holds the configuration, halt signer, owner and chain configuration
 # band-args.sh builds from DEPLOYMENTS_JSON, that each configured Chainlink feed describes its own asset,

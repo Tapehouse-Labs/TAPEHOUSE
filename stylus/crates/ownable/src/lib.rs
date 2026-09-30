@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //! OpenZeppelin's `Ownable2Step` for Stylus programs, with the same functions, events, errors and selectors.
 //! The first owner is an explicit argument: a constructor reached through StylusDeployer sees StylusDeployer
 //! as the sender.

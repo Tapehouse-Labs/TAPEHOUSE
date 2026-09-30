@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 import { Hero } from "./components/Hero";
 import { Thread } from "./components/Thread";
 import { Frustrations } from "./components/Frustrations";

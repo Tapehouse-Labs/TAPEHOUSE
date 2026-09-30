@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT OR Apache-2.0
 """Print a RedStone payload built from the latest redstone-primary-prod data packages.
 
 Usage: redstone-payload.py DATA_PACKAGE_ID [DATA_PACKAGE_ID ...]

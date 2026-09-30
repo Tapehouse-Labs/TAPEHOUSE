@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 /**
  * Public addresses. Each can be overridden with an environment variable;
  * a link left empty is not rendered, so the footer never ships a dead end.

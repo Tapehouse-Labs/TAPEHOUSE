@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: deploy-band-feeds.sh RPC_URL DEPLOYMENTS_JSON SIGNER...
 # Deploys one BandFeed, answering the low side, for each launch asset the registry's band configures,
 # with the asset's Uniswap v3 USDG pool where the registry names one. The description says what is

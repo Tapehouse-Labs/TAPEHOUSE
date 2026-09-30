@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: verify-band-feeds.sh RPC_URL DEPLOYMENTS_JSON
 # Verifies every BandFeed in the registry's .bandFeeds group on Sourcify, with the constructor arguments read
 # back from each feed.
