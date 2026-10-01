@@ -10,21 +10,23 @@ import {IMargin} from "./interfaces/IMargin.sol";
 import {MarginAccounts} from "./MarginAccounts.sol";
 
 /// @title Tapehouse liquidator
-/// @notice Sells the collateral of a margin position that falls short, in a Dutch auction that follows the market.
-/// The market is open while the 24/5 session is open and NYSE is in regular hours or between two trading days. Then
-/// a position falls short when its equity at each band's low edge is below the engine's current requirement, and its
-/// auction starts at each band's high edge and falls a basis point a second. Otherwise, from the regular close before
-/// a weekend or holiday to the regular open after it, or while the session is not known, a position falls short only
-/// if it does so at both edges of its bands, so a shortfall the band can explain waits for the reopening; its auction
-/// falls a basis point every four seconds and sells at most a tenth of the position's holding of a Stock Token an
-/// hour. An unknown session is judged against the open requirement with its buffer, never the closed one it steps up
-/// to. WETH counts for 84% of its Chainlink price. Nothing is sold while a held asset is halted or its multiplier
-/// change is not yet confirmed, while WETH is held and its price is missing or stale, or while the L2 sequencer is not
-/// settled. A purchase repays at most half of what the
-/// position owes, or all of it once that is 2,000 USDG or less. A buyer pays USDG: half a percent goes to the
-/// accounts' reserve unless the position is worth less than it owes, and the rest repays the position, its debt first.
-/// Anyone may start, stop, buy and settle a position's USDG against its debt; a position left with nothing is
-/// written off by the accounts' backstop, or by anyone while they have none.
+/// @notice Sells the collateral of a margin position that falls short, in a Dutch auction that follows the market. The
+/// market is open while the 24/5 session is open and NYSE is in regular hours or between two trading days. Then a
+/// position falls short when its equity at each band's low edge is below the engine's current requirement, and its
+/// auction starts at each band's high edge and falls a basis point a second. Otherwise, from the regular close before a
+/// weekend or holiday to the regular open after it, or while the session is not known, a position falls short only if
+/// it does so at both edges of its bands, so a shortfall the band can explain waits for the reopening; its auction
+/// falls a basis point every four seconds and sells at most a tenth of the position's holding of a Stock Token an hour.
+/// An unknown session is judged against the open requirement with its buffer, never the closed one it steps up to. WETH
+/// counts for 84% of its Chainlink price. Nothing is sold while a held asset is halted or its multiplier change is not
+/// yet confirmed, while WETH is held and its price is missing or stale, or while the L2 sequencer is not settled. A
+/// purchase repays at most half of what the position owes, or all of it once that is 2,000 USDG or less. A buyer pays
+/// USDG: half a percent goes to the accounts' reserve unless the position is worth less than it owes, and the rest
+/// repays the position, its debt first. Anyone may start, stop, buy and settle a position's USDG against its debt; a
+/// position left with nothing, or worth less than it owes with holdings worth less than a USDG each, is written off by
+/// the accounts' backstop, or by anyone while they have none. The reopening auction, set once by the accounts' owner,
+/// holds the positions it will sell out of the Dutch auction while the market is open, and sells them, to its bids and
+/// the backstop, at its clearing price.
 /// @dev Set as the accounts' liquidator, it is their only way into seizures and write-offs.
 contract Liquidator {
     using SafeERC20 for IERC20;
@@ -78,6 +80,9 @@ contract Liquidator {
     uint64 public constant HORIZON = 172_800;
     /// @notice The oldest ETH/USD answer WETH is priced at, in seconds: its heartbeat plus a minute.
     uint256 public constant MAX_FEED_AGE = 86_400 + 60;
+    /// @notice What a holding must be worth, in USDG, to keep a position from being written off: less is swept to the
+    /// caller of `writeOff`.
+    uint256 public constant DUST = 1e6;
 
     uint256 private constant BPS = 10_000;
     uint256 private constant PRICE_UNIT = 1e8;
@@ -100,6 +105,10 @@ contract Liquidator {
     /// @notice The auction of each position, if one runs.
     mapping(address account => mapping(bytes32 position => Auction)) public auctions;
     mapping(address account => mapping(bytes32 position => mapping(address token => Allowance))) private _allowances;
+    /// @notice The reopening auction, set once by the accounts' owner.
+    address public auction;
+    /// @notice Until when, in seconds, the reopening auction holds each position out of the Dutch auction.
+    mapping(address account => mapping(bytes32 position => uint64)) public heldUntil;
 
     /// @notice An auction of `account`'s `position` started, `closed` if the market was closed.
     event AuctionStarted(address indexed account, bytes32 indexed position, bool closed);
@@ -119,6 +128,21 @@ contract Liquidator {
     );
     /// @notice `amount` of `account`'s `position`'s USDG repaid its debt.
     event CashSettled(address indexed account, bytes32 indexed position, uint256 amount);
+    /// @notice The reopening auction is `auction`.
+    event AuctionSet(address indexed auction);
+    /// @notice The reopening auction holds `account`'s `position` out of the Dutch auction until `until`.
+    event Held(address indexed account, bytes32 indexed position, uint64 until);
+    /// @notice The reopening auction sold `amount` of `token` from `account`'s `position` at `price`, for `cost` of USDG,
+    /// `fee` of it to the reserve.
+    event Settled(
+        address indexed account,
+        bytes32 indexed position,
+        address indexed token,
+        uint256 amount,
+        uint256 price,
+        uint256 cost,
+        uint256 fee
+    );
 
     /// @notice The position meets its requirement as this contract judges it, or cannot be judged now.
     error NotLiquidatable(address account, bytes32 position);
@@ -138,6 +162,16 @@ contract Liquidator {
     error NothingToBuy();
     /// @notice Only the accounts' backstop writes off a position once they have one.
     error NotBackstop(address caller);
+    /// @notice Only the reopening auction may.
+    error NotAuction(address caller);
+    /// @notice Only the accounts' owner sets the reopening auction.
+    error NotAccountsOwner(address caller);
+    /// @notice The reopening auction is already set, to `current`.
+    error AuctionAlreadySet(address current);
+    /// @notice The reopening auction cannot be the zero address.
+    error InvalidAuction();
+    /// @notice The reopening auction holds the position until `until`.
+    error PositionHeld(address account, bytes32 position, uint64 until);
 
     /// @param accounts_ The accounts, which must then set this contract as their liquidator.
     constructor(MarginAccounts accounts_) {
@@ -184,6 +218,7 @@ contract Liquidator {
     /// already running in the market's current state runs on. Anyone may call it.
     function start(address account, bytes32 position) external {
         bool closed = _closed();
+        _checkNotHeld(account, position, closed);
         if (!_isShort(_judge(account, position, closed))) revert NotLiquidatable(account, position);
         Auction storage a = auctions[account][position];
         if (_live(a, closed)) return;
@@ -212,6 +247,7 @@ contract Liquidator {
         returns (uint256 bought, uint256 cost)
     {
         bool closed = _closed();
+        _checkNotHeld(account, position, closed);
         Valuation memory v = _judge(account, position, closed);
         if (!_isShort(v)) revert NotLiquidatable(account, position);
         (bought, cost) = _terms(account, position, token, amount, closed, v);
@@ -219,8 +255,60 @@ contract Liquidator {
         uint256 fee = cost * _feeBps(v) / BPS;
         // forge-lint: disable-next-line(reentrancy-events)
         emit Bought(account, position, token, bought, cost, fee, msg.sender, receiver);
-        _pay(account, position, cost, fee);
+        _pay(account, position, cost, fee, msg.sender);
         accounts.seize(position, token, bought, account, receiver);
+    }
+
+    /// @notice Sets the reopening auction. Only the accounts' owner may, once, and never to zero.
+    function setAuction(address newAuction) external {
+        if (msg.sender != accounts.owner()) revert NotAccountsOwner(msg.sender);
+        if (auction != address(0)) revert AuctionAlreadySet(auction);
+        if (newAuction == address(0)) revert InvalidAuction();
+        auction = newAuction;
+        emit AuctionSet(newAuction);
+    }
+
+    /// @notice Holds `account`'s `position` out of the Dutch auction while the market is open, until `until`, while the
+    /// reopening auction sells it. Only the reopening auction may.
+    function hold(address account, bytes32 position, uint64 until) external {
+        if (msg.sender != auction) revert NotAuction(msg.sender);
+        heldUntil[account][position] = until;
+        emit Held(account, position, until);
+    }
+
+    /// @notice Sells up to `amount` of `token` from `account`'s `position` to the caller at `unitPrice`, in USD with 8
+    /// decimals per token, if the position still falls short, paid with the caller's USDG. The sale stops at the
+    /// collateral held and at what repays all the position owes, fee included; half a percent goes to the reserve unless
+    /// the position is worth less than it owes, the rest repays the position, and any rounding excess goes to the
+    /// reserve. Returns what it sold and cost; nothing if the position no longer falls short. Only the reopening auction
+    /// and the accounts' backstop, for what the auction's bids leave, may.
+    function settle(address account, bytes32 position, address token, uint256 amount, uint256 unitPrice)
+        external
+        returns (uint256 sold, uint256 cost)
+    {
+        if (msg.sender != auction && msg.sender != accounts.backstop()) revert NotAuction(msg.sender);
+        Valuation memory v = _judge(account, position, _closed());
+        if (!_isShort(v)) return (0, 0);
+        require(_symbol(token, v.symbols, v.tokens) != bytes32(0), NotForSale(token));
+        uint256 feeBps = _feeBps(v);
+        sold = _min(amount, accounts.collateral(account, position, token));
+        sold = _min(sold, _divUp(v.owed * BPS, BPS - feeBps) * TOKEN_TO_USDG / unitPrice);
+        if (sold != 0) {
+            cost = _divUp(sold * unitPrice, TOKEN_TO_USDG);
+            uint256 fee = cost * feeBps / BPS;
+            // forge-lint: disable-next-line(reentrancy-events)
+            emit Settled(account, position, token, sold, unitPrice, cost, fee);
+            _pay(account, position, cost, fee, address(0));
+            accounts.seize(position, token, sold, account, msg.sender);
+        }
+    }
+
+    /// @notice Adds `amount` of the reopening auction's USDG to the accounts' reserve: the bonds its bidders forfeit.
+    /// Only the reopening auction may.
+    function collect(uint256 amount) external {
+        if (msg.sender != auction) revert NotAuction(msg.sender);
+        usdg.safeTransferFrom(msg.sender, address(this), amount);
+        accounts.collectFee(amount);
     }
 
     /// @notice Repays the debt of `account`'s `position`, then its premium, with the USDG it holds, if it falls short.
@@ -239,13 +327,20 @@ contract Liquidator {
     }
 
     /// @notice Writes off what `account`'s `position` still owes once it holds nothing, or only holdings a burn left
-    /// worthless: lenders bear it, and its premium is forgiven. Once the accounts have a backstop, only it may call
-    /// this, after covering what it can; until then, anyone may.
+    /// worthless: lenders bear it, and its premium is forgiven. If the accounts refuse it and the position is worth less
+    /// than it owes, holdings worth less than `DUST` each are swept to the caller first. Once the accounts have a
+    /// backstop, only it may call this, after covering what it can; until then, anyone may.
     function writeOff(address account, bytes32 position) external returns (uint256) {
         address backstop = accounts.backstop();
         require(backstop == address(0) || msg.sender == backstop, NotBackstop(msg.sender));
         delete auctions[account][position];
-        return accounts.writeOff(account, position);
+        try accounts.writeOff(account, position) returns (uint256 written) {
+            return written;
+        } catch {
+            Valuation memory v = _judge(account, position, _closed());
+            if (v.insolvent) _sweep(account, position);
+            return accounts.writeOff(account, position);
+        }
     }
 
     function _terms(address account, bytes32 position, address token, uint256 amount, bool closed, Valuation memory v)
@@ -275,11 +370,43 @@ contract Liquidator {
             Allowance(SafeCast.toUint192(used + spent), SafeCast.toUint64(block.timestamp));
     }
 
-    function _pay(address account, bytes32 position, uint256 cost, uint256 fee) private {
+    function _pay(address account, bytes32 position, uint256 cost, uint256 fee, address excessTo) private {
         usdg.safeTransferFrom(msg.sender, address(this), cost);
         if (fee != 0) accounts.collectFee(fee);
         uint256 repaid = accounts.repay(position, cost - fee, account);
-        if (repaid < cost - fee) usdg.safeTransfer(msg.sender, cost - fee - repaid);
+        if (repaid < cost - fee) {
+            if (excessTo == address(0)) accounts.collectFee(cost - fee - repaid);
+            else usdg.safeTransfer(excessTo, cost - fee - repaid);
+        }
+    }
+
+    function _sweep(address account, bytes32 position) private {
+        (bytes32[] memory symbols, address[] memory tokens) = accounts.stocks();
+        for (uint256 i; i < symbols.length; ++i) {
+            if (tokens[i] == address(0)) continue;
+            // forge-lint: disable-next-line(calls-loop)
+            uint256 held = accounts.collateral(account, position, tokens[i]);
+            if (held == 0) continue;
+            // slither-disable-next-line unused-return,calls-loop
+            (,,,, uint64 low,) = band.quote(symbols[i]); // forge-lint: disable-line(unused-return, calls-loop)
+            if (held * low / TOKEN_TO_USDG < DUST) _seizeTo(account, position, tokens[i], held);
+        }
+        uint256 eth = accounts.collateral(account, position, address(weth));
+        if (eth != 0 && eth * _ethPrice() / TOKEN_TO_USDG < DUST) {
+            _seizeTo(account, position, address(weth), eth);
+        }
+        uint256 cash = accounts.collateral(account, position, address(usdg));
+        if (cash != 0 && cash < DUST) _seizeTo(account, position, address(usdg), cash);
+    }
+
+    function _seizeTo(address account, bytes32 position, address token, uint256 amount) private {
+        accounts.seize(position, token, amount, account, msg.sender); // forge-lint: disable-line(calls-loop)
+    }
+
+    function _checkNotHeld(address account, bytes32 position, bool closed) private view {
+        uint64 until = heldUntil[account][position];
+        // forge-lint: disable-next-line(block-timestamp)
+        if (!closed && block.timestamp < until) revert PositionHeld(account, position, until);
     }
 
     function _judge(address account, bytes32 position, bool closed) private returns (Valuation memory) {

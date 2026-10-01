@@ -16,10 +16,11 @@ import {MarginAccounts} from "./MarginAccounts.sol";
 /// @notice The junior tranche behind the margin accounts' lenders. Depositors lend it USDG and receive shares; it
 /// takes the weekend premium the accounts set aside for it, and covers what a position emptied by liquidation still
 /// owes, before any of it is written off to lenders. It covers at most a declared limit per closure for each kind of
-/// position: the cross positions together, and each Stock Token's isolated positions. A change to a limit applies
-/// only to closures that begin after every depositor could have left. A depositor leaves by starting a cooldown: its
-/// shares may be redeemed from a week later, for six days, never while the market is closed nor until a day after a
-/// closure's reopening.
+/// position: the cross positions together, and each Stock Token's isolated positions. Within the same limits it buys,
+/// at the reopening auction's clearing price, what the auction's bids leave, and shares the Stock Tokens it takes among
+/// its shares as gains each holder claims. A change to a limit applies only to closures that begin after every
+/// depositor could have left. A depositor leaves by starting a cooldown: its shares may be redeemed from a week later,
+/// for six days, never while the market is closed nor until a day after a closure's reopening.
 /// @dev The backstop counts the USDG it holds itself, so USDG sent to it directly changes no share's value.
 contract GapBackstop is ERC4626, Ownable2Step {
     using SafeERC20 for IERC20;
@@ -47,6 +48,8 @@ contract GapBackstop is ERC4626, Ownable2Step {
     uint256 public constant MIN_CLOSURE_GAP = 72 hours;
 
     bytes32 private constant CROSS = bytes32(0);
+    uint256 private constant GAINS_SCALE = 1e36;
+    uint256 private constant TOKEN_TO_USDG = 1e20;
     uint256 private constant MS = 1000;
     uint256 private constant LONGEST_CLOSURE = 96 hours;
 
@@ -65,6 +68,14 @@ contract GapBackstop is ERC4626, Ownable2Step {
     mapping(address owner => Cooldown) public cooldowns;
     /// @notice The exposure limit of `position` for closures before `fromMs`, and for those from it on, in USDG.
     mapping(bytes32 position => Limit) public exposureLimits;
+    /// @notice The units of each Stock Token taken for one share so far, scaled by 1e36.
+    mapping(address token => uint256) public gainsPerShare;
+    /// @notice How many times the backstop has taken Stock Tokens.
+    uint256 public gainsEpoch;
+    address[] private _tokens;
+    mapping(address owner => uint256) private _seenEpoch;
+    mapping(address owner => mapping(address token => uint256)) private _seenGains;
+    mapping(address owner => mapping(address token => uint256)) private _owedGains;
 
     /// @notice The exposure limit of `position` is `limit` USDG a closure, for closures that close from `fromMs` on.
     event ExposureLimitSet(bytes32 indexed position, uint256 limit, uint64 fromMs);
@@ -79,6 +90,18 @@ contract GapBackstop is ERC4626, Ownable2Step {
     event CooldownStarted(address indexed owner, uint256 shares, uint64 from);
     /// @notice The backstop's count of the USDG it holds fell to its balance.
     event Sync(uint256 held);
+    /// @notice The backstop bought `amount` of `token` from `account`'s `position` for `cost`, what the reopening
+    /// auction's bids left, in the closure it counts from `closesMs`.
+    event RemainderBought(
+        address indexed account,
+        bytes32 indexed position,
+        address indexed token,
+        uint256 amount,
+        uint256 cost,
+        uint64 closesMs
+    );
+    /// @notice `owner` claimed `amount` of `token` it gained.
+    event GainsClaimed(address indexed owner, address indexed token, uint256 amount);
 
     /// @notice `position` is neither the cross position nor an asset of the accounts.
     error InvalidPosition(bytes32 position);
@@ -86,6 +109,8 @@ contract GapBackstop is ERC4626, Ownable2Step {
     error InvalidExposureLimits();
     /// @notice The owner cannot renounce: the backstop needs one to set its exposure limits.
     error OwnershipCannotBeRenounced();
+    /// @notice Only the liquidator's reopening auction may.
+    error NotAuction(address caller);
 
     /// @param accounts_ The accounts, whose owner must then set this vault as their backstop.
     /// @param initialOwner The owner, who sets the exposure limits.
@@ -98,12 +123,12 @@ contract GapBackstop is ERC4626, Ownable2Step {
     {
         accounts = accounts_;
         _usdg = IUSDG(address(accounts_.usdg()));
-        // slither-disable-next-line unused-return
-        (bytes32[] memory symbols,) = accounts_.stocks(); // forge-lint: disable-line(unused-return)
+        (bytes32[] memory symbols, address[] memory tokens) = accounts_.stocks();
         if (assetLimits.length != symbols.length) revert InvalidExposureLimits();
         _initLimit(CROSS, crossLimit);
         for (uint256 i; i < symbols.length; ++i) {
             _initLimit(symbols[i], assetLimits[i]);
+            _tokens.push(tokens[i]);
         }
         IERC20(asset()).forceApprove(address(accounts_), type(uint256).max);
     }
@@ -162,6 +187,57 @@ contract GapBackstop is ERC4626, Ownable2Step {
         emit Covered(account, position, key, paid, written);
     }
 
+    /// @notice Buys up to `amount` of `token` from `account`'s `position` at `price`, in USD with 8 decimals per token,
+    /// what the reopening auction's bids left, within what is left of the position's exposure limit in the current
+    /// closure and of the USDG the backstop holds, and returns what it took. The tokens are shared among the shares as
+    /// gains. The auction offers at most the band's low edge as `price`, and leaves the rest in the position when this
+    /// reverts: while the issuer freezes the backstop or blocks it from the Stock Token, or once it has no shares. Only
+    /// the liquidator's reopening auction may.
+    // slither-disable-next-line reentrancy-no-eth
+    function buyRemainder(address account, bytes32 position, address token, uint256 amount, uint256 price)
+        external
+        returns (uint256 taken)
+    {
+        Liquidator liquidator = Liquidator(accounts.liquidator());
+        if (msg.sender != liquidator.auction()) revert NotAuction(msg.sender);
+        uint64 key = _closure();
+        if (key != closureMs) closureMs = key;
+        uint256 spent = covered[position][key];
+        uint256 budget = _room(_limitAt(exposureLimits[position], key), spent);
+        uint256 units = Math.min(amount, budget * TOKEN_TO_USDG / price);
+        // slither-disable-next-line incorrect-equality
+        if (units == 0) return 0;
+        IERC20(asset()).forceApprove(address(liquidator), budget);
+        uint256 cost;
+        // forge-lint: disable-next-line(reentrancy-no-eth)
+        (taken, cost) = liquidator.settle(account, position, token, units, price);
+        IERC20(asset()).forceApprove(address(liquidator), 0);
+        // slither-disable-next-line incorrect-equality
+        if (taken == 0) return 0;
+        covered[position][key] = spent + cost;
+        held -= cost;
+        gainsPerShare[token] += taken * GAINS_SCALE / totalSupply();
+        ++gainsEpoch;
+        // forge-lint: disable-next-line(reentrancy-events)
+        emit RemainderBought(account, position, token, taken, cost, key);
+    }
+
+    /// @notice Sends the caller the `token` it gained from the Stock Tokens the backstop bought.
+    function claimGains(address token) external returns (uint256 amount) {
+        _checkpoint(msg.sender);
+        amount = _owedGains[msg.sender][token];
+        _owedGains[msg.sender][token] = 0;
+        emit GainsClaimed(msg.sender, token, amount);
+        if (amount != 0) IERC20(token).safeTransfer(msg.sender, amount);
+    }
+
+    /// @notice The `token` that `owner` has gained and not claimed.
+    function gains(address owner, address token) external view returns (uint256) {
+        return
+            _owedGains[owner][token] + balanceOf(owner) * (gainsPerShare[token] - _seenGains[owner][token])
+                / GAINS_SCALE;
+    }
+
     /// @notice Starts the caller's cooldown for all its shares: they may be redeemed from `COOLDOWN` later, for
     /// `WITHDRAWAL_WINDOW`, while redemptions are open. A new cooldown replaces the last. Shares sent away leave it.
     function startCooldown() external {
@@ -198,15 +274,15 @@ contract GapBackstop is ERC4626, Ownable2Step {
     }
 
     /// @inheritdoc ERC4626
-    /// @dev Zero until the accounts name this vault their backstop, and while USDG is paused, the backstop frozen or
-    /// its USDG wiped.
+    /// @dev Zero until the accounts name this vault their backstop, while USDG is paused, the backstop frozen or its
+    /// USDG wiped, and from the moment the accounts record a coming close until a day after its reopening.
     function maxDeposit(address receiver) public view override returns (uint256) {
         return _closedToDeposits() ? 0 : super.maxDeposit(receiver);
     }
 
     /// @inheritdoc ERC4626
-    /// @dev Zero until the accounts name this vault their backstop, and while USDG is paused, the backstop frozen or
-    /// its USDG wiped.
+    /// @dev Zero until the accounts name this vault their backstop, while USDG is paused, the backstop frozen or its
+    /// USDG wiped, and from the moment the accounts record a coming close until a day after its reopening.
     function maxMint(address receiver) public view override returns (uint256) {
         return _closedToDeposits() ? 0 : super.maxMint(receiver);
     }
@@ -233,6 +309,8 @@ contract GapBackstop is ERC4626, Ownable2Step {
     }
 
     function _update(address from, address to, uint256 value) internal override {
+        _checkpoint(from);
+        _checkpoint(to);
         super._update(from, to, value);
         if (from == address(0)) return;
         uint256 balance = balanceOf(from);
@@ -251,6 +329,22 @@ contract GapBackstop is ERC4626, Ownable2Step {
 
     function _decimalsOffset() internal pure override returns (uint8) {
         return 6;
+    }
+
+    function _checkpoint(address owner) private {
+        uint256 epoch = gainsEpoch;
+        if (owner == address(0) || _seenEpoch[owner] == epoch) return;
+        _seenEpoch[owner] = epoch;
+        uint256 balance = balanceOf(owner);
+        uint256 count = _tokens.length;
+        for (uint256 i; i < count; ++i) {
+            address token = _tokens[i];
+            uint256 perShare = gainsPerShare[token];
+            uint256 seen = _seenGains[owner][token];
+            if (perShare == seen) continue;
+            _owedGains[owner][token] += balance * (perShare - seen) / GAINS_SCALE;
+            _seenGains[owner][token] = perShare;
+        }
     }
 
     function _initLimit(bytes32 position, uint256 limit) private {
@@ -275,7 +369,7 @@ contract GapBackstop is ERC4626, Ownable2Step {
 
     function _closedToDeposits() private view returns (bool) {
         try accounts.backstop() returns (address backstop) {
-            return backstop != address(this) || _unavailable();
+            return backstop != address(this) || _unavailable() || _settling();
         } catch {
             return true;
         }

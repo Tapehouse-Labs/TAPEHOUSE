@@ -4,7 +4,9 @@ pragma solidity 0.8.37;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {GapBackstop} from "../src/GapBackstop.sol";
+import {BandFeed} from "../src/BandFeed.sol";
 import {Liquidator} from "../src/Liquidator.sol";
+import {ReopeningAuction} from "../src/ReopeningAuction.sol";
 import {MarginAccounts} from "../src/MarginAccounts.sol";
 import {SupplyVault} from "../src/SupplyVault.sol";
 import {IBand} from "../src/interfaces/IBand.sol";
@@ -345,6 +347,54 @@ contract MarginAccountsForkTest is Test {
         assertApproxEqAbs(vault.totalAssets(), lenders, 1);
         assertEq(backstop.totalAssets(), 20_000e6 - owed);
         assertEq(usdg.balanceOf(address(backstop)), 20_000e6 - owed);
+    }
+
+    function test_AReopeningRoundSellsRealNvdaForRealUsdg() public {
+        Liquidator liquidator = new Liquidator(accounts);
+        accounts.setLiquidator(address(liquidator));
+        ReopeningAuction auction = new ReopeningAuction(liquidator, new bytes32[](0), new BandFeed[](0));
+        liquidator.setAuction(address(auction));
+        _deposit(CROSS, "NVDA", 437e18);
+        (int256 equity, uint256 requirement,,) = accounts.health(alice, CROSS);
+        vm.prank(alice);
+        accounts.borrow(CROSS, (uint256(equity) - requirement) / 1e12, alice, alice);
+        uint64 closes = uint64(vm.getBlockTimestamp() + 1 hours) * 1000;
+        band.setSession(BandDouble.Session(2, 1, 3, 0, closes));
+        accounts.accruePremium();
+        skip(1 hours);
+        uint64 reopenMs = closes + 48 hours * 1000;
+        band.setSession(BandDouble.Session(1, 3, 1, 0, reopenMs));
+        accounts.accruePremium();
+        skip(48 hours);
+        uint64 openMs = reopenMs + 13.5 hours * 1000;
+        band.setSession(BandDouble.Session(2, 3, 1, openMs, 0));
+        accounts.accruePremium();
+        uint64 low = uint64(prices[0] * 95 / 100);
+        _quote(NVDA, low);
+        auction.enroll(alice, CROSS, NVDA);
+        uint256 lot = auction.lots(NVDA, openMs)[0].amount;
+        uint256 price = uint256(low) * 9_600 / 10_000;
+        address bidder = makeAddr("bidder");
+        deal(address(usdg), bidder, 1_000_000e6);
+        bytes32 commitment = keccak256(abi.encode(bidder, NVDA, openMs, lot, price, bytes32("s")));
+        vm.startPrank(bidder);
+        usdg.approve(address(auction), type(uint256).max);
+        auction.commit(NVDA, commitment, (lot * price - 1) / 1e20 + 1);
+        vm.warp(openMs / 1000 - 30 minutes);
+        auction.reveal(NVDA, openMs, lot, price, "s");
+        vm.stopPrank();
+        vm.warp(openMs / 1000);
+        band.setSession(BandDouble.Session(2, 1, 2, openMs + 6.5 hours * 1000, 0));
+        uint256 debt = accounts.debt(alice, CROSS);
+        auction.clear(NVDA, openMs, price);
+        auction.claim(NVDA, openMs, 0);
+        ReopeningAuction.Round memory r = auction.round(NVDA, openMs);
+        assertEq(IERC20(_token("NVDA")).balanceOf(bidder), r.sold);
+        assertGt(r.sold, 0);
+        assertLt(accounts.debt(alice, CROSS), debt);
+        assertEq(accounts.debt(alice, CROSS) + accounts.premium(alice, CROSS), 0);
+        assertEq(accounts.collateral(alice, CROSS, _token("NVDA")), 437e18 - r.sold);
+        assertApproxEqAbs(1_000_000e6 - usdg.balanceOf(bidder), r.paid, 2);
     }
 
     function _deposit(bytes32 position, string memory name, uint256 amount) internal {

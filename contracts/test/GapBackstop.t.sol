@@ -102,7 +102,7 @@ contract GapBackstopTest is Test {
         GapBackstop unnamed = new GapBackstop(accounts, owner, 7, limits);
         assertEq(unnamed.maxDeposit(alice), 0);
         vm.expectRevert(GapBackstop.InvalidExposureLimits.selector);
-        new GapBackstop(accounts, owner, 7, new uint256[](1));
+        this.deploy(7, new uint256[](1));
         assertEq(backstop.maxDeposit(alice), type(uint256).max);
         _back(alice, 1_000 * USDG);
         assertEq(backstop.balanceOf(alice), 1_000 * USDG * 1e6);
@@ -589,6 +589,10 @@ contract GapBackstopTest is Test {
         vm.prank(alice);
         backstop.redeem(shares, alice, alice);
         vm.snapshotGasLastCall("redeem");
+    }
+
+    function deploy(uint256 crossLimit, uint256[] memory limits) external returns (GapBackstop) {
+        return new GapBackstop(accounts, owner, crossLimit, limits);
     }
 
     function _earnPremium() internal returns (uint256 premium) {

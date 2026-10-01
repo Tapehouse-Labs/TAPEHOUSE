@@ -47,12 +47,16 @@ contract BandFeedTest is Test {
     function test_ConstructorRejectsAPoolThatDoesNotTradeTheToken() public {
         PoolDouble other = new PoolDouble(address(usdg), address(0xBEEF));
         vm.expectRevert(abi.encodeWithSelector(BandFeed.PoolWithoutToken.selector, address(other), address(nvda)));
-        new BandFeed(IBand(address(band)), NVDA, BandFeed.Side.Low, IUniswapV3Pool(address(other)), "NVDA / USD");
+        this.deploy(NVDA, address(other));
 
         band.setAsset(SPY, BandDouble.Asset(address(0xC2), bytes32(0), USA500, address(0)));
         PoolDouble pool = new PoolDouble(address(usdg), address(nvda));
         vm.expectRevert(abi.encodeWithSelector(BandFeed.PoolWithoutToken.selector, address(pool), address(0)));
-        new BandFeed(IBand(address(band)), SPY, BandFeed.Side.Low, IUniswapV3Pool(address(pool)), "SPY / USD");
+        this.deploy(SPY, address(pool));
+    }
+
+    function deploy(bytes32 symbol, address pool) external returns (BandFeed) {
+        return new BandFeed(IBand(address(band)), symbol, BandFeed.Side.Low, IUniswapV3Pool(pool), "");
     }
 
     function test_ConstructorRejectsAnUninitializedPool() public {
