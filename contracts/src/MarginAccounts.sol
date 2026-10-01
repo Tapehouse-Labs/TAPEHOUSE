@@ -191,6 +191,8 @@ contract MarginAccounts is Ownable2Step {
     event ClosureSet(uint64 closesMs, uint64 reopensMs);
     /// @notice The backstop claimed `amount` of premium.
     event PremiumClaimed(address indexed backstop, uint256 amount);
+    /// @notice The liquidator added `amount` of fees to the reserve.
+    event FeeCollected(uint256 amount);
     /// @notice The owner took `amount` of the reserve to `receiver`.
     event ReserveWithdrawn(address indexed receiver, uint256 amount);
     /// @notice Anyone cleared `units` of `symbol` a burn left worth nothing from `account`'s `position`.
@@ -496,6 +498,14 @@ contract MarginAccounts is Ownable2Step {
         backstopPremium = 0;
         emit PremiumClaimed(msg.sender, amount);
         usdg.safeTransfer(msg.sender, amount);
+    }
+
+    /// @notice Adds `amount` of the caller's USDG to the reserve: the liquidator's fees. Only the liquidator may.
+    function collectFee(uint256 amount) external {
+        if (msg.sender != liquidator) revert NotLiquidator(msg.sender);
+        reserve += SafeCast.toUint128(amount);
+        emit FeeCollected(amount);
+        usdg.safeTransferFrom(msg.sender, address(this), amount);
     }
 
     /// @notice Sends `amount` of the reserve to `receiver`. Only the owner may.

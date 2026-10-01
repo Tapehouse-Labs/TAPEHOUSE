@@ -3,6 +3,7 @@ pragma solidity 0.8.37;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Liquidator} from "../src/Liquidator.sol";
 import {MarginAccounts} from "../src/MarginAccounts.sol";
 import {SupplyVault} from "../src/SupplyVault.sol";
 import {IBand} from "../src/interfaces/IBand.sol";
@@ -246,6 +247,68 @@ contract MarginAccountsForkTest is Test {
         accounts.withdrawReserve(address(this), premium / 10);
         assertEq(usdg.balanceOf(backstop), premium - premium / 10);
         assertEq(usdg.balanceOf(address(accounts)), 0);
+    }
+
+    function test_AShortPositionIsAuctionedForRealUsdg() public {
+        Liquidator liquidator = new Liquidator(accounts);
+        accounts.setLiquidator(address(liquidator));
+        _deposit(CROSS, "NVDA", 437e18);
+        (int256 equity, uint256 requirement,,) = accounts.health(alice, CROSS);
+        vm.prank(alice);
+        accounts.borrow(CROSS, (uint256(equity) - requirement) / 1e12, alice, alice);
+        uint64 low = uint64(prices[0] * 95 / 100);
+        _quote(NVDA, low);
+        (,, bool short, bool closed) = liquidator.shortfall(alice, CROSS);
+        assertTrue(short);
+        assertFalse(closed);
+        liquidator.start(alice, CROSS);
+        address buyer = makeAddr("buyer");
+        deal(address(usdg), buyer, 1_000_000e6);
+        uint256 debt = accounts.debt(alice, CROSS);
+        vm.startPrank(buyer);
+        usdg.approve(address(liquidator), type(uint256).max);
+        (uint256 bought, uint256 cost) = liquidator.buy(alice, CROSS, _token("NVDA"), 10e18, type(uint256).max, buyer);
+        vm.stopPrank();
+        uint256 high = uint256(low) + low / 100;
+        assertEq(bought, 10e18);
+        assertEq(cost, (10e18 * high - 1) / 1e20 + 1);
+        assertEq(IERC20(_token("NVDA")).balanceOf(buyer), 10e18);
+        assertEq(accounts.collateral(alice, CROSS, _token("NVDA")), 427e18);
+        assertEq(accounts.reserve(), cost * 50 / 10_000);
+        assertApproxEqAbs(accounts.debt(alice, CROSS), debt - (cost - cost * 50 / 10_000), 1);
+        assertEq(usdg.balanceOf(address(liquidator)), 0);
+    }
+
+    function test_WhileClosedAPositionHealthyAtItsLowEdgeIsNotAuctioned() public {
+        Liquidator liquidator = new Liquidator(accounts);
+        accounts.setLiquidator(address(liquidator));
+        _deposit(CROSS, "NVDA", 437e18);
+        band.setSession(BandDouble.Session(1, 3, 1, 0, 0));
+        uint64 low = uint64(prices[0] * 102 / 100);
+        uint128 high = uint128(uint256(low) * 105 / 100);
+        band.setQuote(NVDA, BandDouble.Quote(2, 3, uint64((uint256(low) + high) / 2), 250, low, high));
+        (int256 equity, uint256 requirement,, uint8 regime) = accounts.health(alice, CROSS);
+        assertEq(regime, 1);
+        vm.prank(alice);
+        accounts.borrow(CROSS, (uint256(equity) - requirement) / 1e12 * 99 / 100, alice, alice);
+        (equity, requirement,,) = accounts.health(alice, CROSS);
+        int256[] memory quantities = new int256[](names.length);
+        uint256[] memory edge = new uint256[](names.length);
+        (quantities[0], edge[0]) = (437e18, high);
+        (uint256 atHigh,,) = engine.currentRequirement(quantities, edge);
+        assertLt(int256(uint256(high) * 437e18 / 1e8) - int256(uint256(low) * 437e18 / 1e8) + equity, int256(atHigh));
+        (int256 judged, uint256 required, bool short, bool closed) = liquidator.shortfall(alice, CROSS);
+        assertTrue(closed);
+        assertFalse(short);
+        assertEq(judged, equity);
+        assertEq(required, requirement);
+        vm.expectRevert(abi.encodeWithSelector(Liquidator.NotLiquidatable.selector, alice, CROSS));
+        liquidator.start(alice, CROSS);
+        band.setSession(BandDouble.Session(0, 0, 0, 0, 0));
+        edge[0] = low;
+        (uint256 open,) = engine.requirement(quantities, edge, 172_800, false);
+        (, required,,) = liquidator.shortfall(alice, CROSS);
+        assertEq(required, (open * 5 - 1) / 4 + 1);
     }
 
     function _deposit(bytes32 position, string memory name, uint256 amount) internal {

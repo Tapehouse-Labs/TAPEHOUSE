@@ -7,6 +7,13 @@ interface IMargin {
     /// @notice The assets, in the order of every quantity and price list.
     function assets() external view returns (bytes32[] memory);
 
+    /// @notice The margin a portfolio needs over `horizon` seconds, in USD with 18 decimals, without the open market's
+    /// buffer, and the missing bits of `currentRequirement`. `spansClosure` counts the weekend-gap scenarios.
+    function requirement(int256[] calldata quantities, uint256[] calldata prices, uint64 horizon, bool spansClosure)
+        external
+        view
+        returns (uint256 margin, uint8 missing);
+
     /// @notice The margin a portfolio needs now, in USD with 18 decimals, a bit for every asset whose liquidity
     /// input is missing, and the regime the band's session puts it in: 0 unknown, 1 closed, 2 open, 3 closing.
     /// `quantities` are signed token amounts with 18 decimals and `prices` USD with 8 decimals, in the order of
@@ -14,7 +21,7 @@ interface IMargin {
     function currentRequirement(int256[] calldata quantities, uint256[] calldata prices)
         external
         view
-        returns (uint256 requirement, uint8 missing, uint8 regime);
+        returns (uint256 margin, uint8 missing, uint8 regime);
 
     /// @notice The most gross exposure the current requirement allows per unit of margin across a closure, in
     /// basis points.
