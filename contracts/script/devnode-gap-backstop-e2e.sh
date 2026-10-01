@@ -25,7 +25,7 @@ event() { jq -r --arg topic "$(cast keccak "$1")" '.logs[] | select(.topics[0] =
 word() { cast to-dec "0x${1:$((2 + 64 * $2)):64}"; }
 l2_gas() {
   cast call --rpc-url "$rpc" $node_interface "gasEstimateComponents(address,bool,bytes)(uint64,uint64,uint256,uint256)" \
-    "$backstop" false "$1" --from "$me" | head -n 2 | cut -d' ' -f1 | { read -r total; read -r l1; echo $((total - l1)); }
+    "$backstop" false "$1" --from "$me" | sed -n 1,2p | cut -d' ' -f1 | { read -r total; read -r l1; echo $((total - l1)); }
 }
 now() { cast block --rpc-url "$rpc" latest --field timestamp; }
 

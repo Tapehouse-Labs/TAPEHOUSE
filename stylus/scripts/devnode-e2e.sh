@@ -32,7 +32,7 @@ write() {
 
 l2_gas() {
   cast call --rpc-url "$rpc" $node_interface "gasEstimateComponents(address,bool,bytes)(uint64,uint64,uint256,uint256)" \
-    "${2:-$band}" false "$1" | head -n 2 | cut -d' ' -f1 | { read -r total; read -r l1; echo $((total - l1)); }
+    "${2:-$band}" false "$1" | sed -n 1,2p | cut -d' ' -f1 | { read -r total; read -r l1; echo $((total - l1)); }
 }
 
 gas_log=$root/stylus/target/devnode-gas.txt
@@ -198,7 +198,7 @@ done
 
 read -r status gas l1 _ <<<"$(write "$status_feeds" "$(python3 "$payload" NY_MARKET_STATUS)")"
 [ "$status" = 0x1 ] || fail "writePrices reverted for NY_MARKET_STATUS"
-change_time=$(cast call --rpc-url "$rpc" "$band" "price(bytes32)(uint256,uint64,uint64)" "$(cast format-bytes32-string NY_MARKET_NEXT_CHANGE_TIME)" | head -n 1 | cut -d' ' -f1)
+change_time=$(cast call --rpc-url "$rpc" "$band" "price(bytes32)(uint256,uint64,uint64)" "$(cast format-bytes32-string NY_MARKET_NEXT_CHANGE_TIME)" | sed -n 1p | cut -d' ' -f1)
 [ "$(cast to-base "$change_time" 16 | wc -c)" -gt 19 ] || fail "NY_MARKET_NEXT_CHANGE_TIME $change_time fits in 64 bits"
 status_current=$(cast format-bytes32-string NY_MARKET_CURRENT_STATUS)
 [ "$(tracked "$status_current")" = 0 ] && [ "$(sample_ms "$status_current")" = 0 ] || fail "an untracked feed was sampled"
@@ -332,7 +332,7 @@ fresh_nvda() {
     sleep 10
   done
   cast send --rpc-url "$rpc" --private-key "$key" "$1" "writePrices(bytes32[],bytes)" "[$nvda]" "$nvda_payload" > /dev/null
-  cast call --rpc-url "$rpc" "$1" "price(bytes32)(uint256,uint64,uint64)" "$nvda" | head -n 1 | cut -d' ' -f1
+  cast call --rpc-url "$rpc" "$1" "price(bytes32)(uint256,uint64,uint64)" "$nvda" | sed -n 1p | cut -d' ' -f1
 }
 halted="0 0 0 0 0 0 "
 
@@ -481,7 +481,7 @@ read -r status _ logs <<<"$(sync_multiplier "$symbol_spy")"
 [ "$status $logs" = "0x1 1" ] || fail "SPY's dividend was not recorded: $(action "$symbol_spy")"
 after "$at"
 read -r anchor_cl anchor_index _ <<<"$(cast call --rpc-url "$rpc" "$band" "anchor(bytes32)(uint64,uint64,uint64)" "$symbol_spy" | cut -d' ' -f1 | tr '\n' ' ')"
-read -r index_px _ <<<"$(cast call --rpc-url "$rpc" "$band" "price(bytes32)(uint256,uint64,uint64)" "$usa500" | head -n 1)"
+read -r index_px _ <<<"$(cast call --rpc-url "$rpc" "$band" "price(bytes32)(uint256,uint64,uint64)" "$usa500" | sed -n 1p)"
 read -r cl_price _ price_247 _ <<<"$(legs "$symbol_spy")"
 [ "$cl_price" = "$(math "$spy_cl * $s1 // $s0")" ] &&
   [ "$price_247" = "$(math "($anchor_cl * $s1 // $s0) * $index_px // $anchor_index")" ] ||
@@ -547,7 +547,7 @@ arbitrum=$(cd "$root/stylus/contracts/band" && cargo stylus deploy --no-verify -
 fresh_nvda "$arbitrum" > /dev/null
 cast send --rpc-url "$rpc" --private-key "$key" "$arbitrum" "writePrices(bytes32[],bytes)" "$status_feeds" \
   "$(python3 "$payload" NY_MARKET_STATUS)" > /dev/null
-arbitrum_state() { cast call --rpc-url "$rpc" "$arbitrum" "quote(bytes32)(uint8,uint8,uint64,uint64,uint64,uint128)" "$symbol_nvda" | head -n 1; }
+arbitrum_state() { cast call --rpc-url "$rpc" "$arbitrum" "quote(bytes32)(uint8,uint8,uint64,uint64,uint64,uint128)" "$symbol_nvda" | sed -n 1p; }
 settled_view() { cast call --rpc-url "$rpc" "$arbitrum" "sequencerSettled()(bool)"; }
 if out=$(BAND_ASSETS="NVDA" "$(dirname "$0")/check-band.sh" "$rpc" "$arbitrum" "$registry" 2>&1); then
   fail "check-band.sh accepted a band whose chain configuration is not the registry's"

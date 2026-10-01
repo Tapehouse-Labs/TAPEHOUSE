@@ -33,7 +33,7 @@ record() {
 l2_gas() {
   cast call --rpc-url "$rpc" --from "$owner" $node_interface \
     "gasEstimateComponents(address,bool,bytes)(uint64,uint64,uint256,uint256)" "${2:-$margin}" false "$1" |
-    head -n 2 | cut -d' ' -f1 | { read -r total; read -r l1; echo $((total - l1)); }
+    sed -n 1,2p | cut -d' ' -f1 | { read -r total; read -r l1; echo $((total - l1)); }
 }
 measure() { record "$1" "$(l2_gas "$(cast calldata "$2" "${@:3}")")"; }
 expect_refusal() {
@@ -103,7 +103,7 @@ cast send --rpc-url "$rpc" --private-key "$key" "$feed" "setRound(int256,uint256
 band=$(jq -r '.tapehouse.Band' "$registry")
 read -r open_code nyse nyse_next change_ms boundary_ms <<<"$(cast call --rpc-url "$rpc" "$band" "session()(uint8,uint8,uint8,uint64,uint64)" | sed 's/ \[[^]]*\]//' | tr '\n' ' ')"
 now_ms=$(( $(cast block --rpc-url "$rpc" latest -f timestamp) * 1000 ))
-requirement_at() { cast call --rpc-url "$rpc" "$margin" "$requirement(uint256,uint8)" "$quantities" "$prices" "$1" "$2" | head -n 1 | cut -d' ' -f1; }
+requirement_at() { cast call --rpc-url "$rpc" "$margin" "$requirement(uint256,uint8)" "$quantities" "$prices" "$1" "$2" | sed -n 1p | cut -d' ' -f1; }
 held=$(cast call --rpc-url "$rpc" "$margin" "currentRequirement(int256[],uint256[])(uint256,uint8,uint8)" "$quantities" "$prices" | sed 's/ \[[^]]*\]//' | tr '\n' ' ')
 expected_current() {
   python3 -c '

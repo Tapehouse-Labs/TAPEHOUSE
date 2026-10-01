@@ -54,7 +54,7 @@ fi
 cross=${EXPOSURE_LIMITS%%,*}
 assets=${EXPOSURE_LIMITS#*,}
 [ "$assets" != "$EXPOSURE_LIMITS" ] || assets=
-count=$(cast call --rpc-url "$rpc" "$accounts" "stocks()(bytes32[],address[])" | head -n 1 | tr -d '[] ' | tr ',' '\n' | grep -c . || true)
+count=$(cast call --rpc-url "$rpc" "$accounts" "stocks()(bytes32[],address[])" | sed -n 1p | tr -d '[] ' | tr ',' '\n' | grep -c . || true)
 [ "$(tr ',' '\n' <<<"$assets" | grep -c . || true)" = "$count" ] ||
   { echo "EXPOSURE_LIMITS needs the cross positions' limit and $count assets' limits" >&2; exit 1; }
 holds_seed

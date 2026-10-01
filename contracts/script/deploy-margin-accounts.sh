@@ -34,7 +34,7 @@ for symbol in $(cast call --rpc-url "$rpc" "$margin" "assets()(bytes32[])" | tr 
   read -r feed _ _ token <<<"$(cast call --rpc-url "$rpc" "$band" "asset(bytes32)(address,bytes32,bytes32,address)" "$symbol" | tr '\n' ' ')"
   cap=0
   if [ "$token" != 0x0000000000000000000000000000000000000000 ] && [ "$feed" != 0x0000000000000000000000000000000000000000 ]; then
-    depth=$(cast call --rpc-url "$rpc" "$margin" "depth(bytes32)(uint32,uint32,uint32,uint32)" "$symbol" | head -n 1 | cut -d' ' -f1)
+    depth=$(cast call --rpc-url "$rpc" "$margin" "depth(bytes32)(uint32,uint32,uint32,uint32)" "$symbol" | sed -n 1p | cut -d' ' -f1)
     read -r _ price _ updated _ <<<"$(cast call --rpc-url "$rpc" "$feed" "latestRoundData()(uint80,int256,uint256,uint256,uint80)" | cut -d' ' -f1 | tr '\n' ' ')"
     [ "$price" -gt 0 ] && [ "$updated" -ge $((now - 86460)) ] ||
       { echo "$(cast parse-bytes32-string "$symbol")'s feed answers $price, updated at $updated" >&2; exit 1; }

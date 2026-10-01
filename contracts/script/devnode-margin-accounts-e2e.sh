@@ -26,7 +26,7 @@ read_() { cast call --rpc-url "$rpc" "$@" | cut -d' ' -f1; }
 health() { cast call --rpc-url "$rpc" "$accounts" "health(address,bytes32)(int256,uint256,uint8,uint8)" "$me" "$1" | cut -d' ' -f1 | tr '\n' ' '; }
 l2_gas() {
   cast call --rpc-url "$rpc" $node_interface "gasEstimateComponents(address,bool,bytes)(uint64,uint64,uint256,uint256)" \
-    "$accounts" false "$1" --from "$me" | head -n 2 | cut -d' ' -f1 | { read -r total; read -r l1; echo $((total - l1)); }
+    "$accounts" false "$1" --from "$me" | sed -n 1,2p | cut -d' ' -f1 | { read -r total; read -r l1; echo $((total - l1)); }
 }
 
 [ "$(read_ "$accounts" "engine()(address)")" = "$(jq -r .tapehouse.Margin "$registry")" ] || fail "the accounts' engine is not the registry's"
@@ -37,7 +37,7 @@ l2_gas() {
 [ "$(read_ "$accounts" "guardian()(address)")" = "$(jq -r .tapehouse.Owner "$registry")" ] || fail "the guardian is not the owner"
 [ "$(read_ "$accounts" "premiumRate()(uint32)")" = 500 ] && [ "$(read_ "$accounts" "reserveShare()(uint16)")" = 1000 ] ||
   fail "the premium is not the deployment's"
-depth=$(cast call --rpc-url "$rpc" "$(jq -r .tapehouse.Margin "$registry")" "depth(bytes32)(uint32,uint32,uint32,uint32)" "$isolated" | head -n 1 | cut -d' ' -f1)
+depth=$(cast call --rpc-url "$rpc" "$(jq -r .tapehouse.Margin "$registry")" "depth(bytes32)(uint32,uint32,uint32,uint32)" "$isolated" | sed -n 1p | cut -d' ' -f1)
 feed_price=$(cast call --rpc-url "$rpc" "$(jq -r .chainlink.SPY_USD "$registry")" "latestRoundData()(uint80,int256,uint256,uint256,uint80)" | sed -n 2p | cut -d' ' -f1)
 multiplier=$(cast call --rpc-url "$rpc" "$spy" "uiMultiplier()(uint256)" | cut -d' ' -f1)
 cap=$(cast call --rpc-url "$rpc" "$accounts" "holding(bytes32)(uint256,uint256,uint256)" "$isolated" | sed -n 3p | cut -d' ' -f1)

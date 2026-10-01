@@ -26,7 +26,7 @@ record() {
 l2_gas() {
   cast call --rpc-url "$rpc" --from "$owner" $node_interface \
     "gasEstimateComponents(address,bool,bytes)(uint64,uint64,uint256,uint256)" "$2" false "$1" |
-    head -n 2 | cut -d' ' -f1 | { read -r total; read -r l1; echo $((total - l1)); }
+    sed -n 1,2p | cut -d' ' -f1 | { read -r total; read -r l1; echo $((total - l1)); }
 }
 measure() { record "$1" "$(l2_gas "$(cast calldata "$3" "${@:4}")" "$2")"; }
 list() { jq -r "$1"' | map(tostring) | "[" + join(",") + "]"' "$vectors"; }

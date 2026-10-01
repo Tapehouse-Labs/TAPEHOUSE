@@ -24,7 +24,7 @@ read_() { cast call --rpc-url "$rpc" "$@" | cut -d' ' -f1; }
 short() { cast call --rpc-url "$rpc" "$liquidator" "shortfall(address,bytes32)(int256,uint256,bool,bool)" "$me" "$position" | sed -n 3p; }
 l2_gas() {
   cast call --rpc-url "$rpc" $node_interface "gasEstimateComponents(address,bool,bytes)(uint64,uint64,uint256,uint256)" \
-    "$liquidator" false "$1" --from "$me" | head -n 2 | cut -d' ' -f1 | { read -r total; read -r l1; echo $((total - l1)); }
+    "$liquidator" false "$1" --from "$me" | sed -n 1,2p | cut -d' ' -f1 | { read -r total; read -r l1; echo $((total - l1)); }
 }
 
 [ "$(read_ "$accounts" "liquidator()(address)")" = "$liquidator" ] || fail "the accounts' liquidator is not the registry's"
@@ -81,7 +81,7 @@ q = ['10000000000000000000' if i == spy else '0' for i in range(len(assets))]
 p = [sys.argv[2] if i == spy else '0' for i in range(len(assets))]
 print('[' + ','.join(q) + '] [' + ','.join(p) + ']')" "$(cast call --rpc-url "$rpc" "$margin" "assets()(bytes32[])")" "$low")"
 read -r current _ regime <<<"$(cast call --rpc-url "$rpc" "$margin" "currentRequirement(int256[],uint256[])(uint256,uint8,uint8)" "$quantities" "$prices" | cut -d' ' -f1 | tr '\n' ' ')"
-open=$(cast call --rpc-url "$rpc" "$margin" "requirement(int256[],uint256[],uint64,bool)(uint256,uint8)" "$quantities" "$prices" 172800 false | head -n 1 | cut -d' ' -f1)
+open=$(cast call --rpc-url "$rpc" "$margin" "requirement(int256[],uint256[],uint64,bool)(uint256,uint8)" "$quantities" "$prices" 172800 false | sed -n 1p | cut -d' ' -f1)
 judged=$(cast call --rpc-url "$rpc" "$liquidator" "shortfall(address,bytes32)(int256,uint256,bool,bool)" "$me" "$alone" | sed -n 2p | cut -d' ' -f1)
 python3 -c "import sys; sys.exit($judged != ((($open * 5 - 1) // 4 + 1) if $regime == 0 else $current))" ||
   fail "SPY alone is judged against $judged in regime $regime; the program's current requirement is $current, its open one $open"

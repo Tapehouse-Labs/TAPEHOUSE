@@ -12,7 +12,7 @@ backstop=$(jq -er .tapehouse.GapBackstop "$registry")
 accounts=$(cast call --rpc-url "$rpc" "$backstop" "accounts()(address)")
 limit() { cast call --rpc-url "$rpc" "$backstop" "exposureLimit(bytes32)(uint256)" "$1" | cut -d' ' -f1; }
 limits=
-for symbol in $(cast call --rpc-url "$rpc" "$accounts" "stocks()(bytes32[],address[])" | head -n 1 | tr -d '[],'); do
+for symbol in $(cast call --rpc-url "$rpc" "$accounts" "stocks()(bytes32[],address[])" | sed -n 1p | tr -d '[],'); do
   limits=${limits:+$limits,}$(limit "$symbol")
 done
 arguments=$(cast abi-encode "constructor(address,address,uint256,uint256[])" "$accounts" \
