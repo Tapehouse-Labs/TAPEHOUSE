@@ -9,6 +9,7 @@ import {GapBackstop} from "../src/GapBackstop.sol";
 import {Liquidator} from "../src/Liquidator.sol";
 import {MarginAccounts} from "../src/MarginAccounts.sol";
 import {ReopeningAuction} from "../src/ReopeningAuction.sol";
+import {StockLendingVault} from "../src/StockLendingVault.sol";
 import {SupplyVault} from "../src/SupplyVault.sol";
 import {IBand} from "../src/interfaces/IBand.sol";
 import {IMargin} from "../src/interfaces/IMargin.sol";
@@ -593,6 +594,32 @@ contract ReopeningAuctionTest is ReopeningAuctionBase {
         auction.enroll(alice, CROSS, NVDA);
         assertEq(auction.round(NVDA, openMs).floor, 135e8);
         assertEq(auction.lots(NVDA, openMs)[0].amount, 10 * SHARE);
+    }
+
+    function test_ALotCountsWhatThePositionLentAndItsClearingTakesItFromTheVault() public {
+        StockLendingVault lending =
+            new StockLendingVault(IERC20(address(nvda)), owner, SupplyVault.RateModel(80_00, 25, 1_00, 50_00), 10_00);
+        vm.startPrank(owner);
+        lending.setDepositor(address(accounts));
+        accounts.setLending(NVDA, lending);
+        vm.stopPrank();
+        _position(alice, 10 * SHARE, 1_200 * USDG);
+        vm.prank(alice);
+        accounts.lend(CROSS, address(nvda), 10 * SHARE, alice);
+        _weekend(150e8);
+        _quote(NVDA, 150e8, 152e8);
+        auction.enroll(alice, CROSS, NVDA);
+        uint256 lot = auction.lots(NVDA, openMs)[0].amount;
+        assertEq(lot, _need(1_200 * USDG, 135e8));
+        _commit(carol, lot, 140e8, "c");
+        _toReveal();
+        _reveal(carol, lot, 140e8, "c");
+        _open();
+        auction.clear(NVDA, openMs, 140e8);
+        auction.claim(NVDA, openMs, 0);
+        assertEq(nvda.balanceOf(carol) + accounts.lent(alice, CROSS, address(nvda)), 10 * SHARE);
+        assertEq(accounts.collateral(alice, CROSS, address(nvda)), 0);
+        assertEq(accounts.debt(alice, CROSS), 0);
     }
 
     function test_ALotIncludesThePremiumOwed() public {

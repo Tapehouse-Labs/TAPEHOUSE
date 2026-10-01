@@ -169,8 +169,8 @@ contract ReopeningAuction {
     error UnknownAsset(bytes32 symbol);
     /// @notice The band of `symbol` gives no price.
     error NoPrice(bytes32 symbol);
-    /// @notice The position meets its requirement at its bands' low edges, holds none of the Stock Token, or has a lot
-    /// in the round already.
+    /// @notice The position meets its requirement at its bands' low edges, can sell none of the Stock Token, or has a
+    /// lot in the round already.
     error NotEnrollable(address account, bytes32 position);
     /// @notice The round sells `MAX_LOTS` lots, none smaller than this one.
     error TooManyLots();
@@ -204,8 +204,9 @@ contract ReopeningAuction {
 
     /// @notice Enrolls `account`'s `position` in the round of `symbol` if it falls short at its bands' low edges, as the
     /// accounts' `health` has it, and holds it out of the open-market Dutch auction until the round's clearing window
-    /// closes. Its lot is what repays all it owes at the floor, fee included, at most its holding; a full round takes it
-    /// only in place of a smaller lot. Anyone may call it while bids are committed.
+    /// closes. Its lot is what repays all it owes at the floor, fee included, at most what it holds and what its
+    /// lending vault can return of what it lent; a full round takes it only in place of a smaller lot. Anyone may call
+    /// it while bids are committed.
     function enroll(address account, bytes32 position, bytes32 symbol) external {
         uint64 openMs = _commitPhase();
         address token = _token(symbol);
@@ -373,7 +374,7 @@ contract ReopeningAuction {
     }
 
     function _lotSize(address account, bytes32 position, address token, uint256 floor) private view returns (uint128) {
-        uint256 holding = accounts.collateral(account, position, token);
+        uint256 holding = accounts.sellable(account, position, token);
         // slither-disable-next-line unused-return
         (int256 equity, uint256 requirement,,) = accounts.health(account, position); // forge-lint: disable-line(unused-return)
         if (holding == 0 || equity >= SafeCast.toInt256(requirement)) revert NotEnrollable(account, position);

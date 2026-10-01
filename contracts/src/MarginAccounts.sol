@@ -4,12 +4,14 @@ pragma solidity 0.8.37;
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IBand} from "./interfaces/IBand.sol";
 import {IMargin} from "./interfaces/IMargin.sol";
 import {IStockToken, IStockTokenRegistry} from "./interfaces/IStockToken.sol";
 import {IUSDG} from "./interfaces/IUSDG.sol";
+import {StockLendingVault} from "./StockLendingVault.sol";
 import {SupplyVault} from "./SupplyVault.sol";
 
 /// @title Tapehouse margin accounts
@@ -29,7 +31,9 @@ import {SupplyVault} from "./SupplyVault.sol";
 /// has not blocklisted. Deposits, total debt and weekend debt are capped for good at deployment, and a guardian can
 /// pause new borrowing. While the 24/5 session is closed, each position's debt also
 /// carries a premium, owed beside it and paid after it, that funds the backstop; part of every premium paid goes to a
-/// fee reserve.
+/// fee reserve. A position may lend its Stock Tokens through the asset's lending vault and earn its fee: the tokens
+/// leave its holding, it keeps the vault's shares, and what they are worth still counts as the asset for the engine,
+/// at `RECALL_HAIRCUT` less in its equity for the risk that they come back late.
 contract MarginAccounts is Ownable2Step {
     using SafeERC20 for IERC20;
 
@@ -60,6 +64,7 @@ contract MarginAccounts is Ownable2Step {
         uint256[] prices;
         int256 equity;
         uint256 gross;
+        uint256[] effective;
         uint8 held;
     }
 
@@ -75,6 +80,9 @@ contract MarginAccounts is Ownable2Step {
     /// @notice The highest premium rate, in basis points a year.
     uint32 public constant MAX_PREMIUM_RATE = 100_00;
 
+    /// @notice What a lent Stock Token counts for less in a position's equity, in basis points of its value: half the
+    /// 10% move an asset's cap allows, the average premium a buy-in of a capped holding pays to bring it back.
+    uint256 public constant RECALL_HAIRCUT = 5_00;
     uint256 private constant BPS = 10_000;
     uint256 private constant PRICE_UNIT = 1e8;
     uint256 private constant USDG_TO_USD = 1e12;
@@ -138,11 +146,23 @@ contract MarginAccounts is Ownable2Step {
     address[] private _registries;
     mapping(address account => mapping(bytes32 position => Position)) private _positions;
     mapping(address account => mapping(bytes32 position => mapping(uint256 asset => uint256))) private _units;
+    mapping(uint256 asset => StockLendingVault) private _lending;
+    mapping(address account => mapping(bytes32 position => mapping(uint256 asset => uint256))) private _lent;
     Closure private _closure;
 
     /// @notice `caller` deposited `amount` of `token` into `account`'s `position`.
     event Deposit(
         address indexed caller, address indexed account, bytes32 indexed position, address token, uint256 amount
+    );
+    /// @notice `symbol`'s lending vault was set.
+    event LendingSet(bytes32 indexed symbol, address indexed lending);
+    /// @notice `account`'s `position` lent `amount` of `symbol` for `shares` of its lending vault.
+    event Lend(
+        address indexed account, bytes32 indexed position, bytes32 indexed symbol, uint256 amount, uint256 shares
+    );
+    /// @notice `account`'s `position` took back `amount` of `symbol` for `shares` of its lending vault.
+    event Unlend(
+        address indexed account, bytes32 indexed position, bytes32 indexed symbol, uint256 amount, uint256 shares
     );
     /// @notice `caller` withdrew `amount` of `token` from `account`'s `position` to `receiver`.
     event Withdraw(
@@ -255,8 +275,9 @@ contract MarginAccounts is Ownable2Step {
     error InsufficientReserve(uint256 reserve);
     /// @notice The reserve goes to an address.
     error InvalidReceiver();
-    /// @notice The issuer has paused `symbol`'s Stock Token or blocklisted the accounts, so it could not be seized: it
-    /// backs no new loan or withdrawal in debt.
+    /// @notice The issuer has paused `symbol`'s Stock Token or blocklisted the accounts, or the position lent it to a
+    /// vault the issuer has blocklisted or burnt from before the vault synced, so it could not be seized: it backs no new
+    /// loan or withdrawal in debt.
     error AssetFrozen(bytes32 symbol);
     /// @notice The accounts' holding of `symbol` in the position is still worth a raw unit or more.
     error HoldingNotEmpty(bytes32 symbol);
@@ -284,6 +305,12 @@ contract MarginAccounts is Ownable2Step {
     error AssetWrittenOff(bytes32 symbol);
     /// @notice The issuer has blocklisted `account`, so its Stock Tokens do not move through the accounts either.
     error Blocked(address account);
+    /// @notice `symbol` has no lending vault.
+    error NoLending(bytes32 symbol);
+    /// @notice `symbol`'s lending vault is already set, to `current`.
+    error LendingAlreadySet(bytes32 symbol, address current);
+    /// @notice The lending vault does not lend the asset's token to these accounts.
+    error InvalidLending();
 
     /// @param band_ The band, which must be the engine's.
     /// @param engine_ The margin engine; its assets are the Stock Tokens the positions take.
@@ -351,11 +378,39 @@ contract MarginAccounts is Ownable2Step {
     }
 
     /// @notice What `account`'s `position` holds of `token`: a Stock Token at its holding's last synced scale.
-    function collateral(address account, bytes32 position, address token) external view returns (uint256) {
+    function collateral(address account, bytes32 position, address token) public view returns (uint256) {
         if (token == address(usdg)) return _positions[account][position].usdg;
         if (token == address(weth)) return _positions[account][position].weth;
         uint256 index = _indexOfToken[token];
         return index == 0 ? 0 : _quantity(_units[account][position][index - 1], _books[index - 1].scale);
+    }
+
+    /// @notice What `account`'s `position` has lent of `token` through its lending vault, its fee included: what its
+    /// shares are worth.
+    function lent(address account, bytes32 position, address token) public view returns (uint256) {
+        uint256 index = _indexOfToken[token];
+        if (index == 0) return 0;
+        uint256 shares = _lent[account][position][--index];
+        return shares == 0 ? 0 : _lending[index].convertToAssets(shares);
+    }
+
+    /// @notice What the liquidator may take of `token` from `account`'s `position` now: what it holds, and what its
+    /// lending vault can return of what it lent.
+    function sellable(address account, bytes32 position, address token) external view returns (uint256) {
+        uint256 index = _indexOfToken[token];
+        uint256 held = collateral(account, position, token);
+        if (index == 0) return held;
+        uint256 shares = _lent[account][position][--index];
+        if (shares == 0) return held;
+        StockLendingVault vault_ = _lending[index];
+        return held + _min(vault_.convertToAssets(shares), vault_.maxWithdraw(address(this)));
+    }
+
+    /// @notice The vault through which positions lend `symbol`; zero where there is none.
+    function lending(bytes32 symbol) external view returns (StockLendingVault) {
+        uint256 i = _indexOfSymbol[symbol];
+        if (i == 0) revert UnknownAsset(symbol);
+        return _lending[i - 1];
     }
 
     /// @notice The accounts' holding of `symbol`: the units the positions hold, each worth `scale` / 10^18 of a
@@ -437,7 +492,7 @@ contract MarginAccounts is Ownable2Step {
         if (i == 0) revert UnknownAsset(symbol);
         --i;
         Valuation memory v = _value(account, position, false);
-        uint256 quantity = SafeCast.toUint256(v.quantities[i]);
+        uint256 quantity = v.effective[i];
         uint256 high = v.prices[i];
         if (quantity == 0) return 0;
         int256 rest = v.equity - SafeCast.toInt256(quantity * high / PRICE_UNIT + borrowing * USDG_TO_USD);
@@ -474,6 +529,22 @@ contract MarginAccounts is Ownable2Step {
         if (newBackstop == address(0)) revert InvalidBackstop();
         backstop = newBackstop;
         emit BackstopSet(newBackstop);
+    }
+
+    /// @notice Sets the vault through which positions lend `symbol`, once: it must lend the asset's token, take
+    /// deposits from these accounts alone and have their owner, who alone sets its borrower.
+    function setLending(bytes32 symbol, StockLendingVault newLending) external onlyOwner {
+        uint256 i = _indexOfSymbol[symbol];
+        if (i == 0 || _tokens[i - 1] == address(0)) revert UnknownAsset(symbol);
+        if (address(_lending[--i]) != address(0)) revert LendingAlreadySet(symbol, address(_lending[i]));
+        if (
+            newLending.asset() != _tokens[i] || newLending.depositor() != address(this) || newLending.owner() != owner()
+        ) {
+            revert InvalidLending();
+        }
+        _lending[i] = newLending;
+        emit LendingSet(symbol, address(newLending));
+        IERC20(_tokens[i]).forceApprove(address(newLending), type(uint256).max);
     }
 
     /// @notice Sets the premium rate, in basis points a year, from now on: closed time up to now accrues at the old
@@ -547,11 +618,13 @@ contract MarginAccounts is Ownable2Step {
 
     /// @notice Brings every position's holding of `symbol` down in proportion when the accounts hold less of it than
     /// their positions count, as after the issuer burns from the accounts. It never raises a holding. Anyone may call
-    /// it; every deposit, withdrawal, loan and seizure touching the asset calls it first.
+    /// it; every deposit, withdrawal, loan and seizure touching the asset calls it first. It also syncs the asset's
+    /// lending vault, so a burn from the vault lowers what the positions lent before anyone judges them.
     function sync(bytes32 symbol) external {
         uint256 i = _indexOfSymbol[symbol];
         if (i == 0 || _tokens[i - 1] == address(0)) revert UnknownAsset(symbol);
-        _sync(i - 1);
+        _sync(--i);
+        if (address(_lending[i]) != address(0)) _lending[i].sync();
     }
 
     /// @notice Clears `account`'s holding of `symbol` in `position` once a burn has left it worth less than a raw unit,
@@ -565,7 +638,7 @@ contract MarginAccounts is Ownable2Step {
         b.units -= SafeCast.toUint128(units);
         _units[account][position][i] = 0;
         Position storage p = _positions[account][position];
-        p.held &= ~uint8(1 << i); // forge-lint: disable-line(unsafe-typecast)
+        if (_lent[account][position][i] == 0) p.held &= ~uint8(1 << i); // forge-lint: disable-line(unsafe-typecast)
         emit HoldingCleared(account, position, symbol, units);
     }
 
@@ -573,7 +646,7 @@ contract MarginAccounts is Ownable2Step {
     /// cross position or its own isolated position, and reverts with `AssetInOtherPosition` if the account holds it in
     /// the other. Stock Tokens and USDG come only from the account or an address it authorized, and a Stock Token only
     /// within its cap and for an account and caller the issuer has not blocklisted; anyone may deposit WETH.
-    function deposit(bytes32 position, address token, uint256 amount, address account) external {
+    function deposit(bytes32 position, address token, uint256 amount, address account) public {
         if (amount == 0) revert ZeroAmount();
         _checkPosition(position);
         Position storage p = _positions[account][position];
@@ -595,12 +668,74 @@ contract MarginAccounts is Ownable2Step {
             if (b.scale == 0) revert AssetWrittenOff(symbol);
             uint256 units = amount * WAD / b.scale;
             b.units += SafeCast.toUint128(units);
-            if (_quantity(b.units, b.scale) > _caps[index]) revert AssetCapExceeded(symbol, _caps[index]);
+            if (_quantity(b.units, b.scale) + _lentByAccounts(index) > _caps[index]) {
+                revert AssetCapExceeded(symbol, _caps[index]);
+            }
             _units[account][position][index] += units;
             p.held |= uint8(1 << index); // forge-lint: disable-line(unsafe-typecast)
         }
+        // forge-lint: disable-next-line(reentrancy-events)
         emit Deposit(msg.sender, account, position, token, amount);
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+    }
+
+    /// @notice Deposits as `deposit` does, with an EIP-2612 permit from the caller for the token: a Stock Token's permit
+    /// domain is its current `name()` and version "1", as its `eip712Domain()` reads. A permit already used, as by a
+    /// front-runner, does not stop the deposit if the allowance stands.
+    function depositWithPermit(
+        bytes32 position,
+        address token,
+        uint256 amount,
+        address account,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external {
+        try IERC20Permit(token).permit(msg.sender, address(this), amount, deadline, v, r, s) {} catch {}
+        deposit(position, token, amount, account);
+    }
+
+    /// @notice Lends `amount` of `account`'s `position`'s holding of a Stock Token through the asset's lending vault:
+    /// the tokens leave the holding, the position keeps the vault's shares, and what they are worth still counts for
+    /// the asset, at `RECALL_HAIRCUT` less in its equity. Only for an account the issuer has not blocklisted; a
+    /// position in debt must then pass its checks, and waits while the guardian has paused borrowing.
+    function lend(bytes32 position, address token, uint256 amount, address account) external {
+        _checkAuthorized(account);
+        uint256 index = _indexOfToken[token];
+        if (index == 0) revert UnsupportedToken(token, position);
+        StockLendingVault vault_ = _lending[--index];
+        if (address(vault_) == address(0)) revert NoLending(_symbols[index]);
+        _checkNotBlocked(index, account);
+        Position storage p = _debit(account, position, token, amount);
+        uint256 shares = vault_.previewDeposit(amount);
+        _lent[account][position][index] += shares;
+        p.held |= uint8(1 << index); // forge-lint: disable-line(unsafe-typecast)
+        if (p.debtShares != 0 || p.premium != 0) {
+            if (borrowingPaused) revert BorrowingIsPaused();
+            _accrue();
+            _syncHeld(account, position);
+            _check(account, position);
+        }
+        emit Lend(account, position, _symbols[index], amount, shares);
+        // slither-disable-next-line unused-return
+        vault_.deposit(amount, address(this)); // forge-lint: disable-line(unused-return)
+    }
+
+    /// @notice Takes `amount` of a Stock Token `account`'s `position` lent back from the asset's lending vault into
+    /// its holding, as far as the vault holds it.
+    function unlend(bytes32 position, address token, uint256 amount, address account) external {
+        _checkAuthorized(account);
+        uint256 index = _indexOfToken[token];
+        if (index == 0) revert UnsupportedToken(token, position);
+        Book storage b = _sync(--index);
+        if (b.scale == 0) revert AssetWrittenOff(_symbols[index]);
+        StockLendingVault vault_ = _reclaim(account, position, index, amount);
+        uint256 units = amount * WAD / b.scale;
+        b.units += SafeCast.toUint128(units);
+        _units[account][position][index] += units;
+        // slither-disable-next-line unused-return
+        vault_.withdraw(amount, address(this), address(this)); // forge-lint: disable-line(unused-return)
     }
 
     /// @notice Withdraws `amount` of `token` from `account`'s `position` to `receiver`. A Stock Token leaves only for
@@ -669,13 +804,25 @@ contract MarginAccounts is Ownable2Step {
         return repaid + premiumPaid;
     }
 
-    /// @notice Takes `amount` of `token` from `account`'s `position` to `receiver`, whatever the position's health.
-    /// Only the liquidator may.
+    /// @notice Takes `amount` of `token` from `account`'s `position` to `receiver`, whatever the position's health: a
+    /// Stock Token from its holding first, and the rest from what it lent, straight from the lending vault. Only the
+    /// liquidator may.
     function seize(bytes32 position, address token, uint256 amount, address account, address receiver) external {
         if (msg.sender != liquidator) revert NotLiquidator(msg.sender);
-        _debit(account, position, token, amount);
+        if (amount == 0) revert ZeroAmount();
+        uint256 index = _indexOfToken[token];
+        uint256 fromVault = 0;
+        if (index != 0) {
+            uint256 held = collateral(account, position, token);
+            if (amount > held) fromVault = amount - held;
+        }
+        StockLendingVault vault_ = StockLendingVault(address(0));
+        if (fromVault != 0) vault_ = _reclaim(account, position, index - 1, fromVault);
+        if (fromVault != amount) _debit(account, position, token, amount - fromVault);
         emit Seize(account, position, token, amount, receiver);
-        IERC20(token).safeTransfer(receiver, amount);
+        // slither-disable-next-line unused-return
+        if (fromVault != 0) vault_.withdraw(fromVault, receiver, address(this)); // forge-lint: disable-line(unused-return)
+        if (fromVault != amount) IERC20(token).safeTransfer(receiver, amount - fromVault);
     }
 
     /// @notice Writes off what `account`'s `position` owes once it holds no collateral, or only holdings a burn has
@@ -691,11 +838,12 @@ contract MarginAccounts is Ownable2Step {
             Book storage book = _sync(i);
             uint256 units = _units[account][position][i];
             // forge-lint: disable-next-line(require-revert-in-loop)
-            if (_quantity(units, book.scale) != 0) revert PositionNotEmpty();
+            if (_quantity(units, book.scale) != 0 || _lentAssets(account, position, i) != 0) revert PositionNotEmpty();
             book.units -= SafeCast.toUint128(units);
             _units[account][position][i] = 0;
+            if (_lent[account][position][i] == 0) held &= ~uint8(1 << i); // forge-lint: disable-line(unsafe-typecast)
         }
-        p.held = 0;
+        p.held = held;
         _settle(p, _accrue());
         uint256 total = vault.debt();
         uint256 shares = p.debtShares;
@@ -742,10 +890,11 @@ contract MarginAccounts is Ownable2Step {
         if (closedMs != 0 && totalDebtShares != 0) {
             index += _premiumPerShare(closedMs, c.premiumRate);
             premiumIndex = SafeCast.toUint128(index);
+            // forge-lint: disable-next-line(reentrancy-events)
             emit PremiumAccrued(index);
         }
         bool moved = c.closesMs != closesMs || c.reopensMs != reopensMs;
-        if (moved) emit ClosureSet(c.closesMs, c.reopensMs);
+        if (moved) emit ClosureSet(c.closesMs, c.reopensMs); // forge-lint: disable-line(reentrancy-events)
         if (moved || closedMs != 0) _closure = c;
     }
 
@@ -800,6 +949,32 @@ contract MarginAccounts is Ownable2Step {
         return p.premium + p.debtShares * (index - p.premiumIndex) / RAY;
     }
 
+    function _reclaim(address account, bytes32 position, uint256 index, uint256 amount)
+        private
+        returns (StockLendingVault vault_)
+    {
+        vault_ = _lending[index];
+        if (address(vault_) == address(0)) revert NoLending(_symbols[index]);
+        if (amount == 0) revert ZeroAmount();
+        uint256 lentShares = _lent[account][position][index];
+        uint256 shares = vault_.previewWithdraw(amount);
+        if (shares > lentShares) revert InsufficientCollateral(_tokens[index], amount);
+        _lent[account][position][index] = lentShares - shares;
+        emit Unlend(account, position, _symbols[index], amount, shares);
+    }
+
+    function _lentByAccounts(uint256 index) private view returns (uint256) {
+        StockLendingVault vault_ = _lending[index];
+        if (address(vault_) == address(0)) return 0;
+        return vault_.convertToAssets(vault_.balanceOf(address(this)));
+    }
+
+    function _lentAssets(address account, bytes32 position, uint256 index) private view returns (uint256) {
+        uint256 shares = _lent[account][position][index];
+        // forge-lint: disable-next-line(calls-loop)
+        return shares == 0 ? 0 : _lending[index].convertToAssets(shares);
+    }
+
     function _debit(address account, bytes32 position, address token, uint256 amount)
         private
         returns (Position storage p)
@@ -822,7 +997,9 @@ contract MarginAccounts is Ownable2Step {
             if (_quantity(held - units, b.scale) == 0) units = held;
             _units[account][position][index] = held - units;
             b.units -= SafeCast.toUint128(units);
-            if (held == units) p.held &= ~uint8(1 << index); // forge-lint: disable-line(unsafe-typecast)
+            if (held == units && _lent[account][position][index] == 0) {
+                p.held &= ~uint8(1 << index); // forge-lint: disable-line(unsafe-typecast)
+            }
         }
     }
 
@@ -831,12 +1008,17 @@ contract MarginAccounts is Ownable2Step {
         for (uint256 i = 0; bits >> i != 0; ++i) {
             if (bits & (1 << i) == 0) continue;
             Book storage b = _sync(i);
-            if (_quantity(_units[account][position][i], b.scale) == 0) continue;
+            if (_quantity(_units[account][position][i], b.scale) == 0 && _lentAssets(account, position, i) == 0) {
+                continue;
+            }
             _checkNotBlocked(i, account);
             IStockTokenRegistry registry = IStockTokenRegistry(_registries[i]);
             // forge-lint: disable-start(calls-loop)
             // slither-disable-next-line calls-loop
-            if (IStockToken(_tokens[i]).paused() || registry.isBlocked(address(this))) {
+            if (
+                IStockToken(_tokens[i]).paused() || registry.isBlocked(address(this))
+                    || (_lent[account][position][i] != 0 && _lending[i].maxDeposit(address(this)) == 0)
+            ) {
                 // forge-lint: disable-end(calls-loop)
                 revert AssetFrozen(_symbols[i]); // forge-lint: disable-line(require-revert-in-loop)
             }
@@ -891,9 +1073,13 @@ contract MarginAccounts is Ownable2Step {
         uint256 n = _symbols.length;
         v.quantities = new int256[](n);
         v.prices = new uint256[](n);
+        v.effective = new uint256[](n);
+        uint256 worth = 0;
         for (uint256 i; i < n; ++i) {
             if (p.held & (1 << i) == 0) continue;
-            uint256 quantity = _quantity(_units[account][position][i], _books[i].scale);
+            uint256 held = _quantity(_units[account][position][i], _books[i].scale);
+            uint256 lentQuantity = _lentAssets(account, position, i);
+            uint256 quantity = held + lentQuantity;
             if (quantity == 0) continue;
             bytes32 symbol = _symbols[i];
             // slither-disable-next-line unused-return,calls-loop
@@ -905,17 +1091,18 @@ contract MarginAccounts is Ownable2Step {
                 // forge-lint: disable-next-line(require-revert-in-loop)
                 if (status != 0) revert CorporateActionPending(symbol);
             }
-            uint256 value = quantity * low / PRICE_UNIT;
             v.quantities[i] = SafeCast.toInt256(quantity);
             v.prices[i] = low;
+            v.effective[i] = held + lentQuantity * (BPS - RECALL_HAIRCUT) / BPS;
             v.held |= uint8(1 << i); // forge-lint: disable-line(unsafe-typecast)
-            v.gross += value;
+            v.gross += quantity * low / PRICE_UNIT;
+            worth += v.effective[i] * low / PRICE_UNIT;
         }
         uint256 owed = p.debtShares == 0
             ? p.premium
             : _toAssetsUp(p.debtShares, vault.debt(), totalDebtShares)
                 + _premium(p, strict ? premiumIndex : _premiumIndexNow());
-        v.equity = SafeCast.toInt256(v.gross + p.usdg * USDG_TO_USD + _wethValue(p.weth))
+        v.equity = SafeCast.toInt256(worth + p.usdg * USDG_TO_USD + _wethValue(p.weth))
             - SafeCast.toInt256(owed * USDG_TO_USD);
     }
 

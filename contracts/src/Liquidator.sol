@@ -101,6 +101,8 @@ contract Liquidator {
     IERC20 public immutable weth;
     /// @notice The Chainlink feed that prices WETH; zero where there is none.
     AggregatorV3Interface public immutable ethUsd;
+    /// @notice What a lent Stock Token counts for less in a position's equity, in basis points: the accounts' own.
+    uint256 public immutable recallHaircut;
 
     /// @notice The auction of each position, if one runs.
     mapping(address account => mapping(bytes32 position => Auction)) public auctions;
@@ -181,6 +183,7 @@ contract Liquidator {
         usdg = accounts_.usdg();
         weth = accounts_.weth();
         ethUsd = accounts_.ethUsd();
+        recallHaircut = accounts_.RECALL_HAIRCUT();
         usdg.forceApprove(address(accounts_), type(uint256).max);
     }
 
@@ -291,7 +294,7 @@ contract Liquidator {
         if (!_isShort(v)) return (0, 0);
         require(_symbol(token, v.symbols, v.tokens) != bytes32(0), NotForSale(token));
         uint256 feeBps = _feeBps(v);
-        sold = _min(amount, accounts.collateral(account, position, token));
+        sold = _min(amount, accounts.sellable(account, position, token));
         sold = _min(sold, _divUp(v.owed * BPS, BPS - feeBps) * TOKEN_TO_USDG / unitPrice);
         if (sold != 0) {
             cost = _divUp(sold * unitPrice, TOKEN_TO_USDG);
@@ -328,8 +331,9 @@ contract Liquidator {
 
     /// @notice Writes off what `account`'s `position` still owes once it holds nothing, or only holdings a burn left
     /// worthless: lenders bear it, and its premium is forgiven. If the accounts refuse it and the position is worth less
-    /// than it owes, holdings worth less than `DUST` each are swept to the caller first. Once the accounts have a
-    /// backstop, only it may call this, after covering what it can; until then, anyone may.
+    /// than it owes, holdings worth less than `DUST` each, a Stock Token's with what its lending vault can return of
+    /// what the position lent, are swept to the caller first. Once the accounts have a backstop, only it may call this,
+    /// after covering what it can; until then, anyone may.
     function writeOff(address account, bytes32 position) external returns (uint256) {
         address backstop = accounts.backstop();
         require(backstop == address(0) || msg.sender == backstop, NotBackstop(msg.sender));
@@ -351,7 +355,7 @@ contract Liquidator {
         if (!_live(a, closed)) revert NoAuction(account, position);
         bytes32 symbol = _symbol(token, v.symbols, v.tokens);
         uint256 unit = _price(token, symbol, closed, block.timestamp - a.startedAt);
-        bought = _min(amount, accounts.collateral(account, position, token));
+        bought = _min(amount, accounts.sellable(account, position, token));
         bought = _min(bought, _repayable(v) * TOKEN_TO_USDG / unit);
         if (closed && symbol != bytes32(0)) bought = _spend(account, position, token, bought);
         require(bought != 0, NothingToBuy());
@@ -385,7 +389,7 @@ contract Liquidator {
         for (uint256 i; i < symbols.length; ++i) {
             if (tokens[i] == address(0)) continue;
             // forge-lint: disable-next-line(calls-loop)
-            uint256 held = accounts.collateral(account, position, tokens[i]);
+            uint256 held = accounts.sellable(account, position, tokens[i]);
             if (held == 0) continue;
             // slither-disable-next-line unused-return,calls-loop
             (,,,, uint64 low,) = band.quote(symbols[i]); // forge-lint: disable-line(unused-return, calls-loop)
@@ -412,10 +416,15 @@ contract Liquidator {
     function _judge(address account, bytes32 position, bool closed) private returns (Valuation memory) {
         (bytes32[] memory symbols, address[] memory tokens) = accounts.stocks();
         for (uint256 i; i < symbols.length; ++i) {
-            // forge-lint: disable-next-line(calls-loop)
-            if (tokens[i] != address(0) && accounts.collateral(account, position, tokens[i]) != 0) {
-                accounts.sync(symbols[i]); // forge-lint: disable-line(calls-loop)
+            // forge-lint: disable-start(calls-loop)
+            if (
+                tokens[i] != address(0)
+                    && (accounts.collateral(account, position, tokens[i]) != 0
+                        || accounts.lent(account, position, tokens[i]) != 0)
+            ) {
+                accounts.sync(symbols[i]);
             }
+            // forge-lint: disable-end(calls-loop)
         }
         return _assess(account, position, closed);
     }
@@ -445,10 +454,13 @@ contract Liquidator {
         v.quantities = new int256[](v.symbols.length);
         v.prices = new uint256[](v.symbols.length);
         uint256 gross = 0;
+        uint256 haircut = 0;
         for (uint256 i; i < v.symbols.length; ++i) {
             if (v.tokens[i] == address(0)) continue;
-            // forge-lint: disable-next-line(calls-loop)
-            uint256 quantity = accounts.collateral(account, position, v.tokens[i]);
+            // forge-lint: disable-start(calls-loop)
+            uint256 lent = accounts.lent(account, position, v.tokens[i]);
+            uint256 quantity = accounts.collateral(account, position, v.tokens[i]) + lent;
+            // forge-lint: disable-end(calls-loop)
             if (quantity == 0) continue;
             // forge-lint: disable-start(calls-loop, unused-return)
             // slither-disable-next-line unused-return,calls-loop
@@ -462,7 +474,9 @@ contract Liquidator {
             v.prices[i] = unit;
             v.held = true;
             gross += quantity * unit / PRICE_UNIT;
+            haircut += lent * unit * recallHaircut / (PRICE_UNIT * BPS);
         }
+        gross -= haircut;
         uint256 cash = accounts.collateral(account, position, address(usdg)) * USDG_TO_USD;
         uint256 eth = accounts.collateral(account, position, address(weth));
         if (eth != 0) {
@@ -517,7 +531,7 @@ contract Liquidator {
         returns (uint256 left, uint256 used)
     {
         Allowance memory a = _allowances[account][position][token];
-        uint256 held = accounts.collateral(account, position, token);
+        uint256 held = accounts.collateral(account, position, token) + accounts.lent(account, position, token);
         uint256 cap = held * CLOSED_HOURLY_BPS / BPS;
         // forge-lint: disable-start(block-timestamp)
         uint256 refill = held * CLOSED_HOURLY_BPS * (block.timestamp - a.updatedAt) / (BPS * 1 hours);

@@ -12,6 +12,8 @@ BINARYEN_VERSION := $(shell awk '/^\[/ { table = $$0 } table == "[wasm-opt]" && 
 BINARYEN_HOME := $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/binaryen/version_$(BINARYEN_VERSION)
 export PATH := $(BINARYEN_HOME)/bin:$(PATH)
 NITRO_IMAGE := offchainlabs/nitro-node:v3.11.4-7d5ac27-slim-stripped
+ROBINHOOD_CODE_SIZE := 98304
+ARBITRUM_ONE_CONTRACTS := BandFeed
 DEVNODE_RPC_URL := http://127.0.0.1:8547
 DEVNODE_KEY := 0xb6b15c8cb491557369f3c7d2c287b053eb229daa9c22138887752191c9520659
 DEVNODE_ACCOUNT := 0x3f1Eae7D46d88F08fc2F8ed27FCb2AB183EB2d0E
@@ -47,7 +49,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
 	deploy-band-feeds verify-band-feeds simulate-supply-vault deploy-supply-vault verify-supply-vault \
-	deploy-margin-accounts verify-margin-accounts deploy-liquidator verify-liquidator deploy-gap-backstop verify-gap-backstop deploy-reopening-auction verify-reopening-auction deploy-contracts-devnode test-contracts-devnode lint-scripts lint-licenses
+	deploy-margin-accounts verify-margin-accounts deploy-liquidator verify-liquidator deploy-gap-backstop verify-gap-backstop deploy-reopening-auction verify-reopening-auction deploy-stock-lending verify-stock-lending deploy-contracts-devnode test-contracts-devnode lint-scripts lint-licenses
 
 all: build
 
@@ -145,7 +147,10 @@ coverage-contracts: check-foundry submodules
 				if (l < min || b < min) exit 1 }' contracts/lcov.info; fi
 
 gas-contracts: check-foundry submodules
-	cd contracts && forge build --sizes
+	cd contracts && FOUNDRY_CODE_SIZE_LIMIT=$(ROBINHOOD_CODE_SIZE) forge build --sizes
+	@cd contracts && for c in $(ARBITRUM_ONE_CONTRACTS); do \
+		n=$$(( ($$(forge inspect $$c deployedBytecode | tr -d '\n' | wc -c) - 2) / 2 )); \
+		[ $$n -le 24576 ] || { echo "$$c deploys to Arbitrum One: $$n bytes, over its 24,576."; exit 1; }; done
 	cd contracts && FORGE_SNAPSHOT_CHECK=true forge snapshot --check $(SNAPSHOT_FILTER)
 	@test -z "$$(git ls-files --others --exclude-standard -- contracts/snapshots)" || \
 		{ echo "Untracked gas snapshots in contracts/snapshots. Run: make snapshot, then git add them."; exit 1; }
@@ -259,6 +264,11 @@ deploy-reopening-auction: check-foundry submodules
 		{ echo "Usage: make deploy-reopening-auction CHAIN=<4663|46630|412346> SIGNER='<forge wallet flags of the accounts' owner>' [REGISTRY=<file>]"; exit 1; }
 	@contracts/script/deploy-reopening-auction.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
 
+deploy-stock-lending: check-foundry submodules
+	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
+		{ echo "Usage: RATE_MODEL=<optimal>,<base>,<slope1>,<slope2> FEE_SHARE=<bps> make deploy-stock-lending CHAIN=<4663|46630|412346> SIGNER='<forge wallet flags of the accounts' owner>' [REGISTRY=<file>]"; exit 1; }
+	@contracts/script/deploy-stock-lending.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
+
 deploy-contracts-devnode:
 	rm -rf contracts/broadcast/*/412346
 	$(MAKE) deploy-supply-vault CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
@@ -271,6 +281,8 @@ deploy-contracts-devnode:
 	EXPOSURE_LIMITS=1000000000000,1000000000000,1000000000000,1000000000000 SEED=1000000000 \
 		$(MAKE) deploy-gap-backstop CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
 	$(MAKE) deploy-reopening-auction CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
+	RATE_MODEL=8000,25,100,5000 FEE_SHARE=1500 \
+		$(MAKE) deploy-stock-lending CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
 
 test-contracts-devnode:
 	contracts/script/devnode-supply-vault-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
@@ -278,6 +290,7 @@ test-contracts-devnode:
 	contracts/script/devnode-liquidator-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
 	contracts/script/devnode-gap-backstop-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
 	contracts/script/devnode-reopening-auction-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
+	contracts/script/devnode-stock-lending-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
 
 verify-supply-vault: check-foundry submodules
 	@case "$(CHAIN)" in 4663|46630) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
@@ -309,6 +322,11 @@ verify-reopening-auction: check-foundry submodules
 		{ echo "Usage: make verify-reopening-auction CHAIN=<4663|46630>, with the chain's RPC URL set"; exit 1; }
 	@contracts/script/verify-reopening-auction.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
 
+verify-stock-lending: check-foundry submodules
+	@case "$(CHAIN)" in 4663|46630) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
+		{ echo "Usage: make verify-stock-lending CHAIN=<4663|46630>, with the chain's RPC URL set"; exit 1; }
+	@contracts/script/verify-stock-lending.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
+
 verify-band-feeds: check-foundry submodules
 	@case "$(CHAIN)" in 4663|46630|42161) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
 		{ echo "Usage: make verify-band-feeds CHAIN=<4663|46630|42161>, with the chain's RPC URL set"; exit 1; }
@@ -322,7 +340,7 @@ verify-stylus: check-docker
 devnode: check-docker check-foundry
 	@docker rm -f tapehouse-devnode >/dev/null 2>&1 || true
 	docker run -d --name tapehouse-devnode -p 127.0.0.1:8547:8547 $(NITRO_IMAGE) \
-		--dev --http.addr 0.0.0.0 --http.api=net,web3,eth,debug
+		--dev --init.dev-max-code-size 98304 --http.addr 0.0.0.0 --http.api=net,web3,eth,debug
 	@i=0; until cast chain-id --rpc-url $(DEVNODE_RPC_URL) >/dev/null 2>&1; do \
 		i=$$((i + 1)); [ $$i -lt 150 ] || { docker logs --tail 20 tapehouse-devnode; \
 		echo "The dev node did not answer on $(DEVNODE_RPC_URL)."; exit 1; }; \

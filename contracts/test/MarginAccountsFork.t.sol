@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 pragma solidity 0.8.37;
 
-import {Test} from "forge-std/Test.sol";
+import {Test, Vm} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {GapBackstop} from "../src/GapBackstop.sol";
 import {BandFeed} from "../src/BandFeed.sol";
 import {Liquidator} from "../src/Liquidator.sol";
 import {ReopeningAuction} from "../src/ReopeningAuction.sol";
 import {MarginAccounts} from "../src/MarginAccounts.sol";
+import {StockLendingVault} from "../src/StockLendingVault.sol";
 import {SupplyVault} from "../src/SupplyVault.sol";
 import {IBand} from "../src/interfaces/IBand.sol";
 import {IMargin} from "../src/interfaces/IMargin.sol";
@@ -395,6 +397,130 @@ contract MarginAccountsForkTest is Test {
         assertEq(accounts.debt(alice, CROSS) + accounts.premium(alice, CROSS), 0);
         assertEq(accounts.collateral(alice, CROSS, _token("NVDA")), 437e18 - r.sold);
         assertApproxEqAbs(1_000_000e6 - usdg.balanceOf(bidder), r.paid, 2);
+    }
+
+    function test_APositionLendsRealNvdaThroughAPermitAndTakesItBackWithItsFee() public {
+        IStockToken nvda = IStockToken(_token("NVDA"));
+        Vm.Wallet memory wallet = vm.createWallet("lender");
+        deal(address(nvda), wallet.addr, 100e18);
+        (uint8 v, bytes32 r, bytes32 s) = _permit(nvda, wallet, 100e18);
+        vm.prank(wallet.addr);
+        accounts.depositWithPermit(CROSS, address(nvda), 100e18, wallet.addr, block.timestamp, v, r, s);
+        address borrower = makeAddr("borrower");
+        StockLendingVault lending = new StockLendingVault(
+            IERC20(address(nvda)), address(this), SupplyVault.RateModel(80_00, 25, 1_00, 50_00), 10_00
+        );
+        lending.setDepositor(address(accounts));
+        lending.setBorrower(borrower);
+        accounts.setLending(NVDA, lending);
+        vm.prank(wallet.addr);
+        accounts.lend(CROSS, address(nvda), 40e18, wallet.addr);
+        vm.prank(borrower);
+        lending.borrow(30e18, borrower);
+        assertEq(IERC20(address(nvda)).balanceOf(address(lending)), 10e18);
+        assertEq(IERC20(address(nvda)).balanceOf(borrower), 30e18);
+        assertGt(nvda.uiMultiplier(), 1e18);
+        skip(30 days);
+        uint256 owed = lending.debt();
+        assertGt(owed, 30e18);
+        deal(address(nvda), borrower, owed);
+        vm.startPrank(borrower);
+        IERC20(address(nvda)).approve(address(lending), owed);
+        lending.repay(owed);
+        vm.stopPrank();
+        uint256 lent = accounts.lent(wallet.addr, CROSS, address(nvda));
+        assertGt(lent, 40e18);
+        vm.prank(wallet.addr);
+        accounts.unlend(CROSS, address(nvda), lent, wallet.addr);
+        assertEq(accounts.collateral(wallet.addr, CROSS, address(nvda)), 60e18 + lent);
+        assertEq(accounts.lent(wallet.addr, CROSS, address(nvda)), 0);
+    }
+
+    function test_TheIssuersControlsOnALendingVaultFallOnItsLendersAloneAndLeaveThemAnExit() public {
+        IStockToken nvda = IStockToken(_token("NVDA"));
+        IStockTokenRegistry registry = IStockTokenRegistry(nvda.ACCESS_CONTROLLED_REGISTRY());
+        address bob = makeAddr("bob");
+        StockLendingVault lending = new StockLendingVault(
+            IERC20(address(nvda)), address(this), SupplyVault.RateModel(80_00, 25, 1_00, 50_00), 10_00
+        );
+        lending.setDepositor(address(accounts));
+        lending.setBorrower(makeAddr("borrower"));
+        accounts.setLending(NVDA, lending);
+        _deposit(CROSS, "NVDA", 100e18);
+        vm.prank(alice);
+        accounts.lend(CROSS, address(nvda), 40e18, alice);
+        deal(address(nvda), bob, 50e18);
+        vm.startPrank(bob);
+        IERC20(address(nvda)).approve(address(accounts), 50e18);
+        accounts.deposit(CROSS, address(nvda), 50e18, bob);
+        vm.stopPrank();
+        address[] memory blocked = new address[](1);
+        blocked[0] = address(lending);
+        vm.prank(BLOCKER);
+        registry.blockAccounts(blocked);
+        assertEq(lending.maxRedeem(address(accounts)), 0);
+        vm.expectRevert(abi.encodeWithSelector(MarginAccounts.AssetFrozen.selector, NVDA));
+        vm.prank(alice);
+        accounts.borrow(CROSS, 1e6, alice, alice);
+        vm.expectRevert(
+            abi.encodeWithSignature("ERC4626ExceededMaxDeposit(address,uint256,uint256)", address(accounts), 1e18, 0)
+        );
+        vm.prank(bob);
+        accounts.lend(CROSS, address(nvda), 1e18, bob);
+        vm.expectPartialRevert(bytes4(keccak256("ERC4626ExceededMaxWithdraw(address,uint256,uint256)")));
+        vm.prank(alice);
+        accounts.unlend(CROSS, address(nvda), 1e18, alice);
+        vm.prank(ADMIN_BURNER);
+        nvda.adminBurn(address(lending), 10e18);
+        lending.sync();
+        accounts.sync(NVDA);
+        assertApproxEqAbs(accounts.lent(alice, CROSS, address(nvda)), 30e18, 1);
+        assertEq(accounts.collateral(alice, CROSS, address(nvda)), 60e18);
+        assertEq(accounts.collateral(bob, CROSS, address(nvda)), 50e18);
+        vm.prank(BLOCKER);
+        registry.unblockAccounts(blocked);
+        uint256 back = lending.maxWithdraw(address(accounts));
+        vm.startPrank(alice);
+        accounts.unlend(CROSS, address(nvda), back, alice);
+        accounts.withdraw(CROSS, address(nvda), 60e18 + back, alice, alice);
+        vm.stopPrank();
+        assertEq(IERC20(address(nvda)).balanceOf(alice), 60e18 + back);
+        assertApproxEqAbs(back, 30e18, 1);
+    }
+
+    function _permit(IStockToken token, Vm.Wallet memory wallet, uint256 value)
+        internal
+        view
+        returns (uint8, bytes32, bytes32)
+    {
+        bytes32 domain = _domain(token);
+        bytes32 permit = keccak256(
+            abi.encode(
+                keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
+                wallet.addr,
+                address(accounts),
+                value,
+                token.nonces(wallet.addr),
+                block.timestamp
+            )
+        );
+        return vm.sign(wallet, keccak256(abi.encodePacked("\x19\x01", domain, permit)));
+    }
+
+    function _domain(IStockToken token) internal view returns (bytes32 domain) {
+        (, string memory name, string memory version, uint256 chainId, address verifying,,) = token.eip712Domain();
+        assertEq(name, IERC20Metadata(address(token)).name());
+        assertEq(version, "1");
+        domain = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256(bytes(name)),
+                keccak256(bytes(version)),
+                chainId,
+                verifying
+            )
+        );
+        assertEq(domain, token.DOMAIN_SEPARATOR());
     }
 
     function _deposit(bytes32 position, string memory name, uint256 amount) internal {
