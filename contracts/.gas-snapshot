@@ -165,7 +165,7 @@ MarginReferenceTest:test_TheRampRisesInAStraightLineToTheRequirementAcrossTheClo
 MarginReferenceTest:test_TheRampStartsThreeHoursBeforeTheRegularClose() (gas: 2082)
 RegistryForkTest:test_ArbitrumEntriesAreTheContractsTheyClaimToBe() (gas: 486820)
 RegistryForkTest:test_RobinhoodEntriesAreTheContractsTheyClaimToBe() (gas: 570727)
-RegistryForkTest:test_RobinhoodTestnetEntriesAreTheContractsTheyClaimToBe() (gas: 195215)
+RegistryForkTest:test_RobinhoodTestnetEntriesAreTheContractsTheyClaimToBe() (gas: 333516)
 RegistryTest:test_EveryEntryIsChecksummedAndFilesAreNamedAfterTheirChain() (gas: 3003)
 ReopeningAuctionSettlementTest:test_ABackstopThatCannotBuyNeverBlocksTheClearing() (gas: 2721845)
 ReopeningAuctionSettlementTest:test_ABackstopWithNoRoomLeftBuysNothing() (gas: 2505948)

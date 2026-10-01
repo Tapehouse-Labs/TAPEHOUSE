@@ -9,7 +9,7 @@ import {BandFeed} from "../src/BandFeed.sol";
 
 contract RegistryForkTest is Test {
     uint256 internal constant ROBINHOOD_BLOCK = 69_922_505;
-    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 126_318_441;
+    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 127_006_728;
     uint256 internal constant ARBITRUM_BLOCK = 509_636_514;
     bytes32 internal constant BEACON_SLOT = 0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50;
     bytes4 internal constant STYLUS_ROOT_PREFIX = 0xeff00200;
@@ -65,6 +65,49 @@ contract RegistryForkTest is Test {
             _readAddress(margin, "owner()", ROBINHOOD_TESTNET_BLOCK),
             vm.parseJsonAddress(json, ".tapehouse.Owner"),
             "tapehouse.Margin owner"
+        );
+        address vault = vm.parseJsonAddress(json, ".tapehouse.SupplyVault");
+        address accounts = vm.parseJsonAddress(json, ".tapehouse.MarginAccounts");
+        address liquidator = vm.parseJsonAddress(json, ".tapehouse.Liquidator");
+        address owner = vm.parseJsonAddress(json, ".tapehouse.Owner");
+        assertEq(
+            _readAddress(vault, "asset()", ROBINHOOD_TESTNET_BLOCK),
+            vm.parseJsonAddress(json, ".tokens.USDG"),
+            "tapehouse.SupplyVault asset"
+        );
+        assertEq(_readAddress(vault, "owner()", ROBINHOOD_TESTNET_BLOCK), owner, "tapehouse.SupplyVault owner");
+        assertEq(_readAddress(vault, "borrower()", ROBINHOOD_TESTNET_BLOCK), accounts, "tapehouse.SupplyVault borrower");
+        assertEq(_readAddress(accounts, "vault()", ROBINHOOD_TESTNET_BLOCK), vault, "tapehouse.MarginAccounts vault");
+        assertEq(
+            _readAddress(accounts, "engine()", ROBINHOOD_TESTNET_BLOCK),
+            vm.parseJsonAddress(json, ".tapehouse.Margin"),
+            "tapehouse.MarginAccounts engine"
+        );
+        assertEq(_readAddress(accounts, "owner()", ROBINHOOD_TESTNET_BLOCK), owner, "tapehouse.MarginAccounts owner");
+        assertEq(
+            _readAddress(accounts, "liquidator()", ROBINHOOD_TESTNET_BLOCK),
+            liquidator,
+            "tapehouse.MarginAccounts liquidator"
+        );
+        assertEq(
+            _readAddress(liquidator, "accounts()", ROBINHOOD_TESTNET_BLOCK), accounts, "tapehouse.Liquidator accounts"
+        );
+        address backstop = vm.parseJsonAddress(json, ".tapehouse.GapBackstop");
+        assertEq(
+            _readAddress(accounts, "backstop()", ROBINHOOD_TESTNET_BLOCK), backstop, "tapehouse.MarginAccounts backstop"
+        );
+        assertEq(
+            _readAddress(backstop, "accounts()", ROBINHOOD_TESTNET_BLOCK), accounts, "tapehouse.GapBackstop accounts"
+        );
+        assertEq(_readAddress(backstop, "owner()", ROBINHOOD_TESTNET_BLOCK), owner, "tapehouse.GapBackstop owner");
+        address auction = vm.parseJsonAddress(json, ".tapehouse.ReopeningAuction");
+        assertEq(
+            _readAddress(liquidator, "auction()", ROBINHOOD_TESTNET_BLOCK), auction, "tapehouse.Liquidator auction"
+        );
+        assertEq(
+            _readAddress(auction, "liquidator()", ROBINHOOD_TESTNET_BLOCK),
+            liquidator,
+            "tapehouse.ReopeningAuction liquidator"
         );
         _assertBandFeeds(json);
     }
