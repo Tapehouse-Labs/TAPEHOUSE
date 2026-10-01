@@ -47,7 +47,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
 	deploy-band-feeds verify-band-feeds simulate-supply-vault deploy-supply-vault verify-supply-vault \
-	deploy-margin-accounts verify-margin-accounts deploy-liquidator verify-liquidator deploy-contracts-devnode test-contracts-devnode lint-scripts lint-licenses
+	deploy-margin-accounts verify-margin-accounts deploy-liquidator verify-liquidator deploy-gap-backstop verify-gap-backstop deploy-contracts-devnode test-contracts-devnode lint-scripts lint-licenses
 
 all: build
 
@@ -249,6 +249,11 @@ deploy-liquidator: check-foundry submodules
 		{ echo "Usage: make deploy-liquidator CHAIN=<4663|46630|412346> SIGNER='<forge wallet flags of the accounts' owner>' [REGISTRY=<file>]"; exit 1; }
 	@contracts/script/deploy-liquidator.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
 
+deploy-gap-backstop: check-foundry submodules
+	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
+		{ echo "Usage: EXPOSURE_LIMITS=<cross>,<asset>,... SEED=<USDG units> make deploy-gap-backstop CHAIN=<4663|46630|412346> SIGNER='<forge wallet flags of the accounts' owner>' [REGISTRY=<file>]"; exit 1; }
+	@contracts/script/deploy-gap-backstop.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
+
 deploy-contracts-devnode:
 	rm -rf contracts/broadcast/*/412346
 	$(MAKE) deploy-supply-vault CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
@@ -256,11 +261,16 @@ deploy-contracts-devnode:
 		$(MAKE) deploy-margin-accounts CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" \
 		REGISTRY=stylus/target/devnode-registry.json
 	$(MAKE) deploy-liquidator CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
+	cast send --rpc-url $(DEVNODE_RPC_URL) --private-key $(DEVNODE_KEY) $$(jq -r .tokens.USDG stylus/target/devnode-registry.json) \
+		"mint(address,uint256)" $$(cast wallet address --private-key $(DEVNODE_KEY)) 1000000000 > /dev/null
+	EXPOSURE_LIMITS=1000000000000,1000000000000,1000000000000,1000000000000 SEED=1000000000 \
+		$(MAKE) deploy-gap-backstop CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
 
 test-contracts-devnode:
 	contracts/script/devnode-supply-vault-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
 	contracts/script/devnode-margin-accounts-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
 	contracts/script/devnode-liquidator-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
+	contracts/script/devnode-gap-backstop-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
 
 verify-supply-vault: check-foundry submodules
 	@case "$(CHAIN)" in 4663|46630) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
@@ -281,6 +291,11 @@ verify-liquidator: check-foundry submodules
 	@case "$(CHAIN)" in 4663|46630) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
 		{ echo "Usage: make verify-liquidator CHAIN=<4663|46630>, with the chain's RPC URL set"; exit 1; }
 	@contracts/script/verify-liquidator.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
+
+verify-gap-backstop: check-foundry submodules
+	@case "$(CHAIN)" in 4663|46630) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
+		{ echo "Usage: make verify-gap-backstop CHAIN=<4663|46630>, with the chain's RPC URL set"; exit 1; }
+	@contracts/script/verify-gap-backstop.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
 
 verify-band-feeds: check-foundry submodules
 	@case "$(CHAIN)" in 4663|46630|42161) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \

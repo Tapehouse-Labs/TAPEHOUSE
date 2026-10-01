@@ -47,6 +47,7 @@ contract MarginAccounts is Ownable2Step {
         uint64 reopensMs;
         uint64 accruedMs;
         uint32 premiumRate;
+        uint32 startS;
     }
 
     struct Book {
@@ -322,7 +323,7 @@ contract MarginAccounts is Ownable2Step {
         debtCap = debtCap_;
         weekendDebtCap = weekendDebtCap_;
         reserveShare = reserveShare_;
-        _closure = Closure(0, 0, SafeCast.toUint64(block.timestamp * 1000), premiumRate_);
+        _closure = Closure(0, 0, SafeCast.toUint64(block.timestamp * 1000), premiumRate_, 0);
         bytes32[] memory symbols = engine_.assets();
         if (symbols.length > 8) revert TooManyAssets(symbols.length);
         if (assetCaps.length != symbols.length) revert LengthMismatch();
@@ -389,6 +390,12 @@ contract MarginAccounts is Ownable2Step {
     function closure() external view returns (uint64 closesMs, uint64 reopensMs, uint64 accruedMs) {
         Closure memory c = _closure;
         return (c.closesMs, c.reopensMs, c.accruedMs);
+    }
+
+    /// @notice When the closure the accounts last recorded began, in milliseconds: a closure longer than 72 hours, which
+    /// they record again as it goes on, keeps the close it began with. Zero before any closure.
+    function closureStart() external view returns (uint64) {
+        return uint64(_closure.startS) * 1000;
     }
 
     /// @notice The borrow shares of `account`'s `position`.
@@ -766,8 +773,12 @@ contract MarginAccounts is Ownable2Step {
             uint64 to = c.reopensMs != 0 && c.reopensMs <= nowMs ? c.reopensMs : nowMs;
             if (to > from) closedMs = to - from;
         }
-        if (state == 2 && boundaryMs != 0) (c.closesMs, c.reopensMs) = (boundaryMs, 0);
-        else if (state == 1 && !same) (c.closesMs, c.reopensMs) = (nowMs, boundaryMs);
+        if (state == 2 && boundaryMs != 0) {
+            (c.closesMs, c.reopensMs, c.startS) = (boundaryMs, 0, SafeCast.toUint32(boundaryMs / 1000));
+        } else if (state == 1 && !same) {
+            if (!inside) c.startS = SafeCast.toUint32(nowMs / 1000);
+            (c.closesMs, c.reopensMs) = (nowMs, boundaryMs);
+        }
         c.accruedMs = nowMs;
     }
 

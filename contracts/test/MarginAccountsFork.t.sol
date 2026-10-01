@@ -3,6 +3,7 @@ pragma solidity 0.8.37;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {GapBackstop} from "../src/GapBackstop.sol";
 import {Liquidator} from "../src/Liquidator.sol";
 import {MarginAccounts} from "../src/MarginAccounts.sol";
 import {SupplyVault} from "../src/SupplyVault.sol";
@@ -309,6 +310,41 @@ contract MarginAccountsForkTest is Test {
         (uint256 open,) = engine.requirement(quantities, edge, 172_800, false);
         (, required,,) = liquidator.shortfall(alice, CROSS);
         assertEq(required, (open * 5 - 1) / 4 + 1);
+    }
+
+    function test_TheBackstopCoversAnEmptiedPositionInRealUsdg() public {
+        Liquidator liquidator = new Liquidator(accounts);
+        accounts.setLiquidator(address(liquidator));
+        GapBackstop backstop = new GapBackstop(accounts, address(this), 30_000e6, new uint256[](names.length));
+        accounts.setBackstop(address(backstop));
+        deal(address(usdg), address(this), 20_000e6);
+        usdg.approve(address(backstop), 20_000e6);
+        backstop.deposit(20_000e6, address(this));
+        _deposit(CROSS, "NVDA", 437e18);
+        (int256 equity, uint256 requirement,,) = accounts.health(alice, CROSS);
+        vm.prank(alice);
+        accounts.borrow(CROSS, (uint256(equity) - requirement) / 1e12, alice, alice);
+        _quote(NVDA, uint64(prices[0] * 70 / 100));
+        liquidator.start(alice, CROSS);
+        address buyer = makeAddr("buyer");
+        deal(address(usdg), buyer, 1_000_000e6);
+        vm.startPrank(buyer);
+        usdg.approve(address(liquidator), type(uint256).max);
+        while (accounts.collateral(alice, CROSS, _token("NVDA")) != 0) {
+            liquidator.buy(alice, CROSS, _token("NVDA"), 437e18, type(uint256).max, buyer);
+        }
+        vm.stopPrank();
+        uint256 owed = accounts.debt(alice, CROSS);
+        assertGt(owed, 0);
+        assertLt(owed, 20_000e6);
+        uint256 lenders = vault.totalAssets();
+        (uint256 paid, uint256 written) = backstop.cover(alice, CROSS);
+        assertEq(paid, owed);
+        assertEq(written, 0);
+        assertEq(accounts.debt(alice, CROSS), 0);
+        assertApproxEqAbs(vault.totalAssets(), lenders, 1);
+        assertEq(backstop.totalAssets(), 20_000e6 - owed);
+        assertEq(usdg.balanceOf(address(backstop)), 20_000e6 - owed);
     }
 
     function _deposit(bytes32 position, string memory name, uint256 amount) internal {
