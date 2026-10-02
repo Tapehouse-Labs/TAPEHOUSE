@@ -6,6 +6,7 @@ import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {AggregatorV3Interface, IUniswapV3Factory} from "./conformance/Interfaces.sol";
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {BandFeed} from "../src/BandFeed.sol";
+import {IV3SwapRouter} from "../src/interfaces/IUniswapV3.sol";
 
 contract RegistryForkTest is Test {
     uint256 internal constant ROBINHOOD_BLOCK = 69_922_505;
@@ -35,6 +36,8 @@ contract RegistryForkTest is Test {
         assertGt(vm.parseJsonAddress(json, ".morpho.Blue").code.length, 0, "morpho.Blue");
         IUniswapV3Factory factory = IUniswapV3Factory(vm.parseJsonAddress(json, ".uniswapV3.Factory"));
         assertEq(factory.feeAmountTickSpacing(500), 10, "uniswapV3.Factory");
+        IV3SwapRouter router = IV3SwapRouter(vm.parseJsonAddress(json, ".uniswapV3.SwapRouter02"));
+        assertEq(router.factory(), address(factory), "uniswapV3.SwapRouter02");
     }
 
     function test_RobinhoodTestnetEntriesAreTheContractsTheyClaimToBe() public {

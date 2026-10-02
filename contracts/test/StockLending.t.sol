@@ -170,6 +170,27 @@ contract StockLendingVaultTest is Test {
         assertEq(lending.scaledDebt(), 0);
     }
 
+    function test_OnlyTheBorrowerWritesOffWhatItCannotReturnAndTheLendersBearIt() public {
+        _lend(100 * SHARE);
+        vm.prank(borrower);
+        lending.borrow(50 * SHARE, borrower);
+        vm.expectRevert(abi.encodeWithSelector(StockLendingVault.NotBorrower.selector, other));
+        vm.prank(other);
+        lending.writeOff(SHARE);
+        vm.expectEmit(address(lending));
+        emit StockLendingVault.WriteOff(20 * SHARE);
+        vm.prank(borrower);
+        assertEq(lending.writeOff(20 * SHARE), 20 * SHARE);
+        assertEq(lending.debt(), 30 * SHARE);
+        assertEq(lending.idle(), 50 * SHARE);
+        assertEq(lending.totalAssets(), 80 * SHARE);
+        assertEq(lending.convertToAssets(lending.balanceOf(address(this))), 80 * SHARE);
+        vm.prank(borrower);
+        assertEq(lending.writeOff(100 * SHARE), 30 * SHARE);
+        assertEq(lending.debt(), 0);
+        assertEq(lending.totalAssets(), 50 * SHARE);
+    }
+
     function test_RedemptionsAreCappedByTheTokensTheVaultHolds() public {
         _lend(100 * SHARE);
         vm.prank(borrower);

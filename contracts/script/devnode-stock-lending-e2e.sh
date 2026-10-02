@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: devnode-stock-lending-e2e.sh RPC_URL PRIVATE_KEY DEPLOYMENTS_JSON
 # Checks SPY's stock lending vault on the dev node: it is the accounts' lending vault for SPY, takes deposits from them
-# alone, and has no borrower yet. A position lends 4 of its 10 SPY: the tokens leave its holding for the vault, and its
+# alone, and lends to the short positions alone. A position lends 4 of its 10 SPY: the tokens leave its holding for the vault, and its
 # equity falls by the recall haircut on what it lent, while the engine still sees all 10. It recalls them, which the
 # vault, holding them free, returns at once with no ticket, and its equity is what it was. Prints the L2 gas of the
 # loan and of the recall.
@@ -28,7 +28,7 @@ l2_gas() {
 [ "$(read_ "$accounts" "lending(bytes32)(address)" "$position")" = "$lending" ] || fail "the accounts do not lend SPY through the registry's vault"
 [ "$(read_ "$lending" "asset()(address)")" = "$spy" ] || fail "the vault does not lend SPY"
 [ "$(read_ "$lending" "depositor()(address)")" = "$accounts" ] || fail "the vault's depositor is not the accounts"
-[ "$(read_ "$lending" "borrower()(address)")" = 0x0000000000000000000000000000000000000000 ] || fail "the vault has a borrower already"
+[ "$(read_ "$lending" "borrower()(address)")" = "$(jq -r .tapehouse.ShortPositions "$registry")" ] || fail "the vault's borrower is not the short positions"
 [ "$(read_ "$lending" "maxDeposit(address)(uint256)" "$me")" = 0 ] || fail "the vault takes deposits from $me"
 ten=10000000000000000000
 four=4000000000000000000

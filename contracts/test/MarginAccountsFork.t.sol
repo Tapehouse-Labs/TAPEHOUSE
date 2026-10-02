@@ -8,11 +8,13 @@ import {GapBackstop} from "../src/GapBackstop.sol";
 import {BandFeed} from "../src/BandFeed.sol";
 import {Liquidator} from "../src/Liquidator.sol";
 import {ReopeningAuction} from "../src/ReopeningAuction.sol";
+import {ShortPositions} from "../src/ShortPositions.sol";
 import {MarginAccounts} from "../src/MarginAccounts.sol";
 import {StockLendingVault} from "../src/StockLendingVault.sol";
 import {SupplyVault} from "../src/SupplyVault.sol";
 import {IBand} from "../src/interfaces/IBand.sol";
 import {IMargin} from "../src/interfaces/IMargin.sol";
+import {IV3SwapRouter} from "../src/interfaces/IUniswapV3.sol";
 import {IUSDG} from "../src/interfaces/IUSDG.sol";
 import {BandDouble} from "./doubles/BandDouble.sol";
 import {IUniswapV3SwapPool, PoolBorrowerDouble} from "./doubles/PoolBorrowerDouble.sol";
@@ -523,6 +525,73 @@ contract MarginAccountsForkTest is Test {
         vm.stopPrank();
         assertEq(IERC20(address(nvda)).balanceOf(alice), back);
         emit log_named_decimal_uint("USDG paid for 30 NVDA", borrower.paid(), 6);
+    }
+
+    function test_AShortSellsAndBuysBackRealNvdaThroughTheRealRouter() public {
+        IERC20 nvda = IERC20(_token("NVDA"));
+        (ShortPositions shorts, StockLendingVault lending) = _shortPositions();
+        _deposit(CROSS, "NVDA", 100e18);
+        vm.prank(alice);
+        accounts.lend(CROSS, address(nvda), 100e18, alice);
+        address bob = makeAddr("bob");
+        deal(address(usdg), bob, 5_000e6);
+        vm.startPrank(bob);
+        usdg.approve(address(shorts), 5_000e6);
+        shorts.deposit(NVDA, 5_000e6, bob);
+        uint256 proceeds = shorts.sell(NVDA, 30e18, 0, bob);
+        vm.stopPrank();
+        _assertMarginedAtTheHighEdge(shorts, bob, proceeds);
+        vm.prank(alice);
+        accounts.recall(CROSS, address(nvda), 80e18, alice);
+        assertEq(accounts.claim(alice, CROSS, address(nvda)), 10e18);
+        skip(1 days);
+        (, uint256 before,) = shorts.book(NVDA, 0);
+        lending.buyIn(0);
+        (, uint256 booked,) = shorts.book(NVDA, 0);
+        vm.prank(alice);
+        accounts.settle(alice, CROSS, address(nvda));
+        assertEq(accounts.claim(alice, CROSS, address(nvda)), 0);
+        vm.prank(bob);
+        uint256 cost = shorts.cover(NVDA, type(uint256).max, type(uint256).max, bob);
+        assertEq(lending.debt(), 0);
+        (int256 held,,,) = shorts.position(bob, NVDA);
+        vm.prank(bob);
+        shorts.withdraw(NVDA, uint256(held), bob, bob);
+        assertEq(usdg.balanceOf(address(shorts)), 0);
+        emit log_named_decimal_uint("USDG for 30 NVDA sold", proceeds, 6);
+        emit log_named_decimal_uint("USDG for 10 NVDA bought in", before - booked, 6);
+        emit log_named_decimal_uint("USDG for 20 NVDA bought back", cost, 6);
+    }
+
+    function _shortPositions() internal returns (ShortPositions shorts, StockLendingVault lending) {
+        uint64 mid = uint64(prices[0]);
+        band.setQuote(NVDA, BandDouble.Quote(3, 3, mid, 50, mid - mid / 200, mid + mid / 200));
+        lending = new StockLendingVault(
+            IERC20(_token("NVDA")), address(this), SupplyVault.RateModel(80_00, 25, 1_00, 50_00), 10_00
+        );
+        uint24[] memory fees = new uint24[](6);
+        (fees[0], fees[1], fees[2], fees[3], fees[4], fees[5]) = (500, 3000, 500, 3000, 500, 500);
+        shorts = new ShortPositions(
+            accounts,
+            IV3SwapRouter(vm.parseJsonAddress(vm.readFile("../deployments/4663.json"), ".uniswapV3.SwapRouter02")),
+            fees
+        );
+        lending.setDepositor(address(accounts));
+        lending.setBorrower(address(shorts));
+        accounts.setLending(NVDA, lending);
+    }
+
+    function _assertMarginedAtTheHighEdge(ShortPositions shorts, address account, uint256 proceeds) internal view {
+        uint256 mid = prices[0];
+        assertGe(proceeds, 30e18 * (mid - mid / 200) / 1e20);
+        int256[] memory quantities = new int256[](6);
+        uint256[] memory edges = new uint256[](6);
+        (quantities[0], edges[0]) = (-30e18, mid + mid / 200);
+        (uint256 expected,,) = engine.currentRequirement(quantities, edges);
+        (int256 equity, uint256 requirement, uint8 missing,) = shorts.health(account, NVDA);
+        assertEq(requirement, expected);
+        assertEq(missing, 0);
+        assertGe(equity, int256(requirement));
     }
 
     function _permit(IStockToken token, Vm.Wallet memory wallet, uint256 value)

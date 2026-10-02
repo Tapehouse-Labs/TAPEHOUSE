@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: devnode-deploy.sh RPC_URL PRIVATE_KEY
 # Deploys stub Chainlink aggregators for NVDA, TSLA, SPY and ETH, stub Stock Tokens for NVDA and SPY, a stub
-# USDG and WETH, and stub NVDA/USDG and SPY/WETH pools holding the real pools' mean ticks and liquidity on
-# 28 September 2026, the SPY pool with the Stock Token as token0, writes
+# USDG and WETH, stub NVDA/USDG and SPY/WETH pools holding the real pools' mean ticks and liquidity on
+# 28 September 2026, the SPY pool with the Stock Token as token0, a stub SPY/USDG pool at SPY's stub price, whose entry
+# gives the shorts SPY's fee tier, and a stub swap router that trades NVDA and SPY for USDG at their stub prices, writes
 # them to stylus/target/devnode-registry.json with Anvil's second test account as the halt signer and the
 # deploying account as the owner, and deploys the band and margin programs configured from that file through
 # StylusDeployer, writing each program's address into the file as it is deployed. Writes each program's address
@@ -36,15 +37,19 @@ spy_token=$(token 1001717991187472003)
 usdg=$(forge create --root "$root/contracts" test/devnode/StubUsdg.sol:StubUsdg --rpc-url "$rpc" --private-key "$key" \
   --broadcast --json | jq -r .deployedTo)
 weth=$(create StubToken 18)
+router=$(create StubSwapRouter "$usdg")
+cast send --rpc-url "$rpc" --private-key "$key" "$router" "setPrice(address,uint256)" "$nvda_token" 22900000000 > /dev/null
+cast send --rpc-url "$rpc" --private-key "$key" "$router" "setPrice(address,uint256)" "$spy_token" 77232802713 > /dev/null
 jq -n --arg nvda "$(stub 22900000000 "NVDA / USD")" --arg tsla "$(stub 37800000000 "TSLA / USD")" \
   --arg spy "$(stub 77232802713 "SPY / USD")" --arg eth "$(stub 268330550000 "ETH / USD")" \
   --arg nvda_token "$nvda_token" --arg spy_token "$spy_token" --arg usdg "$usdg" --arg weth "$weth" \
   --arg nvda_pool "$(create StubPool "$usdg" "$nvda_token" 500 221989 11245526858841909681)" \
   --arg spy_pool "$(create StubPool "$spy_token" "$weth" 500 -12513 16029297629534329325587)" \
-  --arg owner "$(cast wallet address --private-key "$key")" \
+  --arg spy_usdg_pool "$(create StubPool "$spy_token" "$usdg" 500 -209827 823471432023715773)" \
+  --arg router "$router" --arg owner "$(cast wallet address --private-key "$key")" \
   '{chainId: 412346, chainlink: {NVDA_USD: $nvda, TSLA_USD: $tsla, SPY_USD: $spy, ETH_USD: $eth},
     tokens: {NVDA: $nvda_token, SPY: $spy_token, USDG: $usdg, WETH: $weth},
-    uniswapV3: {NVDA_USDG_500: $nvda_pool, SPY_WETH_500: $spy_pool},
+    uniswapV3: {NVDA_USDG_500: $nvda_pool, SPY_WETH_500: $spy_pool, SPY_USDG_500: $spy_usdg_pool, SwapRouter02: $router},
     tapehouse: {HaltSigner: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8", Owner: $owner}}' \
   > "$target/devnode-registry.json"
 

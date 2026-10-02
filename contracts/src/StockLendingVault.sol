@@ -95,6 +95,8 @@ contract StockLendingVault is ERC4626, Ownable2Step {
     event Borrow(address indexed receiver, uint256 assets);
     /// @notice The borrower repaid `assets` of its debt.
     event Repay(uint256 assets);
+    /// @notice The borrower wrote off `assets` of its debt it could not return: a loss to the lenders.
+    event WriteOff(uint256 assets);
     /// @notice The vault's count of the tokens it holds fell to its balance.
     event Sync(uint256 idle);
     /// @notice The depositor recalled `assets` as `ticket`, whose notice runs out at `dueAt`.
@@ -206,6 +208,15 @@ contract StockLendingVault is ERC4626, Ownable2Step {
         // forge-lint: disable-next-line(reentrancy-events)
         emit Repay(repaid);
         _transferIn(msg.sender, repaid);
+    }
+
+    /// @notice Writes off up to `assets` of the debt, what the borrower could not return, and returns what it wrote off:
+    /// a loss to the lenders, as the vault's assets fall by it. Only the borrower may.
+    function writeOff(uint256 assets) external returns (uint256 written) {
+        if (msg.sender != borrower) revert NotBorrower(msg.sender);
+        written = _reduceDebt(assets);
+        // forge-lint: disable-next-line(reentrancy-events)
+        emit WriteOff(written);
     }
 
     /// @notice Recalls `assets` for the depositor's lenders as a ticket at the end of the queue, and returns its number, `id`.
