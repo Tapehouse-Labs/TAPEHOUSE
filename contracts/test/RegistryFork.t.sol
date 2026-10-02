@@ -6,6 +6,7 @@ import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {AggregatorV3Interface, IMorpho, IUniswapV3Factory} from "./conformance/Interfaces.sol";
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {BandFeed} from "../src/BandFeed.sol";
+import {IQuoterV2} from "../src/interfaces/IQuoterV2.sol";
 import {IV3SwapRouter} from "../src/interfaces/IUniswapV3.sol";
 
 contract RegistryForkTest is Test {
@@ -42,6 +43,18 @@ contract RegistryForkTest is Test {
         assertEq(factory.feeAmountTickSpacing(500), 10, "uniswapV3.Factory");
         IV3SwapRouter router = IV3SwapRouter(vm.parseJsonAddress(json, ".uniswapV3.SwapRouter02"));
         assertEq(router.factory(), address(factory), "uniswapV3.SwapRouter02");
+        IQuoterV2 quoter = IQuoterV2(vm.parseJsonAddress(json, ".uniswapV3.QuoterV2"));
+        assertEq(quoter.factory(), address(factory), "uniswapV3.QuoterV2");
+        (uint256 out,,,) = quoter.quoteExactInputSingle(
+            IQuoterV2.QuoteExactInputSingleParams({
+                tokenIn: vm.parseJsonAddress(json, ".tokens.NVDA"),
+                tokenOut: vm.parseJsonAddress(json, ".tokens.USDG"),
+                amountIn: 1e18,
+                fee: 500,
+                sqrtPriceLimitX96: 0
+            })
+        );
+        assertGt(out, 0, "uniswapV3.QuoterV2 quote");
     }
 
     function test_RobinhoodTestnetEntriesAreTheContractsTheyClaimToBe() public {

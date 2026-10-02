@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+[package]
+name = "tapehouse-sdk"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94.1"
+description = "Typed reads and transactions for Tapehouse's price band, margin accounts and short positions, on alloy."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Tapehouse-Labs/TAPEHOUSE"
+readme = "README.md"
+keywords = ["ethereum", "arbitrum", "alloy", "defi", "tapehouse"]
+categories = ["cryptography::cryptocurrencies", "api-bindings"]
+
+[dependencies]
+alloy = { version = "2.5.0", default-features = false, features = ["contract", "dyn-abi", "json", "json-abi", "std"] }
+serde_json = "1.0.151"
+
+[dev-dependencies]
+alloy = { version = "2.5.0", features = ["json-rpc", "provider-http", "signer-local"] }
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }

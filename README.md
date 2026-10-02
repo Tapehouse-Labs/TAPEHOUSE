@@ -10,6 +10,9 @@ Portfolio margin for Stock Tokens on Robinhood Chain.
 - `contracts` — Solidity contracts (Foundry)
 - `stylus` — Stylus programs (Rust): `band`, the price band, and `margin`, the portfolio margin engine, with the code they share in `stylus/crates`
 - `deployments` — contract addresses per chain, one JSON file per chain ID
+- `packages/sdk` — the TypeScript SDK (viem)
+- `services` — the Go module: the Go SDK in `services/sdk` (go-ethereum)
+- `crates` — Rust crates: the Rust SDK in `crates/sdk` (alloy)
 
 ## Requirements
 
@@ -20,7 +23,9 @@ Portfolio margin for Stock Tokens on Robinhood Chain.
 | Foundry | 1.8.3 | `foundryup --install v1.8.3` |
 | Slither | 0.11.6 | `pipx install --force slither-analyzer==0.11.6` |
 | REUSE | 6.2.0 | `pipx install --force 'reuse[charset-normalizer]==6.2.0'` — for `make lint` |
-| Rust | 1.91.0, from `stylus/rust-toolchain.toml` | [rustup](https://rustup.rs) installs it on first use |
+| Rust | 1.91.0 for `stylus`, 1.99.0 for `crates`, from each `rust-toolchain.toml` | [rustup](https://rustup.rs) installs them on first use |
+| Go | 1.27.1, from `services/go.mod` | [go.dev](https://go.dev/dl): Go 1.21 or newer downloads it on first use |
+| golangci-lint | 2.14.0 | `curl -sSfL https://golangci-lint.run/install.sh \| sh -s -- -b $(go env GOPATH)/bin v2.14.0` — for `make lint` |
 | cargo-stylus | 0.10.9 | `cargo install --locked --force cargo-stylus@0.10.9` |
 | Binaryen | 133, from `stylus/Stylus.toml` | `make` downloads it on first use into `$XDG_CACHE_HOME/binaryen` (default `~/.cache/binaryen`), checked against a pinned SHA-256 |
 | Docker | any recent | [docker.com](https://www.docker.com) — for `make devnode`, `deploy-stylus` and `verify-stylus` |
@@ -50,7 +55,11 @@ make test
 | `make build-contracts` · `test-contracts` · `lint-contracts` · `coverage-contracts` · `gas-contracts` · `snapshot-contracts` | Contracts only |
 | `make build-stylus` · `test-stylus` · `lint-stylus` · `gas-stylus` · `snapshot-stylus` | Stylus programs only |
 | `make check-activation` | `cargo stylus check` of every program against Robinhood Chain, its testnet and Arbitrum One |
-| `make build-apps` · `test-apps` · `lint-apps` | Apps only |
+| `make build-apps` · `test-apps` · `lint-apps` | Apps and the TypeScript SDK only |
+| `make build-services` · `test-services` · `lint-services` | The Go module only; `test-services` reports coverage |
+| `make build-crates` · `test-crates` · `lint-crates` | The Rust crates only |
+| `make bindings` | Builds the contracts and regenerates the SDKs' bindings from their ABIs; commit the result |
+| `make check-bindings` | Regenerates the bindings and fails if they differ from what is committed |
 | `make devnode deploy-stylus-devnode test-stylus-devnode` | Deploys `band` and `margin` to a local dev node, writes live RedStone prices through the band, reads it through a `BandFeed`, margins a portfolio against stub pools and the band's session, checks the margin engine's Solidity reference against it, and updates the margin engine's parameters |
 | `make gas-stylus-devnode` · `snapshot-stylus-devnode` | Compares the dev-node suite's L2 gas with `stylus/.gas-devnode`, failing on a move over 0.5%, or regenerates it |
 | `make gas-table` | Prints the L2 gas of the margin program and of its Solidity reference on the same calls, from the last dev-node run |
@@ -75,7 +84,8 @@ make test
 | `make verify-short-positions CHAIN=<id>` | Verifies the registry's short positions on Sourcify |
 | `make deploy-morpho-oracles CHAIN=<id> SIGNER='<flags>'` | Deploys a `MorphoBandOracle` with `forge create` for every launch asset the chain's band names a Stock Token for, priced in the registry's USDG and owned by `.tapehouse.Owner`, and records each in `deployments/<id>.json` |
 | `make verify-morpho-oracles CHAIN=<id>` | Verifies the registry's Morpho oracles on Sourcify |
-| `make deploy-contracts-devnode test-contracts-devnode` | Deploys the supply vault, the margin accounts, the liquidator, the gap backstop, the reopening auction, a stock lending vault for each Stock Token, the short positions and a Morpho oracle for each Stock Token to the dev node and checks loans, a liquidation, a cover, the auction's wiring, a loan and recall of SPY, a short of SPY and each oracle's price through them against the band and margin programs |
+| `make deploy-contracts-devnode test-contracts-devnode` | Deploys the supply vault, the margin accounts, the liquidator, the gap backstop, the reopening auction, a stock lending vault for each Stock Token, the short positions, a Morpho oracle for each Stock Token and the band's feeds to the dev node and checks loans, a liquidation, a cover, the auction's wiring, a loan and recall of SPY, a short of SPY and each oracle's price through them against the band and margin programs |
+| `make test-sdks-devnode` | Runs each SDK's example against that deployment: SPY's band and feed, stale RedStone packages refused, and a short of SPY sold and bought back by an address the account authorized |
 
 ## Networks
 
@@ -533,6 +543,26 @@ Reads: `depositor`, `borrower`, `idle`, `scaledDebt`, `borrowIndex`, `lastAccrua
 - **Who bears a loss.** A short whose USDG cannot buy back all it owes spends all of it, and the rest is written off on the vault, a loss to its lenders. A short can also owe more of the buy-ins than it holds, its part having been paid with the book's USDG: at its liquidation the book's other shorts are charged that and owe that much less of the token, written off too, so the lenders bear it as far as those shorts still owe the vault, never writing off so much that the vault is owed less than the book's borrow shares stand for; past that, those shorts bear the rest. Until it is liquidated, such a short closes only by liquidation (`Insolvent`), and the book cannot pay out what it no longer holds (`DeficitOpen`).
 
 Reads: `accounts`, `band`, `engine`, `usdg`, `router`, `weekendLeverage`, `fee`, `position`, `health`, `epoch`, `book`, `restriction`.
+
+## SDKs
+
+Three SDKs read the band, its feeds, the margin accounts and the short positions, and build their transactions:
+
+| SDK | Directory | Package | Bindings |
+|---|---|---|---|
+| TypeScript | `packages/sdk` | `@tapehouse/sdk` on npm, over viem 2 | `as const` ABIs in `src/generated.ts` |
+| Go | `services/sdk` | `github.com/tapehouse/tapehouse/services/sdk`, in the services module | abigen v2, one package per contract in `sdk/bindings` |
+| Rust | `crates/sdk` | `tapehouse-sdk` on crates.io, over alloy 2 | alloy's `sol!` over `abi/*.json` |
+
+- **Generated from the ABIs.** `make bindings` builds the contracts and writes each SDK's bindings from the ABIs of `BandFeed`, `MarginAccounts`, `ShortPositions`, the band as a RedStone relayer calls it (`IBandPrices`: `IBand`'s reads, `writePrices` and `price`), Uniswap's QuoterV2, USDG, the Stock Tokens (`IStockToken`, as the conformance tests pin it) and Chainlink's aggregator. The bindings are committed, and `make check-bindings` fails in CI when they differ from the build. Each SDK adds by hand only what the ABIs cannot say.
+- **Addresses** come from `deployments/<chainId>.json`, read at runtime: no SDK compiles in an address. A mixed-case address must carry its checksum. A `.chainlink` feed is typed by what it prices: the Stock Token on Robinhood Chain, the share on Arbitrum One.
+- **Authorization.** `setAuthorization(authorized, allowed)` lets another address, such as a router, borrow, withdraw and deposit for an account in the margin accounts, and act for its shorts; until then both revert with `Unauthorized(caller, account)`.
+- **Errors.** Every revert of the margin accounts, the shorts, the feeds, the band, the Stock Tokens and USDG decodes by name and arguments, and so do Solidity's `Error(string)`, which carries the router's `Too little received` and `Too much requested`, and `Panic(uint256)`.
+- **Sales and buy-backs.** A sale's `minProceeds` and a buy-back's `maxCost` come from a quote of the asset's pool through Uniswap's QuoterV2, `.uniswapV3.QuoterV2`, less or plus the slippage the caller names, from 0 to 10,000 basis points; never from the contract.
+- **Repayments and positions.** A repayment pays a position's debt first and its premium after; `repayment` reads both at one block, and a repayment of their sum clears the position at that block. Each SDK also reads a position's `collateral`, `leverage` and `liquidationPrice`.
+- **RedStone.** The band's `writePrices` takes its signed packages from a source the integrator supplies (`PackageSource`): its own gateway client, cache or relay. No SDK holds an API key or calls a gateway.
+- **Examples.** Each SDK's `devnode` example reads SPY's band and its feed, has the band refuse stale signed packages, and has a fresh address the account authorizes sell 1 SPY short for it at a quote and buy it back. Each reads the account owner's key from `PRIVATE_KEY` in its environment, never from its command line. `make test-sdks-devnode` runs all three against the dev node, whose registry `make deploy-contracts-devnode` gives band feeds and the dev node a stub QuoterV2.
+- **Publishing.** Each package is at version 0.1.0, declares `MIT OR Apache-2.0` and carries both license texts. None is published yet: the npm scope, the crate name and the Go module path, which needs this repository at `github.com/tapehouse/tapehouse`, are published when Tapehouse launches.
 
 ## Verification
 

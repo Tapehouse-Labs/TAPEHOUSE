@@ -1,0 +1,42 @@
+{
+  "name": "@tapehouse/sdk",
+  "version": "0.1.0",
+  "description": "Typed reads and transactions for Tapehouse's price band, margin accounts and short positions, on viem.",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tapehouse-Labs/TAPEHOUSE.git",
+    "directory": "packages/sdk"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE-APACHE",
+    "LICENSE-MIT"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "lint": "tsc --noEmit && eslint --max-warnings 0",
+    "devnode": "node examples/devnode.ts"
+  },
+  "peerDependencies": {
+    "viem": "^2.57.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@types/node": "24.19.0",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.0",
+    "viem": "2.57.2",
+    "vitest": "5.0.3"
+  }
+}

@@ -1,0 +1,416 @@
+[
+  {
+    "type": "function",
+    "name": "asset",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "chainlinkFeed",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "redstoneFeedId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "indexFeedId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "chainConfig",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "sequencerUptimeFeed",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "chainlinkRegularHours",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "corporateAction",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "status",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "effectiveAt",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "multiplierBefore",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "multiplierAfter",
+        "type": "uint128",
+        "internalType": "uint128"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "halt",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "signedHalt",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "until",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "issuedAt",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "oraclePaused",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "price",
+    "inputs": [
+      {
+        "name": "feedId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "value",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "packageTimestampMs",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "writtenAt",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "quote",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "live",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "mid",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "halfBps",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "low",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "high",
+        "type": "uint128",
+        "internalType": "uint128"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "sequencerSettled",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "session",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "nyse",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "nyseNext",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "changeMs",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "boundaryMs",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "variance",
+    "inputs": [
+      {
+        "name": "feedId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint128",
+        "internalType": "uint128"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "writePrices",
+    "inputs": [
+      {
+        "name": "feedIds",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      },
+      {
+        "name": "payload",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "error",
+    "name": "CalldataMustHaveValidPayload",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "CalldataOverOrUnderFlow",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "DataTimestampCannotBeZero",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "IncompleteStatus",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "IncorrectUnsignedMetadataSize",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InsufficientNumberOfUniqueSigners",
+    "inputs": [
+      {
+        "name": "receivedSignersCount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "requiredSignersCount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidSignature",
+    "inputs": [
+      {
+        "name": "signedHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "PackageNotNewer",
+    "inputs": [
+      {
+        "name": "feedId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "storedTimestampMs",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "packageTimestampMs",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "SignerNotAuthorised",
+    "inputs": [
+      {
+        "name": "receivedSigner",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "TimestampFromTooLongFuture",
+    "inputs": [
+      {
+        "name": "receivedTimestampSeconds",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "blockTimestamp",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "TimestampIsTooOld",
+    "inputs": [
+      {
+        "name": "receivedTimestampSeconds",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "blockTimestamp",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "TimestampsMustBeEqual",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TooLargeValueByteSize",
+    "inputs": [
+      {
+        "name": "valueByteSize",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  }
+]

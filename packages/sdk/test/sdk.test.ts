@@ -1,0 +1,309 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+import { readFileSync } from 'node:fs'
+import {
+  BaseError,
+  checksumAddress,
+  ContractFunctionRevertedError,
+  createClient,
+  custom,
+  decodeFunctionData,
+  encodeErrorResult,
+  encodeFunctionData,
+  encodeFunctionResult,
+  type Hex,
+  hexToBigInt,
+  toFunctionSelector,
+  zeroAddress,
+} from 'viem'
+import { describe, expect, test } from 'vitest'
+import {
+  accounts,
+  band,
+  bandAbi,
+  bandFeedAbi,
+  CROSS,
+  decodeRevert,
+  decodeRevertData,
+  type Deployments,
+  marginAccountsAbi,
+  type PackageSource,
+  parseDeployments,
+  quoterV2Abi,
+  sharePriceFeed,
+  shortPositionsAbi,
+  shorts,
+  stockTokenAbi,
+  toBytes32,
+  tokenPriceFeed,
+} from '../src/index.ts'
+
+const registry = (chainId: number): unknown =>
+  JSON.parse(readFileSync(new URL(`../../../deployments/${chainId}.json`, import.meta.url), 'utf8'))
+const robinhood = parseDeployments(registry(4663))
+const arbitrum = parseDeployments(registry(42161))
+const testnet = parseDeployments(registry(46630))
+const alice = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
+const bob = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'
+
+describe('deployments', () => {
+  test('Chainlink feeds price the Stock Token on Robinhood Chain and the share on Arbitrum One', () => {
+    expect(tokenPriceFeed(robinhood, 'NVDA_USD')).toEqual({
+      address: '0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15',
+      kind: 'token',
+    })
+    expect(sharePriceFeed(arbitrum, 'NVDA_USD')).toEqual({
+      address: '0x4881A4418b5F2460B21d6F08CD5aA0678a7f262F',
+      kind: 'share',
+    })
+    expect(() => sharePriceFeed(robinhood, 'NVDA_USD')).toThrow(
+      '.chainlink.NVDA_USD prices the Stock Token on chain 4663.',
+    )
+    expect(() => tokenPriceFeed(arbitrum, 'NVDA_USD')).toThrow('.chainlink.NVDA_USD prices the share on chain 42161.')
+  })
+
+  test('every group is read, and a missing one is empty', () => {
+    expect(testnet.chainId).toBe(46630)
+    const raw = registry(46630) as { tapehouse: Record<string, unknown>; bandFeeds: Record<string, string> }
+    for (const address of [...Object.values(raw.tapehouse), ...Object.values(raw.bandFeeds)])
+      if (typeof address === 'string') expect(address).toBe(checksumAddress(address as Hex))
+    expect(robinhood.uniswapV3.QuoterV2).toBe('0x33e885eD0Ec9bF04EcfB19341582aADCb4c8A9E7')
+    expect(arbitrum.tokens).toEqual({})
+  })
+
+  test('addresses are checksummed, and a wrong checksum or a missing chain is refused', () => {
+    const lower = parseDeployments({
+      chainId: 412346,
+      tapehouse: { Band: '0xa70118d3324d90532e7d2854627b13cace305641' },
+    })
+    expect(lower.tapehouse.Band).toBe('0xa70118d3324D90532E7D2854627b13CacE305641')
+    expect(() =>
+      parseDeployments({ chainId: 1, tokens: { USDG: '0xa70118D3324D90532E7D2854627b13CacE305641' } }),
+    ).toThrow('.tokens.USDG is not an address.')
+    expect(() => parseDeployments({ tokens: {} })).toThrow('The registry has no chainId.')
+    expect(() => parseDeployments({ chainId: 1, tokens: { USDG: 1 } })).toThrow('.tokens.USDG is not an address.')
+  })
+
+  test('the stock lending vaults are read from .tapehouse.StockLending', () => {
+    const d = parseDeployments({
+      chainId: 412346,
+      tapehouse: { MarginAccounts: alice, StockLending: { SPY: bob } },
+    })
+    expect(d.tapehouse).toEqual({ MarginAccounts: alice })
+    expect(d.stockLending).toEqual({ SPY: bob })
+  })
+})
+
+describe('transactions', () => {
+  test('a sale and a cover carry the limits a quote gives', () => {
+    const sale = shorts.sell(testnetWithShorts(), {
+      asset: 'SPY',
+      amount: 10n ** 18n,
+      minProceeds: 770n,
+      account: alice,
+    })
+    const data = encodeFunctionData(sale)
+    expect(data.slice(0, 10)).toBe(toFunctionSelector('sell(bytes32,uint256,uint256,address)'))
+    expect(decodeFunctionData({ abi: shortPositionsAbi, data }).args).toEqual([
+      toBytes32('SPY'),
+      10n ** 18n,
+      770n,
+      alice,
+    ])
+    expect(sale.address).toBe(bob)
+    const cover = shorts.cover(testnetWithShorts(), { asset: 'SPY', amount: 1n, maxCost: 2n, account: alice })
+    expect(encodeFunctionData(cover).slice(0, 10)).toBe(toFunctionSelector('cover(bytes32,uint256,uint256,address)'))
+  })
+
+  test('an authorization lets one address act for the caller', () => {
+    const call = accounts.setAuthorization(testnet, bob, true)
+    expect(call.address).toBe(testnet.tapehouse.MarginAccounts)
+    const data = encodeFunctionData(call)
+    expect(data.slice(0, 10)).toBe(toFunctionSelector('setAuthorization(address,bool)'))
+    expect(decodeFunctionData({ abi: marginAccountsAbi, data }).args).toEqual([bob, true])
+  })
+
+  test('a repayment and a withdrawal name the position', () => {
+    const repay = accounts.repay(testnet, { position: CROSS, assets: 5n, account: alice })
+    expect(decodeFunctionData({ abi: marginAccountsAbi, data: encodeFunctionData(repay) }).args).toEqual([
+      CROSS,
+      5n,
+      alice,
+    ])
+    const withdraw = accounts.withdraw(testnet, {
+      position: toBytes32('NVDA'),
+      token: zeroAddress,
+      amount: 1n,
+      account: alice,
+      receiver: bob,
+    })
+    expect(encodeFunctionData(withdraw).slice(0, 10)).toBe(
+      toFunctionSelector('withdraw(bytes32,address,uint256,address,address)'),
+    )
+  })
+
+  test('a contract missing from the registry is named', () => {
+    const empty = parseDeployments({ chainId: 1 })
+    expect(() => shorts.mark(empty, 'SPY')).toThrow('The registry has no .tapehouse.ShortPositions.')
+    expect(() => band.seal(empty, 'NVDA')).toThrow('The registry has no .bandFeeds.NVDA.')
+  })
+
+  test('signed RedStone packages come from the source the integrator plugs in', async () => {
+    const packages = readFileSync(
+      new URL('../../../stylus/contracts/band/testdata/nvda-24_7.hex', import.meta.url),
+      'utf8',
+    ).trim() as Hex
+    const asked: string[][] = []
+    const source: PackageSource = {
+      payload: async (feedIds) => {
+        asked.push([...feedIds])
+        return packages
+      },
+    }
+    const call = await band.writePrices(testnet, source, ['NVDA---24_7'])
+    expect(asked).toEqual([['NVDA---24_7']])
+    expect(call.address).toBe(testnet.tapehouse.Band)
+    const { functionName, args } = decodeFunctionData({ abi: bandAbi, data: encodeFunctionData(call) })
+    expect(functionName).toBe('writePrices')
+    expect(args).toEqual([[toBytes32('NVDA---24_7')], packages])
+  })
+})
+
+describe('errors', () => {
+  test("Tapehouse's, the band's, the issuer's and the router's reverts are decoded", () => {
+    const unauthorized = encodeErrorResult({ abi: shortPositionsAbi, errorName: 'Unauthorized', args: [bob, alice] })
+    expect(decodeRevertData(unauthorized)).toEqual({ errorName: 'Unauthorized', args: [bob, alice] })
+    const window = encodeErrorResult({ abi: bandFeedAbi, errorName: 'NotSealWindow', args: [2, 1790200000000n] })
+    expect(decodeRevertData(window)).toEqual({ errorName: 'NotSealWindow', args: [2, 1790200000000n] })
+    expect(decodeRevertData(encodeErrorResult({ abi: stockTokenAbi, errorName: 'IsPaused' }))).toEqual({
+      errorName: 'IsPaused',
+      args: [],
+    })
+    const old = encodeErrorResult({ abi: bandAbi, errorName: 'TimestampIsTooOld', args: [1790119750n, 1790300000n] })
+    expect(decodeRevertData(old)).toEqual({ errorName: 'TimestampIsTooOld', args: [1790119750n, 1790300000n] })
+    const capped = encodeErrorResult({ abi: marginAccountsAbi, errorName: 'DebtCapExceeded', args: [2n, 1n] })
+    expect(decodeRevertData(capped)).toEqual({ errorName: 'DebtCapExceeded', args: [2n, 1n] })
+    const router = encodeErrorResult({
+      abi: [{ type: 'error', name: 'Error', inputs: [{ type: 'string' }] }],
+      errorName: 'Error',
+      args: ['Too little received'],
+    })
+    expect(decodeRevertData(router)).toEqual({ errorName: 'Error', args: ['Too little received'] })
+    expect(decodeRevertData('0xdeadbeef')).toBeUndefined()
+  })
+
+  test('the revert behind a failed call is decoded', () => {
+    const error = new BaseError('the call failed', {
+      cause: new ContractFunctionRevertedError({
+        abi: [],
+        functionName: 'deposit',
+        data: encodeErrorResult({ abi: marginAccountsAbi, errorName: 'Unauthorized', args: [bob, alice] }),
+      }),
+    })
+    expect(decodeRevert(error)).toEqual({ errorName: 'Unauthorized', args: [bob, alice] })
+    expect(decodeRevert(new Error('not a revert'))).toBeUndefined()
+  })
+})
+
+describe('quotes', () => {
+  const quoter = '0x33e885eD0Ec9bF04EcfB19341582aADCb4c8A9E7'
+  const client = createClient({
+    transport: custom({
+      async request({ method, params }) {
+        if (method !== 'eth_call') throw new Error(`unexpected ${method}`)
+        const [{ to, data }] = params as [{ to: string; data: Hex }]
+        if (to === bob) return encodeFunctionResult({ abi: shortPositionsAbi, functionName: 'fee', result: 500 })
+        expect(to).toBe(quoter)
+        const {
+          functionName,
+          args: [quote],
+        } = decodeFunctionData({ abi: quoterV2Abi, data })
+        expect(quote?.fee).toBe(500)
+        expect(quote?.tokenIn).toBe(
+          functionName === 'quoteExactInputSingle' ? robinhood.tokens.SPY : robinhood.tokens.USDG,
+        )
+        return encodeFunctionResult({ abi: quoterV2Abi, functionName, result: [77_232_802n, 0n, 0, 0n] })
+      },
+    }),
+  })
+  const d: Deployments = { ...robinhood, tapehouse: { ShortPositions: bob } }
+
+  test('a sale takes at least its quote less the slippage, rounded down', async () => {
+    expect(await shorts.quoteSale(client, d, { asset: 'SPY', amount: 10n ** 17n, slippageBps: 50n })).toEqual({
+      proceeds: 77_232_802n,
+      minProceeds: 76_846_637n,
+    })
+  })
+
+  test('a cover pays at most its quote plus the slippage, rounded up', async () => {
+    expect(await shorts.quoteCover(client, d, { asset: 'SPY', amount: 10n ** 17n, slippageBps: 50n })).toEqual({
+      cost: 77_232_802n,
+      maxCost: 77_618_967n,
+    })
+  })
+
+  test('a slippage outside 0 to 10000 basis points is refused', async () => {
+    await expect(shorts.quoteSale(client, d, { asset: 'SPY', amount: 1n, slippageBps: 10_001n })).rejects.toThrow(
+      'slippageBps 10001 is outside 0 to 10000.',
+    )
+    await expect(shorts.quoteCover(client, d, { asset: 'SPY', amount: 1n, slippageBps: -1n })).rejects.toThrow(
+      'slippageBps -1 is outside 0 to 10000.',
+    )
+  })
+
+  test('a quote that fails is an error, never a zero limit', async () => {
+    const failing = createClient({
+      transport: custom({
+        async request({ params }) {
+          const [{ to }] = params as [{ to: string }]
+          if (to === bob) return encodeFunctionResult({ abi: shortPositionsAbi, functionName: 'fee', result: 0 })
+          return '0x'
+        },
+      }),
+    })
+    await expect(shorts.quoteSale(failing, d, { asset: 'SPY', amount: 1n, slippageBps: 50n })).rejects.toThrow(
+      'returned no data',
+    )
+  })
+})
+
+describe('account reads', () => {
+  const blockTags: string[] = []
+  const client = createClient({
+    transport: custom({
+      async request({ method, params }) {
+        if (method === 'eth_blockNumber') return '0x7'
+        if (method !== 'eth_call') throw new Error(`unexpected ${method}`)
+        const [{ to, data }, block] = params as [{ to: string; data: Hex }, string]
+        expect(to).toBe(testnet.tapehouse.MarginAccounts)
+        blockTags.push(block)
+        const { functionName, args } = decodeFunctionData({ abi: marginAccountsAbi, data })
+        if (functionName === 'liquidationPrice') {
+          expect(args).toEqual([alice, CROSS, toBytes32('SPY'), 5n])
+          return encodeFunctionResult({ abi: marginAccountsAbi, functionName, result: 69_412_000_000n })
+        }
+        const result = { debt: 100n, premium: 3n, collateral: 2n * 10n ** 18n, leverage: 25_000n }
+        if (!(functionName in result)) throw new Error(`unexpected ${functionName}`)
+        return encodeFunctionResult({
+          abi: marginAccountsAbi,
+          functionName: functionName as keyof typeof result,
+          result: result[functionName as keyof typeof result],
+        })
+      },
+    }),
+  })
+
+  test('a repayment reads the debt and the premium at one block', async () => {
+    expect(await accounts.repayment(client, testnet, alice, CROSS)).toEqual({ debt: 100n, premium: 3n, assets: 103n })
+    expect(blockTags.splice(0).map((tag) => hexToBigInt(tag as Hex))).toEqual([7n, 7n])
+  })
+
+  test("a position's collateral, leverage and liquidation price are read", async () => {
+    expect(await accounts.collateral(client, testnet, alice, CROSS, bob)).toBe(2n * 10n ** 18n)
+    expect(await accounts.leverage(client, testnet, alice, CROSS)).toBe(25_000n)
+    expect(await accounts.liquidationPrice(client, testnet, alice, CROSS, 'SPY', 5n)).toBe(69_412_000_000n)
+  })
+})
+
+function testnetWithShorts(): Deployments {
+  return { ...testnet, tapehouse: { ...testnet.tapehouse, ShortPositions: bob } }
+}

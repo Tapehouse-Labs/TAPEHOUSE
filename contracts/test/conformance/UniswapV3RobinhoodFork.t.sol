@@ -79,11 +79,13 @@ contract UniswapV3RobinhoodForkTest is Test {
 
     function _poolKeys() internal view returns (string[] memory keys) {
         string[] memory names = vm.parseJsonKeys(robinhood, ".uniswapV3");
-        keys = new string[](names.length - 2);
+        keys = new string[](names.length - 3);
         uint256 n;
         for (uint256 i; i < names.length; ++i) {
             bytes32 name = keccak256(bytes(names[i]));
-            if (name != keccak256("Factory") && name != keccak256("SwapRouter02")) keys[n++] = names[i];
+            if (name != keccak256("Factory") && name != keccak256("SwapRouter02") && name != keccak256("QuoterV2")) {
+                keys[n++] = names[i];
+            }
         }
     }
 

@@ -84,6 +84,48 @@ jobs:
           ROBINHOOD_TESTNET_RPC_URL: ${{ secrets.ROBINHOOD_TESTNET_RPC_URL }}
           ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL }}
 
+  services:
+    name: Services
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: services/go.mod
+          cache-dependency-path: services/go.sum
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.14.0
+          install-only: true
+      - run: make lint-services build-services
+      - run: make test-services | tee "$RUNNER_TEMP/coverage.txt"
+      - run: |
+          {
+            echo '```'
+            cat "$RUNNER_TEMP/coverage.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  crates:
+    name: Crates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: crates
+      - run: make lint-crates build-crates test-crates
+
   integration:
     name: Integration
     runs-on: ubuntu-24.04
@@ -104,13 +146,26 @@ jobs:
           version: v1.8.3
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: stylus
+          workspaces: |
+            stylus
+            crates
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: services/go.mod
+          cache-dependency-path: services/go.sum
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
       - run: make check-stylus || cargo install --locked --force cargo-stylus@0.10.9
+      - run: make check-bindings
       - run: make devnode
       - run: make deploy-stylus-devnode
       - run: make deploy-contracts-devnode
       - run: make test-stylus-devnode
       - run: make test-contracts-devnode
+      - run: make test-sdks-devnode
       - run: make gas-stylus-devnode
       - run: make gas-table
 
@@ -134,16 +189,22 @@ jobs:
           version: v1.8.3
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: stylus
+          workspaces: |
+            stylus
+            crates
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: services/go.mod
+          cache-dependency-path: services/go.sum
       - run: /usr/bin/make check-stylus || cargo install --locked --force cargo-stylus@0.10.9
       - run: /usr/bin/make --version
-      - run: /usr/bin/make build test-stylus test-apps gas-stylus
+      - run: /usr/bin/make build test-stylus test-apps test-services test-crates gas-stylus
       - run: /usr/bin/make test-contracts coverage gas-contracts
         env:
           ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL }}
           ROBINHOOD_TESTNET_RPC_URL: ${{ secrets.ROBINHOOD_TESTNET_RPC_URL }}
           ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL }}
-      - run: /usr/bin/make -n test gas lint snapshot devnode devnode-stop deploy-stylus-devnode deploy-contracts-devnode test-stylus-devnode test-contracts-devnode gas-stylus-devnode gas-table check-activation
+      - run: /usr/bin/make -n test gas lint snapshot devnode devnode-stop deploy-stylus-devnode deploy-contracts-devnode test-stylus-devnode test-contracts-devnode test-sdks-devnode gas-stylus-devnode gas-table check-activation bindings check-bindings
 
   workflows:
     name: Workflows

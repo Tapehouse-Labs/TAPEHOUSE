@@ -8,6 +8,14 @@ REUSE_VERSION := 6.2.0
 REUSE_VERSION_RE := $(subst .,\.,$(REUSE_VERSION))
 CARGO_STYLUS_VERSION := 0.10.9
 CARGO_STYLUS_VERSION_RE := $(subst .,\.,$(CARGO_STYLUS_VERSION))
+GOLANGCI_LINT_VERSION := 2.14.0
+GOLANGCI_LINT_VERSION_RE := $(subst .,\.,$(GOLANGCI_LINT_VERSION))
+GO_TOOLCHAIN := $(shell awk '$$1 == "toolchain" { print $$2 }' services/go.mod)
+SDK_BINDINGS := Aggregator:AggregatorV3Interface.sol/AggregatorV3Interface Band:IBandPrices.sol/IBandPrices \
+	BandFeed:BandFeed.sol/BandFeed MarginAccounts:MarginAccounts.sol/MarginAccounts QuoterV2:IQuoterV2.sol/IQuoterV2 \
+	ShortPositions:ShortPositions.sol/ShortPositions StockToken:Interfaces.sol/IStockToken Usdg:IUSDG.sol/IUSDG
+SDK_GENERATED := crates/sdk/abi services/sdk/bindings packages/sdk/src/generated.ts
+SDK_PAYLOAD := stylus/contracts/band/testdata/nvda-24_7.hex
 BINARYEN_VERSION := $(shell awk '/^\[/ { table = $$0 } table == "[wasm-opt]" && $$1 == "version" { gsub(/"/, "", $$3); print $$3 }' stylus/Stylus.toml)
 BINARYEN_HOME := $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/binaryen/version_$(BINARYEN_VERSION)
 export PATH := $(BINARYEN_HOME)/bin:$(PATH)
@@ -44,7 +52,9 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 
 .PHONY: all build test lint coverage gas snapshot \
 	check-toolchains check-node check-foundry check-slither check-reuse check-stylus check-docker submodules \
-	build-apps test-apps lint-apps \
+	check-go check-golangci-lint check-rust \
+	build-apps test-apps lint-apps build-services test-services lint-services build-crates test-crates lint-crates \
+	bindings check-bindings test-sdks-devnode \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
@@ -53,11 +63,11 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 
 all: build
 
-build: build-contracts build-stylus build-apps
+build: build-contracts build-stylus build-apps build-services build-crates
 
-test: test-contracts test-stylus test-apps
+test: test-contracts test-stylus test-apps test-services test-crates
 
-lint: lint-contracts lint-stylus lint-apps lint-scripts lint-licenses
+lint: lint-contracts lint-stylus lint-apps lint-services lint-crates lint-scripts lint-licenses
 
 coverage: coverage-contracts
 
@@ -65,7 +75,7 @@ gas: gas-contracts gas-stylus
 
 snapshot: snapshot-contracts snapshot-stylus
 
-check-toolchains: check-node check-foundry check-slither check-reuse check-stylus
+check-toolchains: check-node check-foundry check-slither check-reuse check-stylus check-go check-golangci-lint check-rust
 
 check-node:
 	@node --version | grep -Eq '^v$(NODE_MAJOR)\.' || \
@@ -96,11 +106,27 @@ check-stylus:
 		  echo "Run: cargo install --locked --force cargo-stylus@$(CARGO_STYLUS_VERSION)"; exit 1; }
 	@stylus/scripts/binaryen.sh $(BINARYEN_VERSION) $(BINARYEN_HOME)
 
+check-go:
+	@command -v go >/dev/null || \
+		{ echo "Go is required. Install it from https://go.dev/dl; it switches to $(GO_TOOLCHAIN), which services/go.mod names."; exit 1; }
+	@cd services && go version | grep -Eq '^go version $(subst .,\.,$(GO_TOOLCHAIN)) ' || \
+		{ echo "$(GO_TOOLCHAIN), which services/go.mod names, is required, found: $$(cd services && go version)."; \
+		  echo "Go 1.21 or newer downloads it unless GOTOOLCHAIN is set to local."; exit 1; }
+
+check-golangci-lint:
+	@golangci-lint version 2>/dev/null | grep -Eq 'has version $(GOLANGCI_LINT_VERSION_RE) ' || \
+		{ echo "golangci-lint $(GOLANGCI_LINT_VERSION) is required, found: $$(golangci-lint version 2>/dev/null || echo none)."; \
+		  echo "Run: curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b \$$(go env GOPATH)/bin v$(GOLANGCI_LINT_VERSION)"; exit 1; }
+
+check-rust:
+	@command -v rustup >/dev/null || \
+		{ echo "rustup is required. Install it from https://rustup.rs"; exit 1; }
+
 check-docker:
 	@docker info >/dev/null 2>&1 || \
 		{ echo "Docker is required for the dev node and reproducible builds. Start Docker and retry."; exit 1; }
 
-node_modules/.modules.yaml: package.json pnpm-workspace.yaml pnpm-lock.yaml $(wildcard apps/*/package.json)
+node_modules/.modules.yaml: package.json pnpm-workspace.yaml pnpm-lock.yaml $(wildcard apps/*/package.json packages/*/package.json)
 	pnpm install --frozen-lockfile
 	@touch $@
 
@@ -112,6 +138,44 @@ test-apps: check-node node_modules/.modules.yaml
 
 lint-apps: check-node node_modules/.modules.yaml
 	pnpm -r run --if-present lint
+
+build-services: check-go
+	cd services && go build ./...
+
+test-services: check-go
+	cd services && go test -cover ./...
+
+lint-services: check-go check-golangci-lint
+	cd services && go mod tidy -diff
+	cd services && golangci-lint fmt --diff ./...
+	cd services && golangci-lint run ./...
+
+build-crates: check-rust
+	cd crates && cargo build --locked --all-targets
+
+test-crates: check-rust
+	cd crates && cargo test --locked
+
+lint-crates: check-rust
+	cd crates && cargo fmt --check
+	cd crates && cargo clippy --locked --all-targets -- -D warnings
+
+bindings: check-foundry check-go submodules
+	cd contracts && forge build
+	@mkdir -p crates/sdk/abi packages/sdk/src
+	@{ echo "// Code generated by make bindings from the contracts' ABIs. DO NOT EDIT."; \
+	  for binding in $(SDK_BINDINGS); do name=$${binding%%:*} package=$$(echo $${binding%%:*} | tr A-Z a-z); \
+	    jq .abi contracts/out/$${binding#*:}.json > crates/sdk/abi/$$name.json && mkdir -p services/sdk/bindings/$$package && \
+	    (cd services && go tool abigen --v2 --abi ../crates/sdk/abi/$$name.json --pkg $$package --type $$name \
+	      --out sdk/bindings/$$package/$$package.go) || exit 1; \
+	    printf '\nexport const %s%sAbi = %s as const\n' "$$(printf %.1s $$name | tr A-Z a-z)" "$${name#?}" \
+	      "$$(cat crates/sdk/abi/$$name.json)"; done; } > packages/sdk/src/generated.ts
+
+check-bindings: bindings
+	@test -z "$$(git ls-files --others --exclude-standard -- $(SDK_GENERATED))" && git diff --quiet -- $(SDK_GENERATED) || \
+		{ git diff --name-only -- $(SDK_GENERATED); git ls-files --others --exclude-standard -- $(SDK_GENERATED); \
+		  echo "The SDKs' bindings differ from the contracts' ABIs or are not staged. Run: make bindings, then git add them."; \
+		  exit 1; }
 
 submodules:
 	@git submodule update --init --recursive
@@ -295,6 +359,12 @@ deploy-contracts-devnode:
 		$(MAKE) deploy-stock-lending CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
 	$(MAKE) deploy-short-positions CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
 	$(MAKE) deploy-morpho-oracles CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
+	BAND_ASSETS="NVDA TSLA SPY" contracts/script/deploy-band-feeds.sh $(DEVNODE_RPC_URL) stylus/target/devnode-registry.json \
+		--private-key $(DEVNODE_KEY) > stylus/target/devnode-band-feeds
+	jq --rawfile feeds stylus/target/devnode-band-feeds \
+		'.bandFeeds = ($$feeds | split("\n") | map(select(. != "") | split(" ") | {(.[0]): .[1]}) | add)' \
+		stylus/target/devnode-registry.json > stylus/target/registry.tmp
+	mv stylus/target/registry.tmp stylus/target/devnode-registry.json
 
 test-contracts-devnode:
 	contracts/script/devnode-supply-vault-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
@@ -305,6 +375,17 @@ test-contracts-devnode:
 	contracts/script/devnode-stock-lending-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
 	contracts/script/devnode-short-positions-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
 	contracts/script/devnode-morpho-oracle-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
+
+test-sdks-devnode: export PRIVATE_KEY := $(DEVNODE_KEY)
+test-sdks-devnode: check-node check-go check-rust node_modules/.modules.yaml
+	contracts/script/devnode-sdk-setup.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
+	pnpm --filter @tapehouse/sdk run build
+	pnpm --filter @tapehouse/sdk run devnode $(DEVNODE_RPC_URL) \
+		$(abspath stylus/target/devnode-registry.json) $(abspath $(SDK_PAYLOAD))
+	cd services && go run ./sdk/examples/devnode $(DEVNODE_RPC_URL) \
+		../stylus/target/devnode-registry.json ../$(SDK_PAYLOAD)
+	cd crates && cargo run --locked --example devnode -- $(DEVNODE_RPC_URL) \
+		../stylus/target/devnode-registry.json ../$(SDK_PAYLOAD)
 
 verify-supply-vault: check-foundry submodules
 	@case "$(CHAIN)" in 4663|46630) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \

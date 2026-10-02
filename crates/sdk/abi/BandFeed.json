@@ -1,0 +1,528 @@
+[
+  {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "band_",
+        "type": "address",
+        "internalType": "contract IBand"
+      },
+      {
+        "name": "symbol_",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "side_",
+        "type": "uint8",
+        "internalType": "enum BandFeed.Side"
+      },
+      {
+        "name": "pool_",
+        "type": "address",
+        "internalType": "contract IUniswapV3Pool"
+      },
+      {
+        "name": "description_",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "SEAL_WINDOW_MS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "TWAP_WINDOW",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "band",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IBand"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "decimals",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "description",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getRoundData",
+    "inputs": [
+      {
+        "name": "roundId",
+        "type": "uint80",
+        "internalType": "uint80"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint80",
+        "internalType": "uint80"
+      },
+      {
+        "name": "",
+        "type": "int256",
+        "internalType": "int256"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint80",
+        "internalType": "uint80"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "latestBand",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "b",
+        "type": "tuple",
+        "internalType": "struct BandFeed.Band",
+        "components": [
+          {
+            "name": "state",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "live",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "mid",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "halfBps",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "low",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "high",
+            "type": "uint128",
+            "internalType": "uint128"
+          },
+          {
+            "name": "variance",
+            "type": "uint128",
+            "internalType": "uint128"
+          },
+          {
+            "name": "session",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "nyse",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "nyseNext",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "nyseChangeMs",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "sessionBoundaryMs",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "signedHalt",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "haltUntil",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "haltIssuedAt",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "oraclePaused",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "sequencerSettled",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "twapValid",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "twap",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "premiumBps",
+            "type": "int256",
+            "internalType": "int256"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "latestRoundData",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint80",
+        "internalType": "uint80"
+      },
+      {
+        "name": "",
+        "type": "int256",
+        "internalType": "int256"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint80",
+        "internalType": "uint80"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pool",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IUniswapV3Pool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "seal",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "seals",
+    "inputs": [
+      {
+        "name": "reopenMs",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "state",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "live",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "mid",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "halfBps",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "low",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "high",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "sealedAt",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "side",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "enum BandFeed.Side"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "symbol",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "version",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "Sealed",
+    "inputs": [
+      {
+        "name": "reopenMs",
+        "type": "uint64",
+        "indexed": true,
+        "internalType": "uint64"
+      },
+      {
+        "name": "state",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "live",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "mid",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      },
+      {
+        "name": "halfBps",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      },
+      {
+        "name": "low",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      },
+      {
+        "name": "high",
+        "type": "uint128",
+        "indexed": false,
+        "internalType": "uint128"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "NoAnswer",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "NoRound",
+    "inputs": [
+      {
+        "name": "roundId",
+        "type": "uint80",
+        "internalType": "uint80"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "NotSealWindow",
+    "inputs": [
+      {
+        "name": "session",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "reopenMs",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "PoolNotInitialized",
+    "inputs": [
+      {
+        "name": "pool",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "PoolWithoutToken",
+    "inputs": [
+      {
+        "name": "pool",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "SequencerNotSettled",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "T",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "UnknownAsset",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
+  }
+]
