@@ -6,6 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {BandFeed} from "./BandFeed.sol";
+import {Basket} from "./Basket.sol";
 import {GapBackstop} from "./GapBackstop.sol";
 import {IBand} from "./interfaces/IBand.sol";
 import {Liquidator} from "./Liquidator.sol";
@@ -204,7 +205,8 @@ contract ReopeningAuction {
 
     /// @notice Enrolls `account`'s `position` in the round of `symbol` if it falls short at its bands' low edges, as the
     /// accounts' `health` has it, and holds it out of the open-market Dutch auction until the round's clearing window
-    /// closes. Its lot is what repays all it owes at the floor, fee included, at most what it holds and what its
+    /// closes. Its baskets are first redeemed into their Stock Tokens, which the accounts allow anyone once it falls
+    /// short. Its lot is what repays all it owes at the floor, fee included, at most what it holds and what its
     /// lending vault can return of what it lent; a full round takes it only in place of a smaller lot. Anyone may call
     /// it while bids are committed.
     function enroll(address account, bytes32 position, bytes32 symbol) external {
@@ -212,6 +214,7 @@ contract ReopeningAuction {
         address token = _token(symbol);
         uint256 floor = _open(symbol, openMs).floor;
         if (enrolled[openMs][account][position][symbol]) revert NotEnrollable(account, position);
+        _unwrap(account, position);
         uint128 amount = _lotSize(account, position, token, floor);
         enrolled[openMs][account][position][symbol] = true;
         ++_lotCount[openMs][account][position];
@@ -371,6 +374,19 @@ contract ReopeningAuction {
         (r.sealMs, r.floor) = (sealMs, SafeCast.toUint128(floor));
         lastOpenMs = openMs;
         emit RoundOpened(symbol, openMs, sealMs, floor, fromSeal);
+    }
+
+    function _unwrap(address account, bytes32 position) private {
+        Basket[] memory baskets = accounts.baskets();
+        for (uint256 j; j < baskets.length; ++j) {
+            // forge-lint: disable-next-line(calls-loop)
+            uint256 shares = accounts.collateral(account, position, address(baskets[j]));
+            if (shares == 0) continue;
+            // slither-disable-start unused-return,calls-loop,reentrancy-no-eth
+            // forge-lint: disable-next-line(calls-loop, reentrancy-no-eth)
+            try accounts.unwrap(account, address(baskets[j]), shares) returns (uint256[] memory) {} catch {}
+            // slither-disable-end unused-return,calls-loop,reentrancy-no-eth
+        }
     }
 
     function _lotSize(address account, bytes32 position, address token, uint256 floor) private view returns (uint128) {

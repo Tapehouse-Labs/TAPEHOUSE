@@ -3,6 +3,7 @@
 package sdk
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/v2"
@@ -40,7 +41,8 @@ func (a *Accounts) SetAuthorization(authorized common.Address, allowed bool) (Tx
 	return a.tx(a.accounts.TryPackSetAuthorization(authorized, allowed))
 }
 
-// Deposit deposits amount of token from the sender into account's position: Cross or an asset's symbol.
+// Deposit deposits amount of token from the sender into account's position: Cross or an asset's symbol. A basket's
+// address deposits its shares, into Cross alone.
 func (a *Accounts) Deposit(position [32]byte, token common.Address, amount *big.Int, account common.Address) (Tx, error) {
 	if err := present(amount); err != nil {
 		return Tx{}, err
@@ -48,7 +50,7 @@ func (a *Accounts) Deposit(position [32]byte, token common.Address, amount *big.
 	return a.tx(a.accounts.TryPackDeposit(position, token, amount, account))
 }
 
-// Withdraw withdraws amount of token from account's position to receiver.
+// Withdraw withdraws amount of token, a basket's shares included, from account's position to receiver.
 func (a *Accounts) Withdraw(position [32]byte, token common.Address, amount *big.Int, account, receiver common.Address) (Tx, error) {
 	if err := present(amount); err != nil {
 		return Tx{}, err
@@ -71,6 +73,19 @@ func (a *Accounts) Repay(position [32]byte, assets *big.Int, account common.Addr
 		return Tx{}, err
 	}
 	return a.tx(a.accounts.TryPackRepay(position, assets, account))
+}
+
+// Unwrap redeems shares of the registry's basket key in account's cross position for its Stock Tokens, which the
+// position then holds. The account or an address it authorized may, and anyone once the position falls short.
+func (a *Accounts) Unwrap(account common.Address, key string, shares *big.Int) (Tx, error) {
+	basket, err := entry(a.c.deployments.Baskets, key, ".tapehouse.Baskets")
+	if err == nil {
+		err = present(shares)
+	}
+	if err != nil {
+		return Tx{}, err
+	}
+	return a.tx(a.accounts.TryPackUnwrap(account, basket, shares))
 }
 
 // IsAuthorized reports whether authorized may act for account.
@@ -97,6 +112,35 @@ func (a *Accounts) Repayment(opts *bind.CallOpts, account common.Address, positi
 		return Repayment{}, err
 	}
 	return Repayment{debt, premium, new(big.Int).Add(debt, premium)}, nil
+}
+
+// InBaskets reads what account's position holds of each Stock Token through its baskets, by asset, as its shares
+// would redeem now: the engine margins them as those Stock Tokens. Both reads are at opts' block, or at the latest
+// block where opts names none.
+func (a *Accounts) InBaskets(opts *bind.CallOpts, account common.Address, position [32]byte) (map[string]*big.Int, error) {
+	if a.err != nil {
+		return nil, a.err
+	}
+	pinned, err := a.c.pin(opts)
+	if err != nil {
+		return nil, err
+	}
+	stocks, err := read(a.c, pinned, a.target, a.accounts.UnpackStocks)(a.accounts.TryPackStocks())
+	if err != nil {
+		return nil, err
+	}
+	amounts, err := read(a.c, pinned, a.target, a.accounts.UnpackInBaskets)(a.accounts.TryPackInBaskets(account, position))
+	if err != nil {
+		return nil, err
+	}
+	if len(amounts) != len(stocks.Symbols) {
+		return nil, fmt.Errorf("the accounts name %d assets and %d amounts", len(stocks.Symbols), len(amounts))
+	}
+	held := make(map[string]*big.Int, len(amounts))
+	for i, symbol := range stocks.Symbols {
+		held[assetName(symbol)] = amounts[i]
+	}
+	return held, nil
 }
 
 // Health reads account's position as the engine sees it: equity and requirement in USD with 18 decimals, the

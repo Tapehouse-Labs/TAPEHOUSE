@@ -6,11 +6,13 @@ import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IBand} from "./interfaces/IBand.sol";
 import {IMargin} from "./interfaces/IMargin.sol";
 import {IStockToken, IStockTokenRegistry} from "./interfaces/IStockToken.sol";
 import {IUSDG} from "./interfaces/IUSDG.sol";
+import {Basket} from "./Basket.sol";
 import {StockLendingVault} from "./StockLendingVault.sol";
 import {SupplyVault} from "./SupplyVault.sol";
 
@@ -33,7 +35,9 @@ import {SupplyVault} from "./SupplyVault.sol";
 /// carries a premium, owed beside it and paid after it, that funds the backstop; part of every premium paid goes to a
 /// fee reserve. A position may lend its Stock Tokens through the asset's lending vault and earn its fee: the tokens
 /// leave its holding, it keeps the vault's shares, and what they are worth still counts as the asset for the engine,
-/// at `RECALL_HAIRCUT` less in its equity for the risk that they come back late.
+/// at `RECALL_HAIRCUT` less in its equity for the risk that they come back late. The cross position may also hold
+/// shares of the baskets the owner adds, which the engine margins as the Stock Tokens they redeem for, and which turn
+/// into those Stock Tokens in the position when it falls short.
 contract MarginAccounts is Ownable2Step {
     using SafeERC20 for IERC20;
 
@@ -42,7 +46,8 @@ contract MarginAccounts is Ownable2Step {
         uint128 usdg;
         uint128 weth;
         uint8 held;
-        uint120 premium;
+        uint8 baskets;
+        uint112 premium;
         uint256 premiumIndex;
     }
 
@@ -89,6 +94,8 @@ contract MarginAccounts is Ownable2Step {
     /// @notice The least a recall that is not a position's first and whole one may queue, in raw units: a hundredth of
     /// a token, so no one can hold the queue up with dust.
     uint256 public constant MIN_RECALL = 1e16;
+    /// @notice The most baskets the accounts take.
+    uint256 public constant MAX_BASKETS = 8;
     uint256 private constant BPS = 10_000;
     uint256 private constant PRICE_UNIT = 1e8;
     uint256 private constant USDG_TO_USD = 1e12;
@@ -157,6 +164,11 @@ contract MarginAccounts is Ownable2Step {
     // slither-disable-next-line uninitialized-state
     mapping(address account => mapping(bytes32 position => mapping(uint256 asset => uint256[]))) private _recalls;
     Closure private _closure;
+    Basket[] private _baskets;
+    uint8[MAX_BASKETS] private _masks;
+    mapping(address basket => uint256) private _indexOfBasket;
+    mapping(address account => mapping(uint256 basket => uint256)) private _basketShares;
+    mapping(uint256 basket => uint256) private _credited;
 
     /// @notice `caller` deposited `amount` of `token` into `account`'s `position`.
     event Deposit(
@@ -235,6 +247,13 @@ contract MarginAccounts is Ownable2Step {
     /// @notice The accounts held `balance` of `symbol`, less than the `counted` their positions held, and every
     /// position's holding of it fell in proportion.
     event AssetWrittenDown(bytes32 indexed symbol, uint256 counted, uint256 balance);
+    /// @notice The cross position takes `basket`'s shares as collateral.
+    event BasketAdded(address indexed basket);
+    /// @notice `caller` redeemed `shares` of `basket` in `account`'s cross position for `assets` of its Stock Tokens, in
+    /// the basket's order, which the position now holds.
+    event Unwrap(
+        address indexed caller, address indexed account, address indexed basket, uint256 shares, uint256[] assets
+    );
 
     /// @notice The engine's band is `engineBand`, not the accounts' band.
     error BandMismatch(address engineBand);
@@ -331,6 +350,16 @@ contract MarginAccounts is Ownable2Step {
     error NothingToSettle();
     /// @notice A recall would queue `amount`, less than `MIN_RECALL`, and is not the position's first and whole one.
     error RecallTooSmall(uint256 amount);
+    /// @notice `basket` is not priced by the accounts' band, holds a token that is not one of their Stock Tokens or lists
+    /// them out of the engine's order, or has another owner.
+    error InvalidBasket(address basket);
+    /// @notice `basket` is taken already.
+    error BasketAlreadyAdded(address basket);
+    /// @notice The accounts take `MAX_BASKETS` baskets already.
+    error TooManyBaskets();
+    /// @notice The issuer has paused one of `basket`'s Stock Tokens or blocklisted the accounts or the basket, so its
+    /// shares could not be redeemed: they back no new loan or withdrawal in debt.
+    error BasketFrozen(address basket);
 
     /// @param band_ The band, which must be the engine's.
     /// @param engine_ The margin engine; its assets are the Stock Tokens the positions take.
@@ -397,12 +426,26 @@ contract MarginAccounts is Ownable2Step {
         return (_symbols, _tokens);
     }
 
-    /// @notice What `account`'s `position` holds of `token`: a Stock Token at its holding's last synced scale.
+    /// @notice What `account`'s `position` holds of `token`: a Stock Token at its holding's last synced scale, and a
+    /// basket's shares in the cross position.
     function collateral(address account, bytes32 position, address token) public view returns (uint256) {
         if (token == address(usdg)) return _positions[account][position].usdg;
         if (token == address(weth)) return _positions[account][position].weth;
         uint256 index = _indexOfToken[token];
-        return index == 0 ? 0 : _quantity(_units[account][position][index - 1], _books[index - 1].scale);
+        if (index != 0) return _quantity(_units[account][position][index - 1], _books[index - 1].scale);
+        uint256 j = _indexOfBasket[token];
+        return j == 0 || position != CROSS ? 0 : _basketShares[account][j - 1];
+    }
+
+    /// @notice What `account`'s `position` holds of each Stock Token through its baskets, in the engine's order: what
+    /// its shares would redeem for now, rounded down.
+    function inBaskets(address account, bytes32 position) external view returns (uint256[] memory) {
+        return _basketed(account, _positions[account][position].baskets);
+    }
+
+    /// @notice The baskets the cross position takes, in the order they were added.
+    function baskets() external view returns (Basket[] memory) {
+        return _baskets;
     }
 
     /// @notice What `account`'s `position` has lent of `token` through its lending vault, its fee included: what its
@@ -578,6 +621,32 @@ contract MarginAccounts is Ownable2Step {
         IERC20(_tokens[i]).forceApprove(address(newLending), type(uint256).max);
     }
 
+    /// @notice Takes `basket`'s shares as collateral of the cross position, for good. The basket must be priced by the
+    /// accounts' band, hold only their Stock Tokens, listed in the engine's order, and have their owner, who alone sets
+    /// its target. Only the owner may, up to `MAX_BASKETS`.
+    function addBasket(Basket basket) external onlyOwner {
+        if (_indexOfBasket[address(basket)] != 0) revert BasketAlreadyAdded(address(basket));
+        if (_baskets.length == MAX_BASKETS) revert TooManyBaskets();
+        if (address(basket.band()) != address(band) || basket.owner() != owner()) {
+            revert InvalidBasket(address(basket));
+        }
+        // slither-disable-next-line unused-return
+        (, address[] memory tokens) = basket.components(); // forge-lint: disable-line(unused-return)
+        uint8 mask = 0;
+        uint256 last = 0;
+        for (uint256 c; c < tokens.length; ++c) {
+            uint256 index = _indexOfToken[tokens[c]];
+            // forge-lint: disable-next-line(require-revert-in-loop)
+            if (index <= last) revert InvalidBasket(address(basket));
+            last = index;
+            mask |= uint8(1 << (index - 1)); // forge-lint: disable-line(unsafe-typecast)
+        }
+        _masks[_baskets.length] = mask;
+        _baskets.push(basket);
+        _indexOfBasket[address(basket)] = _baskets.length;
+        emit BasketAdded(address(basket));
+    }
+
     /// @notice Sets the premium rate, in basis points a year, from now on: closed time up to now accrues at the old
     /// rate. Only while the band can tell the session, so a spell it cannot is never priced at the new rate.
     function setPremiumRate(uint32 rate) external onlyOwner {
@@ -675,8 +744,10 @@ contract MarginAccounts is Ownable2Step {
 
     /// @notice Deposits `amount` of `token` from the caller into `account`'s `position`. A Stock Token goes to the
     /// cross position or its own isolated position, and reverts with `AssetInOtherPosition` if the account holds it in
-    /// the other. Stock Tokens and USDG come only from the account or an address it authorized, and a Stock Token only
-    /// within its cap and for an account and caller the issuer has not blocklisted; anyone may deposit WETH.
+    /// the other; a basket's shares go to the cross position, and only while the account holds none of the basket's
+    /// Stock Tokens in their isolated positions. Stock Tokens, baskets and USDG come only from the account or an address
+    /// it authorized, and Stock Tokens, held or through a basket, only within their caps and for an account and caller
+    /// the issuer has not blocklisted; anyone may deposit WETH.
     function deposit(bytes32 position, address token, uint256 amount, address account) public {
         if (amount == 0) revert ZeroAmount();
         _checkPosition(position);
@@ -686,9 +757,13 @@ contract MarginAccounts is Ownable2Step {
             p.usdg += SafeCast.toUint128(amount);
         } else if (token == address(weth)) {
             p.weth += SafeCast.toUint128(amount);
+        } else if (_indexOfToken[token] == 0) {
+            uint256 j = _indexOfBasket[token];
+            if (j == 0) revert UnsupportedToken(token, position);
+            _checkAuthorized(account);
+            _depositBasket(account, position, p, j - 1, amount);
         } else {
             uint256 index = _indexOfToken[token];
-            if (index == 0) revert UnsupportedToken(token, position);
             _checkAuthorized(account);
             _checkNotBlocked(--index, account);
             bytes32 symbol = _symbols[index];
@@ -696,10 +771,11 @@ contract MarginAccounts is Ownable2Step {
             bytes32 other = position == CROSS ? symbol : CROSS;
             Book storage b = _sync(index);
             if (_quantity(_units[account][other][index], b.scale) != 0) revert AssetInOtherPosition(symbol, other);
+            if (position != CROSS && _inHeldBasket(account, index)) revert AssetInOtherPosition(symbol, CROSS);
             if (b.scale == 0) revert AssetWrittenOff(symbol);
             uint256 units = amount * WAD / b.scale;
             b.units += SafeCast.toUint128(units);
-            if (_quantity(b.units, b.scale) + _lentByAccounts(index) > _caps[index]) {
+            if (_quantity(b.units, b.scale) + _lentByAccounts(index) + _inBasketsOf(index) > _caps[index]) {
                 revert AssetCapExceeded(symbol, _caps[index]);
             }
             _units[account][position][index] += units;
@@ -839,13 +915,18 @@ contract MarginAccounts is Ownable2Step {
         _unlend(account, position, index, back);
     }
 
-    /// @notice Withdraws `amount` of `token` from `account`'s `position` to `receiver`. A Stock Token leaves only for
-    /// an account and caller the issuer has not blocklisted. A position in debt must then pass its checks, and waits while
-    /// the guardian has paused borrowing.
+    /// @notice Withdraws `amount` of `token` from `account`'s `position` to `receiver`. A Stock Token, or a basket of
+    /// them, leaves only for an account and caller the issuer has not blocklisted. A position in debt must then pass its
+    /// checks, and waits while the guardian has paused borrowing.
     function withdraw(bytes32 position, address token, uint256 amount, address account, address receiver) external {
         _checkAuthorized(account);
         uint256 index = _indexOfToken[token];
-        if (index != 0) _checkNotBlocked(index - 1, account);
+        if (index != 0) {
+            _checkNotBlocked(index - 1, account);
+        } else {
+            uint256 j = _indexOfBasket[token];
+            if (j != 0) _checkBasketNotBlocked(_masks[j - 1], account);
+        }
         Position storage p = _debit(account, position, token, amount);
         if (p.debtShares != 0 || p.premium != 0) {
             if (borrowingPaused) revert BorrowingIsPaused();
@@ -855,6 +936,41 @@ contract MarginAccounts is Ownable2Step {
         }
         emit Withdraw(msg.sender, account, position, token, amount, receiver);
         IERC20(token).safeTransfer(receiver, amount);
+    }
+
+    /// @notice Redeems `shares` of `basket` in `account`'s cross position for the Stock Tokens they hold, which the
+    /// position then holds in their place, and returns them, in the basket's order. The account, an address it
+    /// authorized and the liquidator may, and anyone once the position falls short of its current requirement at its
+    /// bands' low edges, as `health` shows, so its Stock Tokens may be sold.
+    function unwrap(address account, address basket, uint256 shares) external returns (uint256[] memory assets) {
+        uint256 j = _indexOfBasket[basket];
+        if (j == 0) revert UnsupportedToken(basket, CROSS);
+        if (msg.sender != liquidator && msg.sender != account && !isAuthorized[account][msg.sender]) {
+            Valuation memory v = _value(account, CROSS, false);
+            // slither-disable-next-line unused-return
+            (uint256 requirement,,) = engine.currentRequirement(v.quantities, v.prices); // forge-lint: disable-line(unused-return)
+            if (v.equity >= SafeCast.toInt256(requirement)) revert Unauthorized(msg.sender, account);
+        }
+        Position storage p = _debit(account, CROSS, basket, shares);
+        Basket basket_ = _baskets[--j];
+        assets = basket_.previewRedeem(shares);
+        uint8 mask = _masks[j];
+        uint256 c = 0;
+        for (uint256 i = 0; mask >> i != 0; ++i) {
+            if (mask & (1 << i) == 0) continue;
+            uint256 amount = assets[c++];
+            if (amount == 0) continue;
+            Book storage b = _sync(i);
+            // forge-lint: disable-next-line(require-revert-in-loop)
+            if (b.scale == 0) revert AssetWrittenOff(_symbols[i]);
+            uint256 units = amount * WAD / b.scale;
+            b.units += SafeCast.toUint128(units);
+            _units[account][CROSS][i] += units;
+            p.held |= uint8(1 << i); // forge-lint: disable-line(unsafe-typecast)
+        }
+        emit Unwrap(msg.sender, account, basket, shares, assets);
+        // slither-disable-next-line unused-return
+        basket_.redeem(shares, address(this), address(this)); // forge-lint: disable-line(unused-return)
     }
 
     /// @notice Borrows `assets` of USDG from the vault against `account`'s `position`, to `receiver`. The position
@@ -934,7 +1050,7 @@ contract MarginAccounts is Ownable2Step {
     function writeOff(address account, bytes32 position) external returns (uint256 written) {
         if (msg.sender != liquidator) revert NotLiquidator(msg.sender);
         Position storage p = _positions[account][position];
-        if (p.usdg != 0 || p.weth != 0) revert PositionNotEmpty();
+        if (p.usdg != 0 || p.weth != 0 || p.baskets != 0) revert PositionNotEmpty();
         uint8 held = p.held;
         for (uint256 i = 0; held >> i != 0; ++i) {
             if (held & (1 << i) == 0) continue;
@@ -977,7 +1093,7 @@ contract MarginAccounts is Ownable2Step {
         if (repaid != 0) emit Repay(msg.sender, account, position, repaid, shares);
         premiumPaid = _min(assets - repaid, p.premium);
         if (premiumPaid != 0) {
-            p.premium -= SafeCast.toUint120(premiumPaid);
+            p.premium -= SafeCast.toUint112(premiumPaid);
             uint256 toReserve = premiumPaid * reserveShare / BPS;
             reserve += SafeCast.toUint128(toReserve);
             backstopPremium += SafeCast.toUint128(premiumPaid - toReserve);
@@ -1043,7 +1159,7 @@ contract MarginAccounts is Ownable2Step {
     function _settle(Position storage p, uint256 index) private {
         uint256 paid = p.premiumIndex;
         if (index != paid) {
-            p.premium += SafeCast.toUint120(p.debtShares * (index - paid) / RAY);
+            p.premium += SafeCast.toUint112(p.debtShares * (index - paid) / RAY);
             p.premiumIndex = index;
         }
     }
@@ -1138,6 +1254,7 @@ contract MarginAccounts is Ownable2Step {
     function _lentByAccounts(uint256 index) private view returns (uint256) {
         StockLendingVault vault_ = _lending[index];
         if (address(vault_) == address(0)) return 0;
+        // forge-lint: disable-next-line(calls-loop)
         return vault_.convertToAssets(vault_.balanceOf(address(this)));
     }
 
@@ -1159,6 +1276,13 @@ contract MarginAccounts is Ownable2Step {
         } else if (token == address(weth)) {
             if (amount > p.weth) revert InsufficientCollateral(token, amount);
             p.weth -= SafeCast.toUint128(amount);
+        } else if (_indexOfBasket[token] != 0) {
+            uint256 j = _indexOfBasket[token] - 1;
+            uint256 shares = position == CROSS ? _basketShares[account][j] : 0;
+            if (amount > shares) revert InsufficientCollateral(token, amount);
+            _basketShares[account][j] = shares - amount;
+            _credited[j] -= amount;
+            if (amount == shares) p.baskets &= ~uint8(1 << j); // forge-lint: disable-line(unsafe-typecast)
         } else {
             uint256 index = _indexOfToken[token];
             if (index == 0) revert UnsupportedToken(token, position);
@@ -1195,10 +1319,129 @@ contract MarginAccounts is Ownable2Step {
                 revert AssetFrozen(_symbols[i]); // forge-lint: disable-line(require-revert-in-loop)
             }
         }
+        uint8 held = _positions[account][position].baskets;
+        for (uint256 j = 0; held >> j != 0; ++j) {
+            if (held & (1 << j) == 0) continue;
+            uint8 mask = _masks[j];
+            _checkBasketNotBlocked(mask, account);
+            address basket = address(_baskets[j]);
+            for (uint256 i = 0; mask >> i != 0; ++i) {
+                if (mask & (1 << i) == 0) continue;
+                IStockTokenRegistry registry = IStockTokenRegistry(_registries[i]);
+                // forge-lint: disable-start(calls-loop, require-revert-in-loop)
+                // slither-disable-next-line calls-loop
+                if (IStockToken(_tokens[i]).paused() || registry.isBlocked(address(this)) || registry.isBlocked(basket))
+                {
+                    revert BasketFrozen(basket);
+                }
+                // forge-lint: disable-end(calls-loop, require-revert-in-loop)
+            }
+        }
+    }
+
+    function _depositBasket(address account, bytes32 position, Position storage p, uint256 j, uint256 shares) private {
+        Basket basket = _baskets[j];
+        if (position != CROSS) revert UnsupportedToken(address(basket), position);
+        uint8 mask = _masks[j];
+        uint256[] memory assets = basket.previewRedeem(shares);
+        uint256[] memory inBaskets_ = _heldInBaskets();
+        uint256 c = 0;
+        for (uint256 i = 0; mask >> i != 0; ++i) {
+            if (mask & (1 << i) == 0) continue;
+            _checkNotBlocked(i, account);
+            bytes32 symbol = _symbols[i];
+            // forge-lint: disable-next-line(require-revert-in-loop)
+            if (_positions[account][symbol].held & (1 << i) != 0) revert AssetInOtherPosition(symbol, symbol);
+            Book storage b = _sync(i);
+            // forge-lint: disable-next-line(require-revert-in-loop)
+            if (_quantity(b.units, b.scale) + _lentByAccounts(i) + inBaskets_[i] + assets[c++] > _caps[i]) {
+                revert AssetCapExceeded(symbol, _caps[i]); // forge-lint: disable-line(require-revert-in-loop)
+            }
+        }
+        _basketShares[account][j] += shares;
+        _credited[j] += shares;
+        p.baskets |= uint8(1 << j); // forge-lint: disable-line(unsafe-typecast)
+    }
+
+    function _inHeldBasket(address account, uint256 i) private view returns (bool) {
+        uint8 held = _positions[account][CROSS].baskets;
+        for (uint256 j = 0; held >> j != 0; ++j) {
+            if (held & (1 << j) != 0 && _masks[j] & (1 << i) != 0) return true;
+        }
+        return false;
+    }
+
+    function _checkBasketNotBlocked(uint8 mask, address account) private view {
+        for (uint256 i = 0; mask >> i != 0; ++i) {
+            if (mask & (1 << i) != 0) _checkNotBlocked(i, account);
+        }
+    }
+
+    /// @dev What `account`'s cross position holds of each Stock Token through its baskets, in the engine's order.
+    function _basketed(address account, uint8 held) private view returns (uint256[] memory quantities) {
+        quantities = new uint256[](_symbols.length);
+        for (uint256 j = 0; held >> j != 0; ++j) {
+            if (held & (1 << j) == 0) continue;
+            // forge-lint: disable-next-line(calls-loop)
+            _addComponents(quantities, _masks[j], _baskets[j].previewRedeem(_basketShares[account][j]));
+        }
+    }
+
+    /// @dev What the positions hold of each Stock Token through baskets, in the engine's order: what the shares
+    /// credited to them would redeem for now.
+    function _heldInBaskets() private view returns (uint256[] memory quantities) {
+        quantities = new uint256[](_symbols.length);
+        uint256 count = _baskets.length;
+        for (uint256 j = 0; j < count; ++j) {
+            uint256 shares = _credited[j];
+            if (shares == 0) continue;
+            // forge-lint: disable-next-line(calls-loop)
+            _addComponents(quantities, _masks[j], _baskets[j].previewRedeem(shares));
+        }
+    }
+
+    /// @dev What the positions hold of Stock Token `i` through baskets, as `_heldInBaskets` counts it.
+    function _inBasketsOf(uint256 i) private view returns (uint256 quantity) {
+        uint256 count = _baskets.length;
+        for (uint256 j = 0; j < count; ++j) {
+            if (_masks[j] & (1 << i) == 0) continue;
+            uint256 shares = _credited[j];
+            if (shares == 0) continue;
+            Basket basket = _baskets[j];
+            // forge-lint: disable-next-line(calls-loop)
+            quantity += Math.mulDiv(shares, IERC20(_tokens[i]).balanceOf(address(basket)), basket.totalSupply());
+        }
+    }
+
+    /// @dev Reverts if the accounts hold more of a Stock Token in the baskets `held` than its cap, directly, lent and
+    /// through baskets: a gift to a basket or a rebalance can move them past it without a deposit.
+    function _checkBasketCaps(uint8 held) private view {
+        uint8 mask = 0;
+        for (uint256 j = 0; held >> j != 0; ++j) {
+            if (held & (1 << j) != 0) mask |= _masks[j];
+        }
+        uint256[] memory inBaskets_ = _heldInBaskets();
+        for (uint256 i = 0; mask >> i != 0; ++i) {
+            if (mask & (1 << i) == 0) continue;
+            Book storage b = _books[i];
+            // forge-lint: disable-next-line(require-revert-in-loop)
+            if (_quantity(b.units, b.scale) + _lentByAccounts(i) + inBaskets_[i] > _caps[i]) {
+                revert AssetCapExceeded(_symbols[i], _caps[i]); // forge-lint: disable-line(require-revert-in-loop)
+            }
+        }
+    }
+
+    function _addComponents(uint256[] memory quantities, uint8 mask, uint256[] memory assets) private pure {
+        uint256 c = 0;
+        for (uint256 i = 0; mask >> i != 0; ++i) {
+            if (mask & (1 << i) != 0) quantities[i] += assets[c++];
+        }
     }
 
     function _check(address account, bytes32 position) private view {
         if (!band.sequencerSettled()) revert SequencerNotSettled();
+        uint8 baskets_ = _positions[account][position].baskets;
+        if (baskets_ != 0) _checkBasketCaps(baskets_);
         Valuation memory v = _value(account, position, true);
         if (v.equity < 0) revert InsufficientMargin(v.equity, 0);
         uint8 held = v.held;
@@ -1246,11 +1489,15 @@ contract MarginAccounts is Ownable2Step {
         v.quantities = new int256[](n);
         v.prices = new uint256[](n);
         v.effective = new uint256[](n);
+        uint256[] memory basketed = _basketed(account, p.baskets);
         uint256 worth = 0;
         for (uint256 i; i < n; ++i) {
-            if (p.held & (1 << i) == 0) continue;
-            uint256 held = _quantity(_units[account][position][i], _books[i].scale);
-            uint256 lentQuantity = _lentAssets(account, position, i);
+            uint256 held = basketed[i];
+            uint256 lentQuantity = 0;
+            if (p.held & (1 << i) != 0) {
+                held += _quantity(_units[account][position][i], _books[i].scale);
+                lentQuantity = _lentAssets(account, position, i);
+            }
             uint256 quantity = held + lentQuantity;
             if (quantity == 0) continue;
             bytes32 symbol = _symbols[i];

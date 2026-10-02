@@ -7,7 +7,7 @@ use alloy::rpc::json_rpc::ErrorPayload;
 use alloy::sol_types::{Revert as SolidityRevert, SolCall, SolError, SolEvent, SolValue};
 use alloy::transports::mock::Asserter;
 use tapehouse_sdk::bindings::{
-    Band, BandFeed, MarginAccounts, MorphoBandOracle, ShortPositions, StockToken,
+    Band, BandFeed, Basket, MarginAccounts, MorphoBandOracle, ShortPositions, StockToken,
 };
 use tapehouse_sdk::{
     CROSS, Deployments, Error, NoPrice, OraclePrice, PackageSource, Tapehouse, decode_revert_data,
@@ -114,6 +114,61 @@ fn a_mixed_case_address_must_carry_its_checksum() {
             "{json}"
         );
     }
+}
+
+#[test]
+fn the_baskets_are_read_from_tapehouse_baskets() {
+    let deployments = Deployments::parse(&format!(
+        r#"{{"chainId":412346,"tapehouse":{{"MarginAccounts":"{ALICE}","Baskets":{{"PAIR":"{}"}}}}}}"#,
+        BOB.to_string().to_lowercase()
+    ))
+    .unwrap();
+    assert_eq!(deployments.baskets["PAIR"], BOB);
+    assert_eq!(deployments.tapehouse.len(), 1);
+    assert!(registry(46630).baskets.is_empty());
+    assert_eq!(
+        Deployments::parse(r#"{"chainId":1,"tapehouse":{"Baskets":{"PAIR":1}}}"#)
+            .unwrap_err()
+            .to_string(),
+        ".tapehouse.Baskets.PAIR is not an address"
+    );
+}
+
+#[test]
+fn a_basket_mints_and_redeems_in_kind_and_the_accounts_unwrap_one() {
+    let mut deployments = registry(46630);
+    deployments.baskets.insert("PAIR".into(), BOB);
+    let tapehouse = offline(deployments.clone());
+    let pair = tapehouse.basket("PAIR").unwrap();
+    assert_eq!(*pair.address(), BOB);
+    let mint = pair.mint(
+        U256::from(10u64.pow(18)),
+        ALICE,
+        vec![U256::from(3), U256::from(4)],
+    );
+    let decoded = Basket::mintCall::abi_decode(mint.calldata()).unwrap();
+    assert_eq!(
+        (decoded.shares, decoded.receiver, decoded.maxAssets),
+        (
+            U256::from(10u64.pow(18)),
+            ALICE,
+            vec![U256::from(3), U256::from(4)]
+        )
+    );
+    let redeem = pair.redeem(U256::from(5), BOB, ALICE);
+    let decoded = Basket::redeemCall::abi_decode(redeem.calldata()).unwrap();
+    assert_eq!((decoded.receiver, decoded.owner), (BOB, ALICE));
+    let unwrap = tapehouse.unwrap(ALICE, "PAIR", U256::from(5)).unwrap();
+    assert_eq!(unwrap.calldata()[..4], MarginAccounts::unwrapCall::SELECTOR);
+    let decoded = MarginAccounts::unwrapCall::abi_decode(unwrap.calldata()).unwrap();
+    assert_eq!(
+        (decoded.account, decoded.basket, decoded.shares),
+        (ALICE, BOB, U256::from(5))
+    );
+    assert_eq!(
+        tapehouse.basket("NONE").unwrap_err().to_string(),
+        "the registry has no .tapehouse.Baskets.NONE"
+    );
 }
 
 #[test]
@@ -250,6 +305,14 @@ fn the_reverts_of_tapehouse_the_band_the_issuer_and_the_router_are_decoded() {
             }
             .abi_encode(),
             "DebtCapExceeded(2, 1)".into(),
+        ),
+        (
+            MarginAccounts::BasketFrozen { basket: BOB }.abi_encode(),
+            format!("BasketFrozen({BOB})"),
+        ),
+        (
+            Basket::PastTarget { symbol: b32("SPY") }.abi_encode(),
+            format!("PastTarget({})", b32("SPY")),
         ),
         (
             SolidityRevert::from("Too little received").abi_encode(),
@@ -646,4 +709,80 @@ fn a_repoints_asset_mismatch_and_band_set_are_decoded() {
     )
     .unwrap();
     assert_eq!((set.previousBand, set.newBand), (ALICE, BAND));
+}
+
+#[tokio::test]
+async fn a_baskets_components_previews_and_targets_are_read() {
+    let asserter = Asserter::new();
+    let mut deployments = registry(46630);
+    deployments.baskets.insert("PAIR".into(), BOB);
+    let tapehouse = Tapehouse::new(
+        ProviderBuilder::new().connect_mocked_client(asserter.clone()),
+        deployments,
+    );
+    let symbols = vec![b32("NVDA"), b32("SPY")];
+    asserter.push_success(&Bytes::from(
+        (symbols, vec![ALICE, BOB]).abi_encode_params(),
+    ));
+    asserter.push_success(&Bytes::from(
+        vec![U256::from(4), U256::from(2)].abi_encode(),
+    ));
+    asserter.push_success(&Bytes::from(
+        vec![U256::from(3), U256::from(1)].abi_encode(),
+    ));
+    asserter.push_success(&Bytes::from(
+        vec![U256::from(7), U256::from(8)].abi_encode(),
+    ));
+    asserter.push_success(&Bytes::from(
+        (vec![U256::from(1), U256::from(2)], 1_790_604_800u64).abi_encode_params(),
+    ));
+    let components = tapehouse.basket_components("PAIR").await.unwrap();
+    assert_eq!(components.assets, vec!["NVDA", "SPY"]);
+    assert_eq!(components.tokens, vec![ALICE, BOB]);
+    assert_eq!(
+        tapehouse.preview_mint("PAIR", U256::from(3)).await.unwrap(),
+        vec![U256::from(4), U256::from(2)]
+    );
+    assert_eq!(
+        tapehouse
+            .preview_redeem("PAIR", U256::from(3))
+            .await
+            .unwrap(),
+        vec![U256::from(3), U256::from(1)]
+    );
+    assert_eq!(
+        tapehouse.basket_target("PAIR").await.unwrap(),
+        vec![U256::from(7), U256::from(8)]
+    );
+    let pending = tapehouse.pending_target("PAIR").await.unwrap();
+    assert_eq!(
+        (pending.units, pending.effective_at),
+        (vec![U256::from(1), U256::from(2)], 1_790_604_800)
+    );
+    assert!(asserter.read_q().is_empty());
+}
+
+#[tokio::test]
+async fn what_a_position_holds_through_its_baskets_is_read_by_asset_at_one_block() {
+    let asserter = Asserter::new();
+    let tapehouse = Tapehouse::new(
+        ProviderBuilder::new().connect_mocked_client(asserter.clone()),
+        registry(46630),
+    );
+    asserter.push_success(&U64::from(9));
+    asserter.push_success(&Bytes::from(
+        (vec![b32("NVDA"), b32("SPY")], vec![ALICE, BOB]).abi_encode_params(),
+    ));
+    asserter.push_success(&Bytes::from(
+        vec![U256::from(10), U256::from(5)].abi_encode(),
+    ));
+    let held = tapehouse.in_baskets(ALICE, CROSS).await.unwrap();
+    assert_eq!(
+        held.into_iter().collect::<Vec<_>>(),
+        vec![
+            ("NVDA".into(), U256::from(10)),
+            ("SPY".into(), U256::from(5))
+        ]
+    );
+    assert!(asserter.read_q().is_empty());
 }

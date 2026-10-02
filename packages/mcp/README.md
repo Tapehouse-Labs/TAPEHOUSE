@@ -1,6 +1,6 @@
 # @tapehouse/mcp
 
-A [Model Context Protocol](https://modelcontextprotocol.io) server through which an AI agent reads [Tapehouse](https://github.com/Tapehouse-Labs/TAPEHOUSE)'s price band, its feeds, the Morpho oracles, the margin accounts and the short positions, and prepares their transactions for a wallet to sign. It never holds a key.
+A [Model Context Protocol](https://modelcontextprotocol.io) server through which an AI agent reads [Tapehouse](https://github.com/Tapehouse-Labs/TAPEHOUSE)'s price band, its feeds, the Morpho oracles, the baskets of Stock Tokens, the margin accounts and the short positions, and prepares their transactions for a wallet to sign. It never holds a key.
 
 Built on the official TypeScript SDK, `@modelcontextprotocol/server`, for the 2026-07-28 specification; it serves clients of the 2025 revisions too. Every read and call goes through `@tapehouse/sdk`.
 
@@ -45,11 +45,16 @@ Every tool is read-only: the reads take the chain's state at one block and name 
 | `band_latest_band`, `band_sealed` | The whole band from the asset's `BandFeed`, and the band it sealed before a reopen |
 | `chainlink_round` | A `.chainlink` feed's latest round, refused where it prices the share and the caller expects the token, or the reverse |
 | `morpho_oracle` | The price an asset's Morpho Blue oracle answers, or no price and why (`stale`, `halted` or `sequencerNotSettled`), never zero; with its band, tokens, scale, owner and the asset's halt |
-| `accounts_health`, `accounts_collateral`, `accounts_leverage` | A margin position's equity, requirement and surplus over it, what it holds of a token, and its leverage |
+| `baskets_components`, `baskets_target`, `baskets_pending_target` | A basket's Stock Tokens and address, the target in effect, base units of each token per share, and a target proposed with its seven days' notice |
+| `baskets_preview_mint`, `baskets_preview_redeem` | What minting shares takes of each Stock Token, rounded up, and what redeeming them gives, rounded down |
+| `accounts_health`, `accounts_in_baskets` | A margin position's equity, requirement and surplus over it, and what it holds of each Stock Token through its baskets, the tokens the engine margins their shares as |
+| `accounts_collateral`, `accounts_leverage` | What a margin position holds of a token or of a basket's shares, and its leverage |
 | `accounts_liquidation_price`, `accounts_repayment`, `accounts_is_authorized` | The price at which a position falls short once it borrows more, what repays it, and whether an address may act for an account |
 | `shorts_position`, `shorts_health`, `shorts_restriction` | A short, its health at the band's high edge, and the short-sale restriction after a 10% fall |
 | `accounts_set_authorization` | The call with which an account lets an address, such as an agent's own wallet, act for it, with `grants`, everything that lets it do; or the call that stops it |
-| `accounts_deposit`, `accounts_withdraw`, `accounts_borrow`, `accounts_repay` | The margin accounts' calls, a deposit or repayment preceded by an approval where the allowance is short |
+| `accounts_deposit`, `accounts_withdraw`, `accounts_borrow`, `accounts_repay` | The margin accounts' calls, a deposit or repayment preceded by an approval where the allowance is short; a basket's key deposits and withdraws its shares, in the cross position alone |
+| `accounts_unwrap` | The call that redeems a basket's shares in a cross position into the Stock Tokens they hold, which the position then holds at the same equity and requirement |
+| `baskets_mint`, `baskets_redeem` | A mint of a basket's shares paid in kind, its `maxAssets` what `baskets_preview_mint` reads, each Stock Token approved for exactly its part where the allowance is short; and a redemption in kind, with what it gives |
 | `shorts_deposit`, `shorts_withdraw` | The USDG of a short, in and out |
 | `shorts_sell`, `shorts_cover` | A short sale and a buy-back, their limits Uniswap QuoterV2's quote less or plus the slippage the caller states, within the server's cap; `max` buys back all a short owes |
 

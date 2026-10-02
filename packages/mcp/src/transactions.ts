@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import type { McpServer } from '@modelcontextprotocol/server'
-import { accounts, shorts } from '@tapehouse/sdk'
+import { accounts, baskets, shorts } from '@tapehouse/sdk'
 import {
   type Abi,
   type Address,
@@ -13,11 +13,17 @@ import { getBlockNumber, readContract } from 'viem/actions'
 import * as z from 'zod'
 import {
   address,
+  amounts,
   asset,
+  basket,
+  basketAddress,
+  byAsset,
   checksummed,
+  collateralAddress,
   type Context,
   position,
   positionId,
+  shares,
   token,
   tokenAddress,
   tool,
@@ -55,25 +61,36 @@ function call({ address: to, abi, functionName, args }: ContractCall) {
   }
 }
 
-/** The calls `from` sends: an approval of `spender` first where its allowance of `tokenAt` is short of `amount`. */
+/**
+ * The calls `from` sends: for each token and amount `then` takes, an approval of `spender` for exactly that amount
+ * first where `from`'s allowance of the token is short of it, read at `blockNumber`, or at the latest block.
+ */
 async function approved(
   { client }: Context,
   from: Address,
-  tokenAt: Address,
   spender: Address,
-  amount: bigint,
+  takes: readonly (readonly [Address, bigint])[],
   then: ContractCall,
+  blockNumber?: bigint,
 ) {
-  const blockNumber = await getBlockNumber(client, { cacheTime: 0 })
-  const allowance = await readContract(client, {
-    address: tokenAt,
-    abi: erc20Abi,
-    functionName: 'allowance',
-    args: [from, spender],
-    blockNumber,
-  })
-  const approve = { address: tokenAt, abi: erc20Abi, functionName: 'approve', args: [spender, amount] } as const
-  return allowance < amount ? [call(approve), call(then)] : [call(then)]
+  const at = blockNumber ?? (await getBlockNumber(client, { cacheTime: 0 }))
+  const allowances = await Promise.all(
+    takes.map(([tokenAt]) =>
+      readContract(client, {
+        address: tokenAt,
+        abi: erc20Abi,
+        functionName: 'allowance',
+        args: [from, spender],
+        blockNumber: at,
+      }),
+    ),
+  )
+  const approvals = takes
+    .filter(([, amount], i) => (allowances[i] ?? 0n) < amount)
+    .map(([tokenAt, amount]) =>
+      call({ address: tokenAt, abi: erc20Abi, functionName: 'approve', args: [spender, amount] }),
+    )
+  return [...approvals, call(then)]
 }
 
 const account = address('The account the call acts for.')
@@ -139,7 +156,7 @@ export function registerTransactions(server: McpServer, context: Context) {
     {
       title: 'Deposit collateral',
       description:
-        "Prepares a deposit of a token from `from`, the account or an address it authorized, into the account's margin position, preceded by an approval where from's allowance is short.",
+        "Prepares a deposit of a token from `from`, the account or an address it authorized, into the account's margin position, preceded by an approval where from's allowance is short. A basket's key deposits its shares, into the cross position alone, where the engine margins them as the Stock Tokens they redeem for.",
       input: z.strictObject({
         from: address('The address that sends the tokens and signs.'),
         account,
@@ -152,7 +169,7 @@ export function registerTransactions(server: McpServer, context: Context) {
     },
     async (args) => {
       const from = checksummed(args.from)
-      const held = tokenAddress(d, args.token)
+      const held = collateralAddress(d, args.token, args.position)
       const amount = BigInt(args.amount)
       const deposit = accounts.deposit(d, {
         position: positionId(args.position),
@@ -160,7 +177,11 @@ export function registerTransactions(server: McpServer, context: Context) {
         amount,
         account: checksummed(args.account),
       })
-      return { chainId, signer: from, calls: await approved(context, from, held, marginAccounts(), amount, deposit) }
+      return {
+        chainId,
+        signer: from,
+        calls: await approved(context, from, marginAccounts(), [[held, amount]], deposit),
+      }
     },
   )
 
@@ -170,7 +191,8 @@ export function registerTransactions(server: McpServer, context: Context) {
     'accounts_withdraw',
     {
       title: 'Withdraw collateral',
-      description: "Prepares a withdrawal of a token from the account's margin position to receiver.",
+      description:
+        "Prepares a withdrawal of a token, or of a basket's shares from the cross position, from the account's margin position to receiver.",
       input: z.strictObject({
         account,
         position,
@@ -188,7 +210,7 @@ export function registerTransactions(server: McpServer, context: Context) {
         call(
           accounts.withdraw(d, {
             position: positionId(args.position),
-            token: tokenAddress(d, args.token),
+            token: collateralAddress(d, args.token, args.position),
             amount: BigInt(args.amount),
             account: checksummed(args.account),
             receiver: checksummed(args.receiver),
@@ -258,7 +280,102 @@ export function registerTransactions(server: McpServer, context: Context) {
       return {
         chainId,
         signer: from,
-        calls: await approved(context, from, tokenAddress(d, 'USDG'), marginAccounts(), assets, repay),
+        calls: await approved(context, from, marginAccounts(), [[tokenAddress(d, 'USDG'), assets]], repay),
+      }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'accounts_unwrap',
+    {
+      title: "Unwrap a position's basket",
+      description:
+        "Prepares the margin accounts' unwrap of shares of a basket in the account's cross position: the basket redeems them, and the position holds their Stock Tokens in their place, at the same equity and requirement. The account or an address it authorized signs it, or anyone once the position falls short.",
+      input: z.strictObject({ account, basket, shares }),
+      output: prepared,
+      openWorld: false,
+    },
+    async (args) => {
+      basketAddress(d, args.basket)
+      const owner = checksummed(args.account)
+      return {
+        chainId,
+        signer: `${owner}, an address it authorized, or anyone once the position falls short`,
+        calls: [call(accounts.unwrap(d, { account: owner, basket: args.basket, shares: BigInt(args.shares) }))],
+      }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'baskets_mint',
+    {
+      title: 'Mint basket shares',
+      description:
+        "Prepares a mint of a basket's shares to receiver, paid in kind by from: each Stock Token's part of what the basket holds, rounded up, as baskets_preview_mint reads it at this block. That is the mint's maxAssets, so it reverts with AboveMaximum rather than take more. Each token is approved for exactly its part where from's allowance is short.",
+      input: z.strictObject({
+        from: address('The address that pays the Stock Tokens and signs.'),
+        basket,
+        shares,
+        receiver: address('Who receives the shares.'),
+      }),
+      output: prepared.extend({ assets: amounts.describe('What the mint takes at most of each Stock Token.') }),
+      openWorld: true,
+    },
+    async (args) => {
+      const spender = basketAddress(d, args.basket)
+      const from = checksummed(args.from)
+      const shares = BigInt(args.shares)
+      const blockNumber = await getBlockNumber(client, { cacheTime: 0 })
+      const [held, maxAssets] = await Promise.all([
+        baskets.components(client, d, args.basket, { blockNumber }),
+        baskets.previewMint(client, d, args.basket, shares, { blockNumber }),
+      ])
+      const mint = baskets.mint(d, { basket: args.basket, shares, receiver: checksummed(args.receiver), maxAssets })
+      const takes = held.tokens.map((tokenAt, i) => [tokenAt, maxAssets[i] ?? 0n] as const)
+      return {
+        chainId,
+        signer: from,
+        assets: byAsset(held, maxAssets, 'amount'),
+        calls: await approved(context, from, spender, takes, mint, blockNumber),
+      }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'baskets_redeem',
+    {
+      title: 'Redeem basket shares',
+      description:
+        "Prepares a redemption of owner's shares of a basket for its Stock Tokens, to receiver: each token's part of what the basket holds, rounded down, as baskets_preview_redeem reads it. Shares redeem whole, in kind: a paused Stock Token or an address the issuer blocklisted stops the redemption. Signed by owner, or by an address it allowed to spend the shares.",
+      input: z.strictObject({
+        basket,
+        shares,
+        receiver: address('Who receives the Stock Tokens.'),
+        owner: address('Whose shares are redeemed.'),
+      }),
+      output: prepared.extend({ assets: amounts.describe('What the redemption gives of each Stock Token now.') }),
+      openWorld: true,
+    },
+    async (args) => {
+      basketAddress(d, args.basket)
+      const owner = checksummed(args.owner)
+      const shares = BigInt(args.shares)
+      const blockNumber = await getBlockNumber(client, { cacheTime: 0 })
+      const [held, assets] = await Promise.all([
+        baskets.components(client, d, args.basket, { blockNumber }),
+        baskets.previewRedeem(client, d, args.basket, shares, { blockNumber }),
+      ])
+      return {
+        chainId,
+        signer: `${owner}, or an address it allowed to spend the shares`,
+        assets: byAsset(held, assets, 'amount'),
+        calls: [call(baskets.redeem(d, { basket: args.basket, shares, receiver: checksummed(args.receiver), owner }))],
       }
     },
   )
@@ -287,7 +404,7 @@ export function registerTransactions(server: McpServer, context: Context) {
       return {
         chainId,
         signer: from,
-        calls: await approved(context, from, tokenAddress(d, 'USDG'), shortPositions(), amount, deposit),
+        calls: await approved(context, from, shortPositions(), [[tokenAddress(d, 'USDG'), amount]], deposit),
       }
     },
   )

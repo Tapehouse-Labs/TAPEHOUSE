@@ -23,6 +23,8 @@ import {
   accounts,
   band,
   bandAbi,
+  basketAbi,
+  baskets,
   bandFeedAbi,
   CROSS,
   decodeRevert,
@@ -130,6 +132,19 @@ describe('deployments', () => {
     expect(d.tapehouse).toEqual({ MarginAccounts: alice })
     expect(d.stockLending).toEqual({ SPY: bob })
   })
+
+  test('the baskets are read from .tapehouse.Baskets', () => {
+    const d = parseDeployments({
+      chainId: 412346,
+      tapehouse: { MarginAccounts: alice, Baskets: { PAIR: bob.toLowerCase() } },
+    })
+    expect(d.tapehouse).toEqual({ MarginAccounts: alice })
+    expect(d.baskets).toEqual({ PAIR: bob })
+    expect(testnet.baskets).toEqual({})
+    expect(() => parseDeployments({ chainId: 1, tapehouse: { Baskets: { PAIR: 1 } } })).toThrow(
+      '.tapehouse.Baskets.PAIR is not an address.',
+    )
+  })
 })
 
 describe('transactions', () => {
@@ -180,6 +195,25 @@ describe('transactions', () => {
     )
   })
 
+  test('a basket mints and redeems in kind, and the accounts unwrap one', () => {
+    const d = withBasket()
+    const mint = baskets.mint(d, { basket: 'PAIR', shares: 10n ** 18n, receiver: alice, maxAssets: [3n, 4n] })
+    expect(mint.address).toBe(bob)
+    const minted = encodeFunctionData(mint)
+    expect(minted.slice(0, 10)).toBe(toFunctionSelector('mint(uint256,address,uint256[])'))
+    expect(decodeFunctionData({ abi: basketAbi, data: minted }).args).toEqual([10n ** 18n, alice, [3n, 4n]])
+    const redeem = baskets.redeem(d, { basket: 'PAIR', shares: 5n, receiver: bob, owner: alice })
+    expect(decodeFunctionData({ abi: basketAbi, data: encodeFunctionData(redeem) }).args).toEqual([5n, bob, alice])
+    const unwrap = accounts.unwrap(d, { account: alice, basket: 'PAIR', shares: 5n })
+    expect(unwrap.address).toBe(testnet.tapehouse.MarginAccounts)
+    const data = encodeFunctionData(unwrap)
+    expect(data.slice(0, 10)).toBe(toFunctionSelector('unwrap(address,address,uint256)'))
+    expect(decodeFunctionData({ abi: marginAccountsAbi, data }).args).toEqual([alice, bob, 5n])
+    expect(() => baskets.redeem(testnet, { basket: 'PAIR', shares: 1n, receiver: bob, owner: alice })).toThrow(
+      'The registry has no .tapehouse.Baskets.PAIR.',
+    )
+  })
+
   test('a contract missing from the registry is named', () => {
     const empty = parseDeployments({ chainId: 1 })
     expect(() => shorts.mark(empty, 'SPY')).toThrow('The registry has no .tapehouse.ShortPositions.')
@@ -219,6 +253,10 @@ describe('errors', () => {
     })
     const old = encodeErrorResult({ abi: bandAbi, errorName: 'TimestampIsTooOld', args: [1790119750n, 1790300000n] })
     expect(decodeRevertData(old)).toEqual({ errorName: 'TimestampIsTooOld', args: [1790119750n, 1790300000n] })
+    const past = encodeErrorResult({ abi: basketAbi, errorName: 'PastTarget', args: [toBytes32('SPY')] })
+    expect(decodeRevertData(past)).toEqual({ errorName: 'PastTarget', args: [toBytes32('SPY')] })
+    const frozen = encodeErrorResult({ abi: marginAccountsAbi, errorName: 'BasketFrozen', args: [bob] })
+    expect(decodeRevertData(frozen)).toEqual({ errorName: 'BasketFrozen', args: [bob] })
     const capped = encodeErrorResult({ abi: marginAccountsAbi, errorName: 'DebtCapExceeded', args: [2n, 1n] })
     expect(decodeRevertData(capped)).toEqual({ errorName: 'DebtCapExceeded', args: [2n, 1n] })
     const router = encodeErrorResult({
@@ -487,6 +525,77 @@ describe('Morpho oracles', () => {
     expect(set).toMatchObject({ eventName: 'BandSet', args: { previousBand: alice, newBand: bandAddress } })
   })
 })
+
+describe('basket reads', () => {
+  const blockTags: string[] = []
+  const client = createClient({
+    transport: custom({
+      async request({ method, params }) {
+        if (method === 'eth_blockNumber') return '0x9'
+        if (method !== 'eth_call') throw new Error(`unexpected ${method}`)
+        const [{ to, data }, block] = params as [{ to: string; data: Hex }, string]
+        blockTags.push(block)
+        if (to === testnet.tapehouse.MarginAccounts) {
+          const { functionName, args } = decodeFunctionData({ abi: marginAccountsAbi, data })
+          if (functionName === 'stocks')
+            return encodeFunctionResult({
+              abi: marginAccountsAbi,
+              functionName,
+              result: [
+                [toBytes32('NVDA'), toBytes32('SPY')],
+                [alice, bob],
+              ],
+            })
+          expect(functionName).toBe('inBaskets')
+          expect(args).toEqual([alice, CROSS])
+          return encodeFunctionResult({ abi: marginAccountsAbi, functionName: 'inBaskets', result: [10n, 5n] })
+        }
+        expect(to).toBe(bob)
+        const { functionName, args } = decodeFunctionData({ abi: basketAbi, data })
+        if (functionName === 'components')
+          return encodeFunctionResult({
+            abi: basketAbi,
+            functionName,
+            result: [
+              [toBytes32('NVDA'), toBytes32('SPY')],
+              [alice, bob],
+            ],
+          })
+        if (functionName === 'pendingTarget')
+          return encodeFunctionResult({ abi: basketAbi, functionName, result: [[1n, 2n], 1_790_604_800n] })
+        if (functionName === 'target') return encodeFunctionResult({ abi: basketAbi, functionName, result: [7n, 8n] })
+        expect(args).toEqual([3n])
+        if (functionName === 'previewMint')
+          return encodeFunctionResult({ abi: basketAbi, functionName, result: [4n, 2n] })
+        if (functionName === 'previewRedeem')
+          return encodeFunctionResult({ abi: basketAbi, functionName, result: [3n, 1n] })
+        throw new Error(`unexpected ${functionName}`)
+      },
+    }),
+  })
+  const d = withBasket()
+
+  test("a basket's components, previews and targets are read", async () => {
+    expect(await baskets.components(client, d, 'PAIR')).toEqual({ assets: ['NVDA', 'SPY'], tokens: [alice, bob] })
+    expect(await baskets.previewMint(client, d, 'PAIR', 3n)).toEqual([4n, 2n])
+    expect(await baskets.previewRedeem(client, d, 'PAIR', 3n)).toEqual([3n, 1n])
+    expect(await baskets.target(client, d, 'PAIR')).toEqual([7n, 8n])
+    expect(await baskets.pendingTarget(client, d, 'PAIR', { blockNumber: 4n })).toEqual({
+      units: [1n, 2n],
+      effectiveAt: 1_790_604_800n,
+    })
+    expect(blockTags.splice(0).at(-1)).toBe('0x4')
+  })
+
+  test("what a position holds through its baskets is read by asset, at one block", async () => {
+    expect(await accounts.inBaskets(client, d, alice, CROSS)).toEqual({ NVDA: 10n, SPY: 5n })
+    expect(blockTags.splice(0).map((tag) => hexToBigInt(tag as Hex))).toEqual([9n, 9n])
+  })
+})
+
+function withBasket(): Deployments {
+  return { ...testnet, baskets: { PAIR: bob } }
+}
 
 function testnetWithShorts(): Deployments {
   return { ...testnet, tapehouse: { ...testnet.tapehouse, ShortPositions: bob } }

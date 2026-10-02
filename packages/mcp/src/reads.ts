@@ -1,19 +1,24 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import type { McpServer } from '@modelcontextprotocol/server'
-import { accounts, band, morpho, sharePriceFeed, shorts, toBytes32, tokenPriceFeed } from '@tapehouse/sdk'
+import { accounts, band, baskets, morpho, sharePriceFeed, shorts, toBytes32, tokenPriceFeed } from '@tapehouse/sdk'
 import { getBlockNumber } from 'viem/actions'
 import * as z from 'zod'
 import {
   address,
+  amounts,
   asset,
+  basket,
+  basketAddress,
+  byAsset,
   checksummed,
+  collateralAddress,
   type Context,
   explainRevert,
   int,
   position,
   positionId,
+  shares,
   token,
-  tokenAddress,
   tool,
   uint,
   units,
@@ -44,12 +49,16 @@ const health = {
   regime: z.number().int().describe("The engine's regime."),
 }
 const account = address('The account.')
+const target = z.array(z.object({ asset: z.string(), token: z.string(), units: uint }))
 
 async function at({ client }: Context) {
   return { blockNumber: await getBlockNumber(client, { cacheTime: 0 }) }
 }
 
-/** Registers the tools that read the band, its feeds, Chainlink, the Morpho oracles, the accounts and the shorts. */
+/**
+ * Registers the tools that read the band, its feeds, Chainlink, the Morpho oracles, the baskets, the accounts and the
+ * shorts.
+ */
 export function registerReads(server: McpServer, context: Context) {
   const { client, deployments: d } = context
 
@@ -59,7 +68,7 @@ export function registerReads(server: McpServer, context: Context) {
     'registry',
     {
       title: 'Registry',
-      description: "The chain's registry: every contract, token, feed and oracle address the other tools use.",
+      description: "The chain's registry: every contract, token, basket, feed and oracle address the other tools use.",
       input: z.strictObject({}),
       output: z.object({
         chainId: z.number().int(),
@@ -68,6 +77,7 @@ export function registerReads(server: McpServer, context: Context) {
         bandFeeds: z.record(z.string(), z.string()),
         tapehouse: z.record(z.string(), z.string()),
         stockLending: z.record(z.string(), z.string()),
+        baskets: z.record(z.string(), z.string()),
         uniswapV3: z.record(z.string(), z.string()),
         morpho: z.record(z.string(), z.string()),
         morphoMarkets: z.record(z.string(), z.string()),
@@ -284,6 +294,133 @@ export function registerReads(server: McpServer, context: Context) {
   tool(
     server,
     context,
+    'baskets_components',
+    {
+      title: "A basket's components",
+      description:
+        "The Stock Tokens a basket holds, by asset, in the order of every list of its amounts, and the basket's address, the ERC-20 of its shares. A basket is minted and redeemed in kind, never at a price.",
+      input: z.strictObject({ basket }),
+      output: z.object({
+        ...block,
+        basket: z.string(),
+        address: z.string(),
+        components: z.array(z.object({ asset: z.string(), token: z.string() })),
+      }),
+      openWorld: true,
+    },
+    async (args) => {
+      const contract = basketAddress(d, args.basket)
+      const read = await at(context)
+      const { assets, tokens } = await baskets.components(client, d, args.basket, read)
+      return {
+        ...read,
+        basket: args.basket,
+        address: contract,
+        components: assets.map((asset, i) => ({ asset, token: tokens[i] })),
+      }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'baskets_preview_mint',
+    {
+      title: 'What a mint takes',
+      description:
+        "What minting shares of a basket takes of each Stock Token now, in the token's base units: its part of what the basket holds, rounded up, or of the target while the basket has no shares. baskets_mint takes exactly this as its limit.",
+      input: z.strictObject({ basket, shares }),
+      output: z.object({ ...block, basket: z.string(), shares: uint, assets: amounts }),
+      openWorld: true,
+    },
+    async (args) => {
+      basketAddress(d, args.basket)
+      const read = await at(context)
+      const [held, assets] = await Promise.all([
+        baskets.components(client, d, args.basket, read),
+        baskets.previewMint(client, d, args.basket, BigInt(args.shares), read),
+      ])
+      return { ...read, basket: args.basket, shares: args.shares, assets: byAsset(held, assets, 'amount') }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'baskets_preview_redeem',
+    {
+      title: 'What a redemption gives',
+      description:
+        "What redeeming shares of a basket gives of each Stock Token now, in the token's base units: its part of what the basket holds, rounded down.",
+      input: z.strictObject({ basket, shares }),
+      output: z.object({ ...block, basket: z.string(), shares: uint, assets: amounts }),
+      openWorld: true,
+    },
+    async (args) => {
+      basketAddress(d, args.basket)
+      const read = await at(context)
+      const [held, assets] = await Promise.all([
+        baskets.components(client, d, args.basket, read),
+        baskets.previewRedeem(client, d, args.basket, BigInt(args.shares), read),
+      ])
+      return { ...read, basket: args.basket, shares: args.shares, assets: byAsset(held, assets, 'amount') }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'baskets_target',
+    {
+      title: "A basket's target",
+      description:
+        "The target in effect of a basket: base units of each Stock Token per share (10^18 of the share's base units). Anyone may rebalance the basket toward it, only when what comes in at the bands' low edges is worth at least what goes out at their high edges.",
+      input: z.strictObject({ basket }),
+      output: z.object({ ...block, basket: z.string(), target }),
+      openWorld: true,
+    },
+    async (args) => {
+      basketAddress(d, args.basket)
+      const read = await at(context)
+      const [held, units] = await Promise.all([
+        baskets.components(client, d, args.basket, read),
+        baskets.target(client, d, args.basket, read),
+      ])
+      return { ...read, basket: args.basket, target: byAsset(held, units, 'units') }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'baskets_pending_target',
+    {
+      title: "A basket's pending target",
+      description:
+        "A target the basket's owner proposed and that is not yet in effect, as baskets_target gives it, and when it takes effect, in seconds: seven days after it was proposed, so a holder who disagrees can redeem in kind first. Empty and 0 where none is pending.",
+      input: z.strictObject({ basket }),
+      output: z.object({ ...block, basket: z.string(), target, effectiveAt: uint }),
+      openWorld: true,
+    },
+    async (args) => {
+      basketAddress(d, args.basket)
+      const read = await at(context)
+      const [held, pending] = await Promise.all([
+        baskets.components(client, d, args.basket, read),
+        baskets.pendingTarget(client, d, args.basket, read),
+      ])
+      return {
+        ...read,
+        basket: args.basket,
+        target: byAsset(held, pending.units, 'units'),
+        effectiveAt: pending.effectiveAt,
+      }
+    },
+  )
+
+  tool(
+    server,
+    context,
     'accounts_health',
     {
       title: "A margin position's health",
@@ -310,16 +447,38 @@ export function registerReads(server: McpServer, context: Context) {
   tool(
     server,
     context,
+    'accounts_in_baskets',
+    {
+      title: 'What a margin position holds through its baskets',
+      description:
+        "What an account's margin position holds of each Stock Token through its baskets' shares, by asset, in the token's base units, as the shares would redeem now, rounded down. The engine margins the shares as these Stock Tokens, beside what the position holds directly. Only the cross position holds baskets.",
+      input: z.strictObject({ account, position }),
+      output: z.object({ ...block, assets: z.record(z.string(), uint) }),
+      openWorld: true,
+    },
+    async (args) => {
+      const read = await at(context)
+      return {
+        ...read,
+        assets: await accounts.inBaskets(client, d, checksummed(args.account), positionId(args.position), read),
+      }
+    },
+  )
+
+  tool(
+    server,
+    context,
     'accounts_collateral',
     {
       title: "A margin position's collateral",
-      description: "What an account's margin position holds of a token, in the token's base units.",
+      description:
+        "What an account's margin position holds of a token, in the token's base units, or of a basket's shares in its cross position.",
       input: z.strictObject({ account, position, token }),
       output: z.object({ ...block, token: z.string(), amount: uint }),
       openWorld: true,
     },
     async (args) => {
-      const held = tokenAddress(d, args.token)
+      const held = collateralAddress(d, args.token, args.position)
       const read = await at(context)
       const amount = await accounts.collateral(
         client,

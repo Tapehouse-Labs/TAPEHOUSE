@@ -59,17 +59,31 @@ export const position = z
   .regex(name, 'not CROSS or a symbol')
   .describe("CROSS for the account's cross position, or an asset's symbol, such as NVDA, for its isolated position.")
 
-/** A token of the registry, by its key in `.tokens`. */
+/** A token of the registry, by its key in `.tokens`, or a basket's shares, by its key in `.tapehouse.Baskets`. */
 export const token = z
   .string()
   .regex(name, 'not a symbol')
-  .describe("The token's key in the registry's .tokens: USDG, WETH or a Stock Token's symbol.")
+  .describe(
+    "The token's key in the registry's .tokens: USDG, WETH or a Stock Token's symbol; or a basket's key in .tapehouse.Baskets, such as PAIR, for its shares, which the cross position alone holds.",
+  )
+
+/** A basket of the registry, by its key in `.tapehouse.Baskets`. */
+export const basket = z
+  .string()
+  .regex(name, 'not a basket key')
+  .describe("The basket's key in the registry's .tapehouse.Baskets, such as PAIR.")
 
 /** A decimal string of a whole number. */
 export const uint = z.string().regex(/^\d+$/)
 
 /** A decimal string of a whole number that may be negative. */
 export const int = z.string().regex(/^-?\d+$/)
+
+/** Shares of a basket. */
+export const shares = units('The shares, in base units (18 decimals): 10^18 is one share.')
+
+/** A basket's amounts of each Stock Token, by asset, in the token's base units. */
+export const amounts = z.array(z.object({ asset: z.string(), token: z.string(), amount: uint }))
 
 /** The `position` argument of the margin accounts. */
 export function positionId(value: string): Hex {
@@ -81,6 +95,37 @@ export function tokenAddress(deployments: Deployments, symbol: string): Address 
   const found = Object.hasOwn(deployments.tokens, symbol) ? deployments.tokens[symbol] : undefined
   if (found === undefined) throw new Error(`The registry has no .tokens.${symbol}.`)
   return found
+}
+
+/** The address of the basket `key` in the registry's `.tapehouse.Baskets`. */
+export function basketAddress(deployments: Deployments, key: string): Address {
+  const found = Object.hasOwn(deployments.baskets, key) ? deployments.baskets[key] : undefined
+  if (found === undefined) throw new Error(`The registry has no .tapehouse.Baskets.${key}.`)
+  return found
+}
+
+/**
+ * The address of the collateral `key` of the margin accounts' `position`: a token of `.tokens`, or the shares of a
+ * basket of `.tapehouse.Baskets`, which the cross position alone holds.
+ */
+export function collateralAddress(deployments: Deployments, key: string, position: string): Address {
+  if (Object.hasOwn(deployments.tokens, key) || !Object.hasOwn(deployments.baskets, key))
+    return tokenAddress(deployments, key)
+  if (position !== 'CROSS')
+    throw new Error("A basket's shares are held in the cross position alone: position must be CROSS.")
+  return basketAddress(deployments, key)
+}
+
+/** A basket's amounts of each Stock Token, in its order, each with its asset and token. */
+export function byAsset<Key extends string>(
+  components: { assets: readonly string[]; tokens: readonly Address[] },
+  amounts: readonly bigint[],
+  key: Key,
+) {
+  return components.assets.flatMap((asset, i) => {
+    const amount = amounts[i]
+    return amount === undefined ? [] : [{ asset, token: components.tokens[i], [key]: amount }]
+  })
 }
 
 /** A checksummed address from a validated input. */

@@ -8,7 +8,7 @@ use alloy::json_abi::{Error as AbiError, JsonAbi};
 use alloy::primitives::{Bytes, Selector};
 use alloy::sol_types::{Panic, Revert as SolidityRevert, SolError};
 
-/// A call's revert, decoded: a custom error of Tapehouse's contracts, the band, the Stock Tokens or USDG, or
+/// A call's revert, decoded: a custom error of Tapehouse's contracts, its baskets, the band, the Stock Tokens or USDG, or
 /// Solidity's `Error(string)` and `Panic(uint256)`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Revert {
@@ -32,6 +32,7 @@ static ERRORS: LazyLock<HashMap<Selector, AbiError>> = LazyLock::new(|| {
     for json in [
         include_str!("../abi/ShortPositions.json"),
         include_str!("../abi/MarginAccounts.json"),
+        include_str!("../abi/Basket.json"),
         include_str!("../abi/BandFeed.json"),
         include_str!("../abi/MorphoBandOracle.json"),
         include_str!("../abi/Band.json"),

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Reads SPY's band and its BandFeed on a dev node, sends RedStone packages from a file through a `PackageSource` and
 //! decodes the band's refusal of their age, then authorizes a fresh address in the margin accounts, which sells 1 SPY
-//! short for the account at a QuoterV2 quote and buys it back.
+//! short for the account at a QuoterV2 quote and buys it back. Then it mints 1 share of the basket PAIR for the fresh
+//! address, which deposits it into its cross position, reads it there as NVDA and SPY, unwraps it and withdraws them.
 //!
 //! Usage: `PRIVATE_KEY=0x… cargo run --example devnode -- RPC_URL DEPLOYMENTS_JSON PAYLOAD_FILE`
 
@@ -261,6 +262,83 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "the operator is still authorized",
     )?;
 
+    let pair = owner.basket("PAIR")?;
+    let components = owner.basket_components("PAIR").await?;
+    check(
+        components.assets == ["NVDA", "SPY"],
+        format!("PAIR holds {:?}", components.assets),
+    )?;
+    let paid = owner.preview_mint("PAIR", one).await?;
+    for (asset, amount) in components.assets.iter().zip(&paid) {
+        owner
+            .stock_token(asset)?
+            .approve(*pair.address(), *amount)
+            .send()
+            .await?
+            .get_receipt()
+            .await?;
+    }
+    let minted = pair
+        .mint(one, operator_address, paid.clone())
+        .send()
+        .await?
+        .get_receipt()
+        .await?;
+    check(minted.status(), "the mint reverted")?;
+    let margin_accounts = *operator.accounts()?.address();
+    operator
+        .basket("PAIR")?
+        .approve(margin_accounts, one)
+        .send()
+        .await?
+        .get_receipt()
+        .await?;
+    let deposited = operator
+        .accounts()?
+        .deposit(CROSS, *pair.address(), one, operator_address)
+        .send()
+        .await?
+        .get_receipt()
+        .await?;
+    check(deposited.status(), "the deposit of the share reverted")?;
+    let through = owner.in_baskets(operator_address, CROSS).await?;
+    let margined = owner
+        .accounts()?
+        .health(operator_address, CROSS)
+        .call()
+        .await?;
+    check(
+        through["NVDA"] == paid[0] && through["SPY"] == paid[1],
+        "the share does not hold what it was minted for",
+    )?;
+    let shares = owner
+        .collateral(operator_address, CROSS, *pair.address())
+        .await?;
+    let unwrapped_receipt = operator
+        .unwrap(operator_address, "PAIR", one)?
+        .send()
+        .await?
+        .get_receipt()
+        .await?;
+    check(unwrapped_receipt.status(), "the unwrap reverted")?;
+    let mut unwrapped = Vec::new();
+    for token in &components.tokens {
+        unwrapped.push(owner.collateral(operator_address, CROSS, *token).await?);
+    }
+    check(
+        unwrapped == [through["NVDA"], through["SPY"]],
+        "the unwrap did not put the share's tokens in the position",
+    )?;
+    for (token, amount) in components.tokens.iter().zip(&unwrapped) {
+        operator
+            .accounts()?
+            .withdraw(CROSS, *token, *amount, operator_address, operator_address)
+            .send()
+            .await?
+            .get_receipt()
+            .await?;
+    }
+
     println!(
         "rust sdk: SPY band state {} at {}, feed round {} answers {}, seal at {} {sealing} (sealed {}); writePrices {stale}; \
          before authorization {refused}; sold 1 SPY for {} and bought it back for {}",
@@ -272,6 +350,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         sealed.sealedAt,
         sell.proceeds,
         cover.cost
+    );
+    println!(
+        "basket PAIR: {shares} shares in the cross position hold {} NVDA and {} SPY; equity {} requirement {}",
+        through["NVDA"], through["SPY"], margined.equity, margined.requirement
+    );
+    println!(
+        "basket PAIR: unwrapped into {} NVDA and {} SPY in the cross position, then withdrawn",
+        unwrapped[0], unwrapped[1]
     );
     println!("PASS");
     Ok(())

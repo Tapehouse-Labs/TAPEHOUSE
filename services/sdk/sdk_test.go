@@ -20,6 +20,7 @@ import (
 	"github.com/tapehouse/tapehouse/services/sdk"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/band"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/bandfeed"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/basket"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/marginaccounts"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/morphobandoracle"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/quoterv2"
@@ -106,6 +107,50 @@ func TestAMixedCaseAddressMustCarryItsChecksum(t *testing.T) {
 		if _, err := sdk.ParseDeployments([]byte(registry)); err == nil || err.Error() != message {
 			t.Errorf("%s: %v, want %q", registry, err, message)
 		}
+	}
+}
+
+func TestTheBasketsAreReadFromTapehouseBaskets(t *testing.T) {
+	d, err := sdk.ParseDeployments([]byte(`{"chainId":412346,"tapehouse":{"MarginAccounts":"` + alice.Hex() + `","Baskets":{"PAIR":"` + strings.ToLower(bob.Hex()) + `"}}}`))
+	if err != nil || d.Baskets["PAIR"] != bob || len(d.Tapehouse) != 1 || d.Tapehouse["MarginAccounts"] != alice {
+		t.Fatalf("baskets: %+v, %v", d, err)
+	}
+	if testnet := registry(t, "46630"); len(testnet.Baskets) != 0 {
+		t.Fatalf("46630 baskets: %v", testnet.Baskets)
+	}
+	if _, err := sdk.ParseDeployments([]byte(`{"chainId":1,"tapehouse":{"Baskets":{"PAIR":1}}}`)); err == nil {
+		t.Fatal("a basket that is not an address parsed")
+	}
+}
+
+func TestABasketMintsAndRedeemsInKindAndTheAccountsUnwrapOne(t *testing.T) {
+	d := registry(t, "46630")
+	d.Baskets = map[string]common.Address{"PAIR": bob}
+	client := sdk.NewClient(nil, d)
+	tx, err := client.Basket("PAIR").Mint(big.NewInt(1e18), alice, []*big.Int{big.NewInt(3), big.NewInt(4)})
+	if err != nil || tx.To != bob {
+		t.Fatalf("mint: %v, %v", tx, err)
+	}
+	args := unpack(t, &basket.BasketMetaData, "mint", tx.Data)
+	if args[0].(*big.Int).Cmp(big.NewInt(1e18)) != 0 || args[1] != alice || args[2].([]*big.Int)[1].Int64() != 4 {
+		t.Fatalf("mint args %v", args)
+	}
+	tx, _ = client.Basket("PAIR").Redeem(big.NewInt(5), bob, alice)
+	if args := unpack(t, &basket.BasketMetaData, "redeem", tx.Data); args[1] != bob || args[2] != alice {
+		t.Fatalf("redeem args %v", args)
+	}
+	tx, err = client.Accounts().Unwrap(alice, "PAIR", big.NewInt(5))
+	if err != nil || tx.To != d.Tapehouse["MarginAccounts"] {
+		t.Fatalf("unwrap: %v, %v", tx, err)
+	}
+	if args := unpack(t, &marginaccounts.MarginAccountsMetaData, "unwrap", tx.Data); args[0] != alice || args[1] != bob || args[2].(*big.Int).Int64() != 5 {
+		t.Fatalf("unwrap args %v", args)
+	}
+	if _, err := client.Basket("NONE").Redeem(big.NewInt(1), bob, alice); err == nil || err.Error() != "the registry has no .tapehouse.Baskets.NONE" {
+		t.Fatalf("missing basket: %v", err)
+	}
+	if _, err := client.Basket("PAIR").Mint(nil, alice, nil); err == nil {
+		t.Fatal("a nil amount packed")
 	}
 }
 
@@ -214,6 +259,8 @@ func TestTheRevertsOfTapehouseTheBandTheIssuerAndTheRouterAreDecoded(t *testing.
 		{&stocktoken.StockTokenMetaData, "IsPaused", nil, "IsPaused()"},
 		{&band.BandMetaData, "TimestampIsTooOld", []any{big.NewInt(1790119750), big.NewInt(1790300000)}, "TimestampIsTooOld(1790119750, 1790300000)"},
 		{&marginaccounts.MarginAccountsMetaData, "DebtCapExceeded", []any{big.NewInt(2), big.NewInt(1)}, "DebtCapExceeded(2, 1)"},
+		{&marginaccounts.MarginAccountsMetaData, "BasketFrozen", []any{bob}, "BasketFrozen(" + bob.Hex() + ")"},
+		{&basket.BasketMetaData, "PastTarget", []any{bytes32(t, "SPY")}, "PastTarget(0x5350590000000000000000000000000000000000000000000000000000000000)"},
 	} {
 		revert, ok := sdk.DecodeRevertData(encodeError(t, c.metadata, c.name, c.args...))
 		if !ok || revert.Error() != c.want {
@@ -579,6 +626,94 @@ func TestARepointsAssetMismatchAndBandSetAreDecoded(t *testing.T) {
 	})
 	if err != nil || set.PreviousBand != alice || set.NewBand != bandAddress {
 		t.Fatalf("BandSet %+v, %v", set, err)
+	}
+}
+
+type shelf struct {
+	bind.ContractBackend
+	t      *testing.T
+	basket common.Address
+	blocks []*big.Int
+}
+
+func (s *shelf) HeaderByNumber(context.Context, *big.Int) (*types.Header, error) {
+	return &types.Header{Number: big.NewInt(9)}, nil
+}
+
+func (s *shelf) CallContract(_ context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error) {
+	s.blocks = append(s.blocks, block)
+	metadata := &marginaccounts.MarginAccountsMetaData
+	if *call.To == s.basket {
+		metadata = &basket.BasketMetaData
+	}
+	parsed, _ := metadata.ParseABI()
+	method, err := parsed.MethodById(call.Data)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	args, _ := method.Inputs.Unpack(call.Data[4:])
+	symbols := [][32]byte{bytes32(s.t, "NVDA"), bytes32(s.t, "SPY")}
+	switch method.Name {
+	case "stocks", "components":
+		return method.Outputs.Pack(symbols, []common.Address{alice, bob})
+	case "inBaskets":
+		if args[0] != alice || args[1] != sdk.Cross {
+			s.t.Fatalf("inBaskets of %v", args)
+		}
+		return method.Outputs.Pack([]*big.Int{big.NewInt(10), big.NewInt(5)})
+	case "pendingTarget":
+		return method.Outputs.Pack([]*big.Int{big.NewInt(1), big.NewInt(2)}, uint64(1_790_604_800))
+	case "target":
+		return method.Outputs.Pack([]*big.Int{big.NewInt(7), big.NewInt(8)})
+	}
+	if args[0].(*big.Int).Int64() != 3 {
+		s.t.Fatalf("%s of %v", method.Name, args)
+	}
+	if method.Name == "previewMint" {
+		return method.Outputs.Pack([]*big.Int{big.NewInt(4), big.NewInt(2)})
+	}
+	return method.Outputs.Pack([]*big.Int{big.NewInt(3), big.NewInt(1)})
+}
+
+func TestABasketsComponentsPreviewsAndTargetsAreRead(t *testing.T) {
+	d := registry(t, "46630")
+	d.Baskets = map[string]common.Address{"PAIR": bob}
+	backend := &shelf{t: t, basket: bob}
+	pair := sdk.NewClient(backend, d).Basket("PAIR")
+	components, err := pair.Components(&bind.CallOpts{})
+	if err != nil || strings.Join(components.Assets, ",") != "NVDA,SPY" || components.Tokens[1] != bob {
+		t.Fatalf("components %+v, %v", components, err)
+	}
+	for name, read := range map[string]func(*bind.CallOpts, *big.Int) ([]*big.Int, error){
+		"4,2": pair.PreviewMint,
+		"3,1": pair.PreviewRedeem,
+	} {
+		amounts, err := read(&bind.CallOpts{}, big.NewInt(3))
+		if err != nil || amounts[0].String()+","+amounts[1].String() != name {
+			t.Errorf("preview %v, %v, want %s", amounts, err, name)
+		}
+	}
+	units, err := pair.Target(&bind.CallOpts{})
+	if err != nil || units[1].Int64() != 8 {
+		t.Fatalf("target %v, %v", units, err)
+	}
+	pending, err := pair.PendingTarget(&bind.CallOpts{BlockNumber: big.NewInt(4)})
+	if err != nil || pending.Units[0].Int64() != 1 || pending.EffectiveAt != 1_790_604_800 {
+		t.Fatalf("pending %+v, %v", pending, err)
+	}
+	if last := backend.blocks[len(backend.blocks)-1]; last.Int64() != 4 {
+		t.Fatalf("read at %v", last)
+	}
+}
+
+func TestWhatAPositionHoldsThroughItsBasketsIsReadByAssetAtOneBlock(t *testing.T) {
+	backend := &shelf{t: t}
+	held, err := sdk.NewClient(backend, registry(t, "46630")).Accounts().InBaskets(&bind.CallOpts{}, alice, sdk.Cross)
+	if err != nil || len(held) != 2 || held["NVDA"].Int64() != 10 || held["SPY"].Int64() != 5 {
+		t.Fatalf("inBaskets %v, %v", held, err)
+	}
+	if len(backend.blocks) != 2 || backend.blocks[0].Int64() != 9 || backend.blocks[1].Int64() != 9 {
+		t.Fatalf("read at %v", backend.blocks)
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/band"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/bandfeed"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/basket"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/marginaccounts"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/morphobandoracle"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/shortpositions"
@@ -21,7 +22,7 @@ import (
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/usdg"
 )
 
-// Revert is a call's revert, decoded: a custom error of Tapehouse's contracts, the band, the Stock Tokens or USDG, or
+// Revert is a call's revert, decoded: a custom error of Tapehouse's contracts, its baskets, the band, the Stock Tokens or USDG, or
 // Solidity's Error(string) and Panic(uint256).
 type Revert struct {
 	Name string
@@ -51,6 +52,7 @@ var revertErrors = func() map[[4]byte]abi.Error {
 	for _, metadata := range []*bind.MetaData{
 		&shortpositions.ShortPositionsMetaData,
 		&marginaccounts.MarginAccountsMetaData,
+		&basket.BasketMetaData,
 		&bandfeed.BandFeedMetaData,
 		&morphobandoracle.MorphoBandOracleMetaData,
 		&band.BandMetaData,

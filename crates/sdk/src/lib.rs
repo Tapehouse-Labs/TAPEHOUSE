@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! Typed reads and transactions for Tapehouse's price band, its feeds, the margin accounts, the short positions and the
-//! Morpho oracles, over alloy bindings generated from the contracts' ABIs. Addresses come from a chain's registry,
-//! `deployments/<chainId>.json`, read at runtime.
+//! Typed reads and transactions for Tapehouse's price band, its feeds, the margin accounts, the baskets, the short
+//! positions and the Morpho oracles, over alloy bindings generated from the contracts' ABIs. Addresses come from a
+//! chain's registry, `deployments/<chainId>.json`, read at runtime.
 #![warn(missing_docs)]
 
 pub mod bindings;
@@ -9,7 +9,10 @@ mod client;
 mod deployments;
 mod revert;
 
-pub use client::{BuyBack, NoPrice, OraclePrice, PackageSource, Repayment, Sale, Tapehouse};
+pub use client::{
+    BuyBack, Components, NoPrice, OraclePrice, PackageSource, PendingTarget, Repayment, Sale,
+    Tapehouse,
+};
 pub use deployments::{
     CROSS, Deployments, SHARE_PRICE_CHAINS, SharePriceFeed, TokenPriceFeed, to_bytes32,
 };

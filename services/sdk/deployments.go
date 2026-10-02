@@ -27,6 +27,7 @@ type Deployments struct {
 	BandFeeds     map[string]common.Address
 	Tapehouse     map[string]common.Address
 	StockLending  map[string]common.Address
+	Baskets       map[string]common.Address
 	UniswapV3     map[string]common.Address
 	Morpho        map[string]common.Address
 	MorphoMarkets map[string]common.Hash
@@ -83,17 +84,20 @@ func ParseDeployments(data []byte) (*Deployments, error) {
 			return nil, err
 		}
 	}
-	var lending, markets map[string]string
-	if d.Tapehouse, lending, err = nested(registry.Tapehouse, "StockLending", ".tapehouse"); err != nil {
+	var within map[string]map[string]string
+	if d.Tapehouse, within, err = nested(registry.Tapehouse, ".tapehouse", "StockLending", "Baskets"); err != nil {
 		return nil, err
 	}
-	if d.StockLending, err = addresses(lending, ".tapehouse.StockLending"); err != nil {
+	if d.StockLending, err = addresses(within["StockLending"], ".tapehouse.StockLending"); err != nil {
 		return nil, err
 	}
-	if d.Morpho, markets, err = nested(registry.Morpho, "Markets", ".morpho"); err != nil {
+	if d.Baskets, err = addresses(within["Baskets"], ".tapehouse.Baskets"); err != nil {
 		return nil, err
 	}
-	if d.MorphoMarkets, err = ids(markets, ".morpho.Markets"); err != nil {
+	if d.Morpho, within, err = nested(registry.Morpho, ".morpho", "Markets"); err != nil {
+		return nil, err
+	}
+	if d.MorphoMarkets, err = ids(within["Markets"], ".morpho.Markets"); err != nil {
 		return nil, err
 	}
 	return d, nil
@@ -153,13 +157,15 @@ func addresses(group map[string]string, path string) (map[string]common.Address,
 	return out, nil
 }
 
-func nested(group map[string]json.RawMessage, inner, path string) (map[string]common.Address, map[string]string, error) {
-	out, within := map[string]common.Address{}, map[string]string{}
+func nested(group map[string]json.RawMessage, path string, inner ...string) (map[string]common.Address, map[string]map[string]string, error) {
+	out, within := map[string]common.Address{}, map[string]map[string]string{}
 	for name, raw := range group {
-		if name == inner {
-			if err := json.Unmarshal(raw, &within); err != nil {
+		if slices.Contains(inner, name) {
+			var entries map[string]string
+			if err := json.Unmarshal(raw, &entries); err != nil {
 				return nil, nil, fmt.Errorf("%s.%s: %w", path, name, err)
 			}
+			within[name] = entries
 			continue
 		}
 		var value string

@@ -7,6 +7,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IBand} from "./interfaces/IBand.sol";
 import {IMargin} from "./interfaces/IMargin.sol";
+import {Basket} from "./Basket.sol";
 import {MarginAccounts} from "./MarginAccounts.sol";
 
 /// @title Tapehouse liquidator
@@ -26,7 +27,9 @@ import {MarginAccounts} from "./MarginAccounts.sol";
 /// position left with nothing, or worth less than it owes with holdings worth less than a USDG each, is written off by
 /// the accounts' backstop, or by anyone while they have none. The reopening auction, set once by the accounts' owner,
 /// holds the positions it will sell out of the Dutch auction while the market is open, and sells them, to its bids and
-/// the backstop, at its clearing price.
+/// the backstop, at its clearing price. A basket in a position counts as the Stock Tokens it redeems for, and once the
+/// position falls short its baskets are redeemed into those Stock Tokens, which are then sold as any other; a basket
+/// whose tokens the issuer has frozen stays, and the rest is sold.
 /// @dev Set as the accounts' liquidator, it is their only way into seizures and write-offs.
 contract Liquidator {
     using SafeERC20 for IERC20;
@@ -441,7 +444,24 @@ contract Liquidator {
             }
             // forge-lint: disable-end(calls-loop)
         }
-        return _assess(account, position, closed);
+        Valuation memory v = _assess(account, position, closed);
+        if (_isShort(v)) _unwrap(account, position);
+        return v;
+    }
+
+    /// @dev Redeems every basket share the position holds into its Stock Tokens, which count the same for its
+    /// valuation, whatever they come to: shares worth nothing in each token would otherwise hold up its write-off.
+    function _unwrap(address account, bytes32 position) private {
+        Basket[] memory baskets = accounts.baskets();
+        for (uint256 j; j < baskets.length; ++j) {
+            // forge-lint: disable-next-line(calls-loop)
+            uint256 shares = accounts.collateral(account, position, address(baskets[j]));
+            if (shares == 0) continue;
+            // slither-disable-start unused-return,calls-loop
+            // forge-lint: disable-next-line(calls-loop)
+            try accounts.unwrap(account, address(baskets[j]), shares) returns (uint256[] memory) {} catch {}
+            // slither-disable-end unused-return,calls-loop
+        }
     }
 
     function _assess(address account, bytes32 position, bool closed) private view returns (Valuation memory v) {
@@ -466,6 +486,7 @@ contract Liquidator {
     function _value(address account, bytes32 position, bool atHigh) private view returns (Valuation memory v) {
         if (!band.sequencerSettled()) return v;
         (v.symbols, v.tokens) = accounts.stocks();
+        uint256[] memory basketed = accounts.inBaskets(account, position);
         v.quantities = new int256[](v.symbols.length);
         v.prices = new uint256[](v.symbols.length);
         uint256 gross = 0;
@@ -474,7 +495,7 @@ contract Liquidator {
             if (v.tokens[i] == address(0)) continue;
             // forge-lint: disable-start(calls-loop)
             uint256 lent = accounts.lent(account, position, v.tokens[i]);
-            uint256 quantity = accounts.collateral(account, position, v.tokens[i]) + lent;
+            uint256 quantity = accounts.collateral(account, position, v.tokens[i]) + lent + basketed[i];
             // forge-lint: disable-end(calls-loop)
             if (quantity == 0) continue;
             // forge-lint: disable-start(calls-loop, unused-return)

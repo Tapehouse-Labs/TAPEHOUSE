@@ -4,6 +4,7 @@ pragma solidity 0.8.37;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import {Basket} from "../src/Basket.sol";
 import {BandFeed} from "../src/BandFeed.sol";
 import {GapBackstop} from "../src/GapBackstop.sol";
 import {Liquidator} from "../src/Liquidator.sol";
@@ -594,6 +595,44 @@ contract ReopeningAuctionTest is ReopeningAuctionBase {
         auction.enroll(alice, CROSS, NVDA);
         assertEq(auction.round(NVDA, openMs).floor, 135e8);
         assertEq(auction.lots(NVDA, openMs)[0].amount, 10 * SHARE);
+    }
+
+    function test_ALotCountsTheStockTokensOfThePositionsBaskets() public {
+        bytes32[] memory symbols = new bytes32[](1);
+        symbols[0] = NVDA;
+        uint256[] memory units = new uint256[](1);
+        units[0] = 1e18;
+        Basket basket = new Basket("Tapehouse Test Basket", "thTEST", IBand(address(band)), symbols, units, owner);
+        vm.prank(owner);
+        accounts.addBasket(basket);
+        nvda.mint(alice, 7 * SHARE);
+        units[0] = 7 * SHARE;
+        vm.startPrank(alice);
+        nvda.approve(address(basket), 7 * SHARE);
+        basket.mint(7 * SHARE, alice, units);
+        basket.transfer(bob, SHARE);
+        basket.approve(address(accounts), 6 * SHARE);
+        accounts.deposit(CROSS, address(basket), 6 * SHARE, alice);
+        vm.stopPrank();
+        units[0] = 6 * SHARE;
+        vm.startPrank(bob);
+        basket.approve(address(accounts), SHARE);
+        accounts.deposit(CROSS, address(basket), SHARE, bob);
+        vm.stopPrank();
+        _position(alice, 4 * SHARE, 1_600 * USDG);
+        _position(carol, 10 * SHARE, 1_600 * USDG);
+        _weekend(190e8);
+        vm.expectRevert(abi.encodeWithSelector(ReopeningAuction.NotEnrollable.selector, bob, CROSS));
+        auction.enroll(bob, CROSS, NVDA);
+        vm.expectEmit(address(accounts));
+        emit MarginAccounts.Unwrap(address(auction), alice, address(basket), 6 * SHARE, units);
+        auction.enroll(alice, CROSS, NVDA);
+        assertEq(accounts.collateral(alice, CROSS, address(basket)), 0);
+        assertEq(accounts.collateral(alice, CROSS, address(nvda)), 10 * SHARE);
+        auction.enroll(carol, CROSS, NVDA);
+        ReopeningAuction.Lot[] memory lots = auction.lots(NVDA, openMs);
+        assertEq(lots[0].amount, _need(1_600 * USDG, 171e8));
+        assertEq(lots[1].amount, lots[0].amount);
     }
 
     function test_ALotCountsWhatThePositionLentAndItsClearingTakesItFromTheVault() public {

@@ -24,10 +24,12 @@ pub struct Deployments {
     pub chainlink: BTreeMap<String, Address>,
     /// `.bandFeeds`: each asset's `BandFeed`.
     pub band_feeds: BTreeMap<String, Address>,
-    /// `.tapehouse`: Tapehouse's own contracts, but for the stock lending vaults.
+    /// `.tapehouse`: Tapehouse's own contracts, but for the stock lending vaults and the baskets.
     pub tapehouse: BTreeMap<String, Address>,
     /// `.tapehouse.StockLending`: each Stock Token's lending vault.
     pub stock_lending: BTreeMap<String, Address>,
+    /// `.tapehouse.Baskets`: each basket of Stock Tokens the margin accounts take.
+    pub baskets: BTreeMap<String, Address>,
     /// `.uniswapV3`: the factory, the router, the quoter and the pools.
     pub uniswap_v3: BTreeMap<String, Address>,
     /// `.morpho`: Morpho Blue and its interest rate model, but for its markets.
@@ -72,10 +74,14 @@ impl Deployments {
             .filter(|id| *id != 0)
             .ok_or_else(|| Error::Registry("the registry has no chainId".into()))?;
         let mut tapehouse = registry["tapehouse"].clone();
-        let stock_lending = tapehouse
-            .as_object_mut()
-            .and_then(|group| group.remove("StockLending"))
-            .unwrap_or(Value::Null);
+        let mut split = |name| {
+            tapehouse
+                .as_object_mut()
+                .and_then(|group| group.remove(name))
+                .unwrap_or(Value::Null)
+        };
+        let stock_lending = split("StockLending");
+        let baskets = split("Baskets");
         let mut morpho = registry["morpho"].clone();
         let markets = morpho
             .as_object_mut()
@@ -88,6 +94,7 @@ impl Deployments {
             band_feeds: addresses(&registry["bandFeeds"], ".bandFeeds")?,
             tapehouse: addresses(&tapehouse, ".tapehouse")?,
             stock_lending: addresses(&stock_lending, ".tapehouse.StockLending")?,
+            baskets: addresses(&baskets, ".tapehouse.Baskets")?,
             uniswap_v3: addresses(&registry["uniswapV3"], ".uniswapV3")?,
             morpho: addresses(&morpho, ".morpho")?,
             morpho_markets: ids(&markets, ".morpho.Markets")?,

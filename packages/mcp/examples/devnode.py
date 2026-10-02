@@ -7,8 +7,8 @@
 
 Usage: uv run --script devnode.py RPC_URL DEPLOYMENTS_JSON SERVER_JS
 
-Reads SPY's band and both Morpho oracles on a dev node, refuses a slippage above the server's cap, and prepares an
-authorization for the registry's margin accounts, signing nothing.
+Reads SPY's band, both Morpho oracles and the basket PAIR on a dev node, refuses a slippage above the server's cap, and
+prepares an authorization for the registry's margin accounts, signing nothing.
 """
 
 import asyncio
@@ -42,7 +42,7 @@ async def main(rpc: str, registry: str, server: str) -> None:
             return result.structured_content
 
         tools = (await client.list_tools()).tools
-        check(len(tools) == 26, f"{len(tools)} tools")
+        check(len(tools) == 35, f"{len(tools)} tools")
         check(all(tool.annotations.read_only_hint and tool.output_schema for tool in tools), "a tool is not read-only")
 
         spy = await use("band_quote", {"asset": "SPY"})
@@ -52,6 +52,9 @@ async def main(rpc: str, registry: str, server: str) -> None:
         check(int(priced["price"]) == int(spy["low"]) * int(priced["scaleFactor"]), "SPY's oracle is not its low edge")
         nvda = await use("morpho_oracle", {"asset": "NVDA"})
         check(nvda["price"] is None and nvda["noPrice"] in ("stale", "halted"), f"NVDA's oracle: {nvda}")
+
+        pair = await use("baskets_components", {"basket": "PAIR"})
+        check([c["asset"] for c in pair["components"]] == ["NVDA", "SPY"], f"PAIR: {pair}")
 
         refused = await client.call_tool(
             "shorts_sell", {"account": OPERATOR, "asset": "SPY", "amount": "1", "slippageBps": 10_000}
@@ -71,6 +74,7 @@ async def main(rpc: str, registry: str, server: str) -> None:
     print(
         f"python client over stdio, protocol 2025-11-25: SPY band {spy['state']} at {spy['mid']}, "
         f"its Morpho oracle {priced['price']}; NVDA's oracle no price ({nvda['noPrice']}); "
+        f"basket PAIR of NVDA and SPY at {pair['address']}; "
         f"setAuthorization prepared for {call['to']}"
     )
     print("PASS")

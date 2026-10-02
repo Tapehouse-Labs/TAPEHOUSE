@@ -3,8 +3,9 @@
 // Starts the built server over Streamable HTTP on a dev node, without the key, and drives it with the official MCP
 // client on the 2026-07-28 protocol: checks that the listener refuses another site's Host and Origin, reads SPY's and
 // NVDA's bands and Morpho oracles against the SDK, then has the account authorize a fresh address through a prepared
-// call, fund its SPY short, and the address sell 1 SPY short and buy it back, every call prepared by the server and
-// signed here.
+// call, fund its SPY short, and the address sell 1 SPY short and buy it back. Then the account mints the address a
+// share of the basket PAIR, which it deposits into its cross position, reads there as NVDA and SPY, and unwraps. Every
+// call is prepared by the server and signed here.
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { readFileSync } from 'node:fs'
@@ -101,7 +102,7 @@ try {
   await mcp.connect(new StreamableHTTPClientTransport(url))
   check(mcp.getProtocolEra() === 'modern', 'the client did not reach the 2026-07-28 protocol')
   const { tools } = await mcp.listTools()
-  check(tools.length === 26 && tools.every((tool) => tool.annotations?.readOnlyHint), 'the tools are not all listed')
+  check(tools.length === 35 && tools.every((tool) => tool.annotations?.readOnlyHint), 'the tools are not all listed')
 
   const spy = await use('band_quote', { asset: 'SPY' })
   const at = { blockNumber: BigInt(spy.blockNumber as string) }
@@ -160,6 +161,30 @@ try {
     operator,
     await use('shorts_withdraw', { account, asset: 'SPY', amount: closed.usdgHeld, receiver: account }),
   )
+  const holder = operator.account.address
+  const one = parseEther('1').toString()
+  const { components } = (await use('baskets_components', { basket: 'PAIR' })) as { components: { asset: string }[] }
+  check(components.map(({ asset }) => asset).join() === 'NVDA,SPY', 'PAIR does not hold NVDA and SPY')
+  const mint = await use('baskets_mint', { from: account, basket: 'PAIR', shares: one, receiver: holder })
+  await sign(owner, mint)
+  const [nvdaPaid, spyPaid] = (mint.assets as { amount: string }[]).map(({ amount }) => amount)
+  await sign(
+    operator,
+    await use('accounts_deposit', { from: holder, account: holder, position: 'CROSS', token: 'PAIR', amount: one }),
+  )
+  const inBaskets = await use('accounts_in_baskets', { account: holder, position: 'CROSS' })
+  const through = inBaskets.assets as Record<string, string>
+  check(through.NVDA === nvdaPaid && through.SPY === spyPaid, 'the share does not hold what it was minted for')
+  const [unwrapped] = await sign(
+    operator,
+    await use('accounts_unwrap', { account: holder, basket: 'PAIR', shares: one }),
+  )
+  const [unwrap] = parseEventLogs({ abi: marginAccountsAbi, eventName: 'Unwrap', logs: unwrapped?.logs ?? [] })
+  check(unwrap?.args.shares === parseEther('1'), 'no Unwrap of the share')
+  const nvdaHeld = await use('accounts_collateral', { account: holder, position: 'CROSS', token: 'NVDA' })
+  const left = await use('accounts_collateral', { account: holder, position: 'CROSS', token: 'PAIR' })
+  check(nvdaHeld.amount === nvdaPaid && left.amount === '0', "the unwrap did not put the share's NVDA in the position")
+
   await sign(owner, await use('accounts_set_authorization', { operator: operator.account.address, allowed: false }))
   const after = await use('accounts_is_authorized', { account, operator: operator.account.address })
   check(after.authorized === false, 'the operator is still authorized')
@@ -168,7 +193,8 @@ try {
     `typescript client over Streamable HTTP, ${mcp.getProtocolEra()} era: another site's Host and Origin refused; ` +
       `SPY band ${spy.state} at ${spy.mid}, ` +
       `its Morpho oracle ${priced.price}; NVDA's oracle no price (${nvda.noPrice}); ` +
-      `sold 1 SPY for ${sell.args.proceeds} and bought it back for ${cover.args.cost}, every call prepared unsigned`,
+      `sold 1 SPY for ${sell.args.proceeds} and bought it back for ${cover.args.cost}; ` +
+      `minted 1 PAIR for ${nvdaPaid} NVDA and ${spyPaid} SPY, deposited it and unwrapped it; every call prepared unsigned`,
   )
   console.log('PASS')
 } finally {

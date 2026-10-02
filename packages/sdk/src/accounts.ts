@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-import type { Address, Client, Hex } from 'viem'
+import { type Address, type Client, type Hex, hexToString } from 'viem'
 import { getBlockNumber, readContract } from 'viem/actions'
 import type { At } from './band.js'
 import { type Deployments, entry, toBytes32 } from './deployments.js'
@@ -18,7 +18,10 @@ export function setAuthorization(deployments: Deployments, authorized: Address, 
   } as const
 }
 
-/** Deposits `amount` of `token` from the caller into `account`'s `position`: `CROSS` or an asset's symbol. */
+/**
+ * Deposits `amount` of `token` from the caller into `account`'s `position`: `CROSS` or an asset's symbol. A basket's
+ * address deposits its shares, into `CROSS` alone.
+ */
 export function deposit(
   deployments: Deployments,
   { position, token, amount, account }: { position: Hex; token: Address; amount: bigint; account: Address },
@@ -31,7 +34,7 @@ export function deposit(
   } as const
 }
 
-/** Withdraws `amount` of `token` from `account`'s `position` to `receiver`. */
+/** Withdraws `amount` of `token`, a basket's shares included, from `account`'s `position` to `receiver`. */
 export function withdraw(
   deployments: Deployments,
   {
@@ -79,6 +82,22 @@ export function repay(
   } as const
 }
 
+/**
+ * Redeems `shares` of the registry's basket `basket` in `account`'s cross position for its Stock Tokens, which the
+ * position then holds. The account or an address it authorized may, and anyone once the position falls short.
+ */
+export function unwrap(
+  deployments: Deployments,
+  { account, basket, shares }: { account: Address; basket: string; shares: bigint },
+) {
+  return {
+    address: accounts(deployments),
+    abi: marginAccountsAbi,
+    functionName: 'unwrap',
+    args: [account, entry(deployments.baskets, basket, '.tapehouse.Baskets'), shares],
+  } as const
+}
+
 /** Whether `authorized` may act for `account`. */
 export function isAuthorized(
   client: Client,
@@ -112,6 +131,32 @@ export async function repayment(
     readContract(client, { ...read, functionName: 'premium' }),
   ])
   return { debt, premium, assets: debt + premium }
+}
+
+/**
+ * What `account`'s `position` holds of each Stock Token through its baskets, by asset, as its shares would redeem now:
+ * the engine margins them as those Stock Tokens. Both reads are at one block.
+ */
+export async function inBaskets(
+  client: Client,
+  deployments: Deployments,
+  account: Address,
+  position: Hex,
+  at: At = {},
+): Promise<Record<string, bigint>> {
+  const address = accounts(deployments)
+  const blockNumber = at.blockNumber ?? (await getBlockNumber(client, { cacheTime: 0 }))
+  const [[symbols], amounts] = await Promise.all([
+    readContract(client, { address, abi: marginAccountsAbi, functionName: 'stocks', blockNumber }),
+    readContract(client, {
+      address,
+      abi: marginAccountsAbi,
+      functionName: 'inBaskets',
+      args: [account, position],
+      blockNumber,
+    }),
+  ])
+  return Object.fromEntries(symbols.map((symbol, i) => [hexToString(symbol, { size: 32 }), amounts[i] ?? 0n]))
 }
 
 /**

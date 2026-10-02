@@ -20,6 +20,8 @@ import {
 import { afterEach, describe, expect, test } from 'vitest'
 import {
   bandAbi,
+  basketAbi,
+  CROSS,
   type Deployments,
   marginAccountsAbi,
   morphoBandOracleAbi,
@@ -40,23 +42,28 @@ const band: Address = '0xa70118d3324D90532E7D2854627b13CacE305641'
 const accounts: Address = '0x5FbDB2315678afecb367f032d93F642f64180aa3'
 const shorts: Address = '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512'
 const oracle: Address = '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0'
+const pair: Address = '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9'
+const nvda = robinhood.tokens.NVDA as Address
+const spy = robinhood.tokens.SPY as Address
 const deployments: Deployments = {
   ...robinhood,
   tapehouse: { Band: band, MarginAccounts: accounts, ShortPositions: shorts },
   morphoOracles: { NVDA: oracle, SPY: oracle },
+  baskets: { PAIR: pair },
 }
 const abis: Record<string, Abi> = {
   [band]: bandAbi,
   [accounts]: marginAccountsAbi,
   [shorts]: shortPositionsAbi,
   [oracle]: morphoBandOracleAbi,
+  [pair]: basketAbi,
   [robinhood.uniswapV3.QuoterV2 as string]: quoterV2Abi,
 }
 
 type Answer = unknown | { revert: Hex } | { fail: string }
 type Call = { to: string; functionName: string; args: readonly unknown[]; block: string }
 
-function chain(answers: Record<string, Answer | ((args: readonly unknown[]) => Answer)>) {
+function chain(answers: Record<string, Answer | ((args: readonly unknown[], to: string) => Answer)>) {
   const calls: Call[] = []
   const methods: string[] = []
   const client = createClient({
@@ -73,7 +80,7 @@ function chain(answers: Record<string, Answer | ((args: readonly unknown[]) => A
           calls.push({ to, functionName, args, block })
           const answer = answers[functionName]
           if (answer === undefined) throw new Error(`unexpected ${functionName} on ${to}`)
-          const result = typeof answer === 'function' ? answer(args) : answer
+          const result = typeof answer === 'function' ? answer(args, to) : answer
           if (typeof result === 'object' && result !== null && 'revert' in result)
             throw Object.assign(new Error('execution reverted'), { code: 3, data: result.revert })
           if (typeof result === 'object' && result !== null && 'fail' in result)
@@ -141,7 +148,13 @@ describe('tools', () => {
       'band_sealed',
       'chainlink_round',
       'morpho_oracle',
+      'baskets_components',
+      'baskets_preview_mint',
+      'baskets_preview_redeem',
+      'baskets_target',
+      'baskets_pending_target',
       'accounts_health',
+      'accounts_in_baskets',
       'accounts_collateral',
       'accounts_leverage',
       'accounts_liquidation_price',
@@ -155,6 +168,9 @@ describe('tools', () => {
       'accounts_withdraw',
       'accounts_borrow',
       'accounts_repay',
+      'accounts_unwrap',
+      'baskets_mint',
+      'baskets_redeem',
       'shorts_deposit',
       'shorts_withdraw',
       'shorts_sell',
@@ -454,6 +470,224 @@ describe('prepared transactions', () => {
     })
     const [{ data }] = structured.calls as [{ data: Hex }]
     expect(data.slice(0, 10)).toBe(toFunctionSelector('cover(bytes32,uint256,uint256,address)'))
+  })
+})
+
+const components = {
+  components: [
+    [toBytes32('NVDA'), toBytes32('SPY')],
+    [nvda, spy],
+  ],
+}
+
+describe('baskets', () => {
+  test("a basket's components, previews and targets are read at one block, by asset", async () => {
+    const { client, calls } = chain({
+      ...components,
+      previewMint: [4n, 2n],
+      previewRedeem: [3n, 1n],
+      target: [10n ** 18n, 5n * 10n ** 17n],
+      pendingTarget: [[10n ** 18n, 0n], 1_790_604_800n],
+    })
+    const mcp = await legacy(client)
+    expect((await call(mcp, 'baskets_components', { basket: 'PAIR' })).structured).toEqual({
+      blockNumber: '7',
+      basket: 'PAIR',
+      address: pair,
+      components: [
+        { asset: 'NVDA', token: nvda },
+        { asset: 'SPY', token: spy },
+      ],
+    })
+    expect((await call(mcp, 'baskets_preview_mint', { basket: 'PAIR', shares: '3' })).structured).toEqual({
+      blockNumber: '7',
+      basket: 'PAIR',
+      shares: '3',
+      assets: [
+        { asset: 'NVDA', token: nvda, amount: '4' },
+        { asset: 'SPY', token: spy, amount: '2' },
+      ],
+    })
+    expect((await call(mcp, 'baskets_preview_redeem', { basket: 'PAIR', shares: '3' })).structured).toMatchObject({
+      assets: [
+        { asset: 'NVDA', amount: '3' },
+        { asset: 'SPY', amount: '1' },
+      ],
+    })
+    expect((await call(mcp, 'baskets_target', { basket: 'PAIR' })).structured).toEqual({
+      blockNumber: '7',
+      basket: 'PAIR',
+      target: [
+        { asset: 'NVDA', token: nvda, units: '1000000000000000000' },
+        { asset: 'SPY', token: spy, units: '500000000000000000' },
+      ],
+    })
+    expect((await call(mcp, 'baskets_pending_target', { basket: 'PAIR' })).structured).toMatchObject({
+      target: [
+        { asset: 'NVDA', units: '1000000000000000000' },
+        { asset: 'SPY', units: '0' },
+      ],
+      effectiveAt: '1790604800',
+    })
+    expect(new Set(calls.map(({ to, block }) => `${to}@${block}`))).toEqual(new Set([`${pair}@0x7`]))
+    const none = chain({ ...components, pendingTarget: [[], 0n] })
+    expect(
+      (await call(await legacy(none.client), 'baskets_pending_target', { basket: 'PAIR' })).structured,
+    ).toMatchObject({ target: [], effectiveAt: '0' })
+  })
+
+  test('what a position holds through its baskets is read by asset, at one block', async () => {
+    const { client, calls } = chain({
+      stocks: [
+        [toBytes32('NVDA'), toBytes32('SPY')],
+        [nvda, spy],
+      ],
+      inBaskets: [10n, 5n],
+    })
+    const { structured } = await call(await legacy(client), 'accounts_in_baskets', {
+      account: alice,
+      position: 'CROSS',
+    })
+    expect(structured).toEqual({ blockNumber: '7', assets: { NVDA: '10', SPY: '5' } })
+    expect(calls).toEqual([
+      { to: accounts, functionName: 'stocks', args: [], block: '0x7' },
+      { to: accounts, functionName: 'inBaskets', args: [alice, CROSS], block: '0x7' },
+    ])
+  })
+
+  test('a basket outside the registry is named, even one every object inherits', async () => {
+    const { client, methods } = chain({})
+    const mcp = await legacy(client)
+    for (const name of ['NONE', 'constructor', '__proto__']) {
+      const { result, text } = await call(mcp, 'baskets_mint', { from: bob, basket: name, shares: '1', receiver: bob })
+      expect(result.isError).toBe(true)
+      expect(text).toBe(`The registry has no .tapehouse.Baskets.${name}.`)
+    }
+    expect(methods).toEqual([])
+  })
+
+  test("a mint's limit is previewMint, each token approved for exactly its part where the allowance falls short", async () => {
+    const { client, calls } = chain({
+      ...components,
+      previewMint: (args: readonly unknown[]) => {
+        expect(args).toEqual([2n * 10n ** 18n])
+        return [2n * 10n ** 18n, 10n ** 18n]
+      },
+      allowance: (_: readonly unknown[], to: string) => (to === nvda ? 10n ** 18n : maxUint256),
+    })
+    const { structured } = await call(await legacy(client), 'baskets_mint', {
+      from: bob,
+      basket: 'PAIR',
+      shares: '2000000000000000000',
+      receiver: alice,
+    })
+    expect(structured).toMatchObject({
+      chainId: 4663,
+      signer: bob,
+      assets: [
+        { asset: 'NVDA', token: nvda, amount: '2000000000000000000' },
+        { asset: 'SPY', token: spy, amount: '1000000000000000000' },
+      ],
+      calls: [
+        { to: nvda, functionName: 'approve', args: { spender: pair, amount: '2000000000000000000' } },
+        {
+          to: pair,
+          functionName: 'mint',
+          args: {
+            shares: '2000000000000000000',
+            receiver: alice,
+            maxAssets: ['2000000000000000000', '1000000000000000000'],
+          },
+        },
+      ],
+    })
+    expect(structured.calls).toHaveLength(2)
+    const [, minted] = structured.calls as [unknown, { data: Hex }]
+    expect(decodeFunctionData({ abi: basketAbi, data: minted.data }).args).toEqual([
+      2n * 10n ** 18n,
+      alice,
+      [2n * 10n ** 18n, 10n ** 18n],
+    ])
+    expect(new Set(calls.map(({ block }) => block))).toEqual(new Set(['0x7']))
+    expect(calls.filter(({ functionName }) => functionName === 'allowance')).toMatchObject([
+      { to: nvda, args: [bob, pair] },
+      { to: spy, args: [bob, pair] },
+    ])
+  })
+
+  test('a redemption and an unwrap name what they give and who signs', async () => {
+    const { client } = chain({ ...components, previewRedeem: [3n, 1n] })
+    const mcp = await legacy(client)
+    const { structured } = await call(mcp, 'baskets_redeem', {
+      basket: 'PAIR',
+      shares: '5',
+      receiver: bob,
+      owner: alice,
+    })
+    expect(structured).toMatchObject({
+      signer: `${alice}, or an address it allowed to spend the shares`,
+      assets: [
+        { asset: 'NVDA', amount: '3' },
+        { asset: 'SPY', amount: '1' },
+      ],
+      calls: [{ to: pair, functionName: 'redeem', args: { shares: '5', receiver: bob, owner: alice } }],
+    })
+    const unwrap = await call(mcp, 'accounts_unwrap', { account: alice, basket: 'PAIR', shares: '5' })
+    expect(unwrap.structured).toMatchObject({
+      signer: `${alice}, an address it authorized, or anyone once the position falls short`,
+      calls: [{ to: accounts, functionName: 'unwrap', args: { account: alice, basket: pair, shares: '5' } }],
+    })
+    const [{ data }] = unwrap.structured.calls as [{ data: Hex }]
+    expect(decodeFunctionData({ abi: marginAccountsAbi, data }).args).toEqual([alice, pair, 5n])
+  })
+
+  test("a basket's shares go in and out of the cross position alone", async () => {
+    const { client, calls } = chain({ allowance: 0n, collateral: 7n })
+    const mcp = await legacy(client)
+    const deposit = { from: bob, account: alice, position: 'CROSS', token: 'PAIR', amount: '7' }
+    expect((await call(mcp, 'accounts_deposit', deposit)).structured.calls).toMatchObject([
+      { to: pair, functionName: 'approve', args: { spender: accounts, amount: '7' } },
+      { to: accounts, functionName: 'deposit', args: { position: CROSS, token: pair, amount: '7', account: alice } },
+    ])
+    const withdrawal = { account: alice, position: 'CROSS', token: 'PAIR', amount: '7', receiver: bob }
+    expect((await call(mcp, 'accounts_withdraw', withdrawal)).structured.calls).toMatchObject([
+      { to: accounts, functionName: 'withdraw', args: { token: pair, amount: '7', receiver: bob } },
+    ])
+    const held = await call(mcp, 'accounts_collateral', { account: alice, position: 'CROSS', token: 'PAIR' })
+    expect(held.structured).toEqual({ blockNumber: '7', token: 'PAIR', amount: '7' })
+    const read = calls.length
+    for (const [name, args] of [
+      ['accounts_deposit', { ...deposit, position: 'NVDA' }],
+      ['accounts_withdraw', { ...withdrawal, position: 'NVDA' }],
+      ['accounts_collateral', { account: alice, position: 'NVDA', token: 'PAIR' }],
+    ] as const) {
+      const { result, text } = await call(mcp, name, args)
+      expect(result.isError).toBe(true)
+      expect(text).toBe("A basket's shares are held in the cross position alone: position must be CROSS.")
+    }
+    expect(calls).toHaveLength(read)
+  })
+
+  test("a basket's reverts and the accounts' BasketFrozen are explained by name and arguments", async () => {
+    const above = encodeErrorResult({ abi: basketAbi, errorName: 'AboveMaximum', args: [nvda, 2n, 1n] })
+    const frozen = encodeErrorResult({ abi: marginAccountsAbi, errorName: 'BasketFrozen', args: [pair] })
+    const mcp = await legacy(
+      chain({ ...components, previewMint: { revert: above }, health: { revert: frozen } }).client,
+    )
+    expect((await call(mcp, 'baskets_preview_mint', { basket: 'PAIR', shares: '1' })).text).toBe(
+      `The call reverted with AboveMaximum(${nvda}, 2, 1).`,
+    )
+    expect((await call(mcp, 'accounts_health', { account: alice, position: 'CROSS' })).text).toBe(
+      `The call reverted with BasketFrozen(${pair}).`,
+    )
+  })
+
+  test('the registry lists the baskets, and its output schema declares them', async () => {
+    const mcp = await legacy(chain({}).client)
+    const { structured } = await call(mcp, 'registry', {})
+    expect(structured.baskets).toEqual({ PAIR: pair })
+    const { tools } = await mcp.listTools()
+    expect(tools.find((tool) => tool.name === 'registry')?.outputSchema?.properties).toHaveProperty('baskets')
   })
 })
 

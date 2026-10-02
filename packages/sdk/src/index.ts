@@ -2,6 +2,7 @@
 export * as accounts from './accounts.js'
 export * as band from './band.js'
 export type { At, PackageSource } from './band.js'
+export * as baskets from './baskets.js'
 export {
   CROSS,
   type Deployments,

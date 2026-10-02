@@ -21,6 +21,7 @@ export type Deployments = {
   bandFeeds: Record<string, Address>
   tapehouse: Record<string, Address>
   stockLending: Record<string, Address>
+  baskets: Record<string, Address>
   uniswapV3: Record<string, Address>
   morpho: Record<string, Address>
   morphoMarkets: Record<string, Hex>
@@ -48,7 +49,7 @@ export function parseDeployments(json: unknown): Deployments {
   if (typeof chainId !== 'number' || !Number.isSafeInteger(chainId) || chainId <= 0)
     throw new Error('The registry has no chainId.')
   const kind: PriceKind = SHARE_PRICE_CHAINS.includes(chainId) ? 'share' : 'token'
-  const { StockLending, ...tapehouse } = record(registry.tapehouse ?? {}, '.tapehouse')
+  const { StockLending, Baskets, ...tapehouse } = record(registry.tapehouse ?? {}, '.tapehouse')
   const { Markets, ...morpho } = record(registry.morpho ?? {}, '.morpho')
   return {
     chainId,
@@ -59,6 +60,7 @@ export function parseDeployments(json: unknown): Deployments {
     bandFeeds: addresses(registry.bandFeeds, '.bandFeeds'),
     tapehouse: addresses(tapehouse, '.tapehouse'),
     stockLending: addresses(StockLending, '.tapehouse.StockLending'),
+    baskets: addresses(Baskets, '.tapehouse.Baskets'),
     uniswapV3: addresses(registry.uniswapV3, '.uniswapV3'),
     morpho: addresses(morpho, '.morpho'),
     morphoMarkets: ids(Markets, '.morpho.Markets'),

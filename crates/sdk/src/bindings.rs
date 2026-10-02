@@ -21,6 +21,13 @@ sol!(
 sol!(
     #[sol(rpc)]
     #[derive(Debug)]
+    Basket,
+    "abi/Basket.json"
+);
+
+sol!(
+    #[sol(rpc)]
+    #[derive(Debug)]
     BandFeed,
     "abi/BandFeed.json"
 );

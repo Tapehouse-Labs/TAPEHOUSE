@@ -83,6 +83,19 @@
   },
   {
     "type": "function",
+    "name": "MAX_BASKETS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MAX_FEED_AGE",
     "inputs": [],
     "outputs": [
@@ -181,6 +194,19 @@
   },
   {
     "type": "function",
+    "name": "addBasket",
+    "inputs": [
+      {
+        "name": "basket",
+        "type": "address",
+        "internalType": "contract Basket"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "backstop",
     "inputs": [],
     "outputs": [
@@ -214,6 +240,19 @@
         "name": "",
         "type": "address",
         "internalType": "contract IBand"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "baskets",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address[]",
+        "internalType": "contract Basket[]"
       }
     ],
     "stateMutability": "view"
@@ -642,6 +681,30 @@
         "name": "cap",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "inBaskets",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "position",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
       }
     ],
     "stateMutability": "view"
@@ -1314,6 +1377,35 @@
   },
   {
     "type": "function",
+    "name": "unwrap",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "basket",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "shares",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "assets",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "usdg",
     "inputs": [],
     "outputs": [
@@ -1508,6 +1600,19 @@
     "inputs": [
       {
         "name": "backstop",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BasketAdded",
+    "inputs": [
+      {
+        "name": "basket",
         "type": "address",
         "indexed": true,
         "internalType": "address"
@@ -2036,6 +2141,43 @@
   },
   {
     "type": "event",
+    "name": "Unwrap",
+    "inputs": [
+      {
+        "name": "caller",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "basket",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "shares",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "assets",
+        "type": "uint256[]",
+        "indexed": false,
+        "internalType": "uint256[]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Withdraw",
     "inputs": [
       {
@@ -2208,6 +2350,28 @@
   },
   {
     "type": "error",
+    "name": "BasketAlreadyAdded",
+    "inputs": [
+      {
+        "name": "basket",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "BasketFrozen",
+    "inputs": [
+      {
+        "name": "basket",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "Blocked",
     "inputs": [
       {
@@ -2312,6 +2476,17 @@
     "type": "error",
     "name": "InvalidBackstop",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidBasket",
+    "inputs": [
+      {
+        "name": "basket",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
   },
   {
     "type": "error",
@@ -2563,6 +2738,11 @@
         "internalType": "uint256"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "TooManyBaskets",
+    "inputs": []
   },
   {
     "type": "error",

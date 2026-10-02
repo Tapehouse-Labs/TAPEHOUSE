@@ -1,7 +1,7 @@
 {
   "name": "@tapehouse/mcp",
   "version": "0.1.0",
-  "description": "A Model Context Protocol server through which AI agents read Tapehouse's band, accounts, shorts and Morpho oracles, and prepare transactions for a wallet to sign.",
+  "description": "A Model Context Protocol server through which AI agents read Tapehouse's band, baskets, accounts, shorts and Morpho oracles, and prepare transactions for a wallet to sign.",
   "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",

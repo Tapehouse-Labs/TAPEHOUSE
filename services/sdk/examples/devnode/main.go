@@ -2,7 +2,9 @@
 
 // Command devnode reads SPY's band and its BandFeed on a dev node, sends RedStone packages from a file through a
 // PackageSource and decodes the band's refusal of their age, then authorizes a fresh address in the margin accounts,
-// which sells 1 SPY short for the account at a QuoterV2 quote and buys it back.
+// which sells 1 SPY short for the account at a QuoterV2 quote and buys it back. Then it mints 1 share of the basket
+// PAIR for the fresh address, which deposits it into its cross position, reads it there as NVDA and SPY, unwraps it and
+// withdraws them.
 //
 // Usage: PRIVATE_KEY=0x… go run ./sdk/examples/devnode RPC_URL DEPLOYMENTS_JSON PAYLOAD_FILE
 package main
@@ -26,8 +28,10 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/tapehouse/tapehouse/services/sdk"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/basket"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/marginaccounts"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/shortpositions"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocktoken"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/usdg"
 )
 
@@ -150,10 +154,39 @@ func main() {
 	send(owner, must(accounts.SetAuthorization(operator.From, false)), nil)
 	check(!must(accounts.IsAuthorized(latest, account, operator.From)), "the operator is still authorized")
 
+	pair, holder := client.Basket("PAIR"), operator.From
+	basketAddress := deployments.Baskets["PAIR"]
+	components := must(pair.Components(latest))
+	check(strings.Join(components.Assets, ",") == "NVDA,SPY", "PAIR holds %v", components.Assets)
+	paid := must(pair.PreviewMint(latest, one))
+	for i, token := range components.Tokens {
+		send(owner, sdk.Tx{To: token, Data: must(stocktoken.NewStockToken().TryPackApprove(basketAddress, paid[i]))}, nil)
+	}
+	send(owner, must(pair.Mint(one, holder, paid)), nil)
+	send(operator, sdk.Tx{To: basketAddress, Data: must(basket.NewBasket().TryPackApprove(deployments.Tapehouse["MarginAccounts"], one))}, nil)
+	send(operator, must(accounts.Deposit(sdk.Cross, basketAddress, one, holder)), nil)
+	through := must(accounts.InBaskets(latest, holder, sdk.Cross))
+	margined := must(accounts.Health(latest, holder, sdk.Cross))
+	check(through["NVDA"].Cmp(paid[0]) == 0 && through["SPY"].Cmp(paid[1]) == 0, "the share does not hold what it was minted for")
+	shares := must(accounts.Collateral(latest, holder, sdk.Cross, basketAddress))
+	send(operator, must(accounts.Unwrap(holder, "PAIR", one)), nil)
+	unwrapped := make([]*big.Int, len(components.Tokens))
+	for i, token := range components.Tokens {
+		unwrapped[i] = must(accounts.Collateral(latest, holder, sdk.Cross, token))
+	}
+	check(unwrapped[0].Cmp(through["NVDA"]) == 0 && unwrapped[1].Cmp(through["SPY"]) == 0,
+		"the unwrap did not put the share's tokens in the position")
+	for i, token := range components.Tokens {
+		send(operator, must(accounts.Withdraw(sdk.Cross, token, unwrapped[i], holder, holder)), nil)
+	}
+
 	fmt.Printf("go sdk: SPY band state %d at %d, feed round %v answers %v, seal at %d %s (sealed %d); writePrices %v; "+
 		"before authorization %v; sold 1 SPY for %v and bought it back for %v\n",
 		quote.State, quote.Mid, round.RoundID, round.Answer, session.BoundaryMs, sealing, sealed.SealedAt, stale,
 		refused, sell.Proceeds, cover.Cost)
+	fmt.Printf("basket PAIR: %v shares in the cross position hold %v NVDA and %v SPY; equity %v requirement %v\n",
+		shares, through["NVDA"], through["SPY"], margined.Equity, margined.Requirement)
+	fmt.Printf("basket PAIR: unwrapped into %v NVDA and %v SPY in the cross position, then withdrawn\n", unwrapped[0], unwrapped[1])
 	fmt.Println("PASS")
 }
 

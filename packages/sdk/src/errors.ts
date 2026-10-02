@@ -3,6 +3,7 @@ import { BaseError, ContractFunctionRevertedError, decodeErrorResult, type Hex }
 import {
   bandAbi,
   bandFeedAbi,
+  basketAbi,
   marginAccountsAbi,
   morphoBandOracleAbi,
   shortPositionsAbi,
@@ -13,6 +14,7 @@ import {
 const items = [
   ...shortPositionsAbi,
   ...marginAccountsAbi,
+  ...basketAbi,
   ...bandFeedAbi,
   ...morphoBandOracleAbi,
   ...bandAbi,
@@ -20,7 +22,7 @@ const items = [
   ...usdgAbi,
 ]
 
-/** Every error Tapehouse's contracts, the band, the Stock Tokens and USDG revert with. */
+/** Every error Tapehouse's contracts, its baskets, the band, the Stock Tokens and USDG revert with. */
 export const errorsAbi = items.filter(
   (item): item is Extract<(typeof items)[number], { type: 'error' }> => item.type === 'error',
 )

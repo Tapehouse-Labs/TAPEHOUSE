@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use std::collections::BTreeMap;
 use std::future::Future;
 
 use alloy::contract::SolCallBuilder;
@@ -7,7 +8,7 @@ use alloy::primitives::{Address, B256, Bytes, U256, aliases::U24};
 use alloy::providers::Provider;
 
 use crate::bindings::{
-    Aggregator, Band, BandFeed, IQuoterV2, MarginAccounts, MorphoBandOracle, QuoterV2,
+    Aggregator, Band, BandFeed, Basket, IQuoterV2, MarginAccounts, MorphoBandOracle, QuoterV2,
     ShortPositions, StockToken, Usdg,
 };
 use crate::deployments::{Deployments, SharePriceFeed, TokenPriceFeed, entry, to_bytes32};
@@ -79,7 +80,32 @@ pub enum OraclePrice {
     },
 }
 
+/// The assets a basket holds and their Stock Tokens, in the order of every list of amounts.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Components {
+    /// The assets' names.
+    pub assets: Vec<String>,
+    /// Their Stock Tokens.
+    pub tokens: Vec<Address>,
+}
+
+/// A basket's target proposed and not yet in effect: raw units of each Stock Token per share, and when it takes effect,
+/// in seconds. Empty and zero if none.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PendingTarget {
+    /// The units per share.
+    pub units: Vec<U256>,
+    /// When they take effect.
+    pub effective_at: u64,
+}
+
 const BPS: u64 = 10_000;
+
+fn asset_name(symbol: &B256) -> String {
+    String::from_utf8_lossy(symbol.as_slice())
+        .trim_end_matches('\0')
+        .to_string()
+}
 
 fn check_slippage(slippage_bps: u64) -> Result<()> {
     if slippage_bps > BPS {
@@ -134,6 +160,92 @@ impl<P: Provider + Clone> Tapehouse<P> {
     pub fn shorts(&self) -> Result<ShortPositions::ShortPositionsInstance<P>> {
         let address = entry(&self.deployments.tapehouse, "ShortPositions", ".tapehouse")?;
         Ok(ShortPositions::new(address, self.provider.clone()))
+    }
+
+    /// The basket `key`, from `.tapehouse.Baskets`: `mint` takes, for each Stock Token in its order, at most
+    /// `maxAssets`, its part rounded up as `previewMint` reads it; `redeem` gives each part rounded down.
+    pub fn basket(&self, key: &str) -> Result<Basket::BasketInstance<P>> {
+        let address = entry(&self.deployments.baskets, key, ".tapehouse.Baskets")?;
+        Ok(Basket::new(address, self.provider.clone()))
+    }
+
+    /// The margin accounts' `unwrap` of `shares` of the basket `key` in `account`'s cross position, for its Stock
+    /// Tokens, which the position then holds. The account or an address it authorized may, and anyone once the position
+    /// falls short. A basket's shares themselves go in and out of the cross position through `deposit` and `withdraw`.
+    pub fn unwrap(
+        &self,
+        account: Address,
+        key: &str,
+        shares: U256,
+    ) -> Result<SolCallBuilder<P, MarginAccounts::unwrapCall>> {
+        let basket = entry(&self.deployments.baskets, key, ".tapehouse.Baskets")?;
+        Ok(self
+            .accounts()?
+            .unwrap(account, basket, shares)
+            .with_cloned_provider())
+    }
+
+    /// The assets the basket `key` holds and their Stock Tokens.
+    pub async fn basket_components(&self, key: &str) -> Result<Components> {
+        let out = self.basket(key)?.components().call().await?;
+        Ok(Components {
+            assets: out.symbols.iter().map(asset_name).collect(),
+            tokens: out.tokens,
+        })
+    }
+
+    /// What minting `shares` of the basket `key` takes of each Stock Token, in raw units, rounded up.
+    pub async fn preview_mint(&self, key: &str, shares: U256) -> Result<Vec<U256>> {
+        Ok(self.basket(key)?.previewMint(shares).call().await?)
+    }
+
+    /// What redeeming `shares` of the basket `key` gives of each Stock Token, in raw units, rounded down.
+    pub async fn preview_redeem(&self, key: &str, shares: U256) -> Result<Vec<U256>> {
+        Ok(self.basket(key)?.previewRedeem(shares).call().await?)
+    }
+
+    /// The target in effect of the basket `key`: raw units of each Stock Token per share.
+    pub async fn basket_target(&self, key: &str) -> Result<Vec<U256>> {
+        Ok(self.basket(key)?.target().call().await?)
+    }
+
+    /// The target of the basket `key` proposed and not yet in effect.
+    pub async fn pending_target(&self, key: &str) -> Result<PendingTarget> {
+        let out = self.basket(key)?.pendingTarget().call().await?;
+        Ok(PendingTarget {
+            units: out.units,
+            effective_at: out.effectiveAt,
+        })
+    }
+
+    /// What `account`'s `position` holds of each Stock Token through its baskets, by asset, as its shares would
+    /// redeem now: the engine margins them as those Stock Tokens. Both reads are at the latest block.
+    pub async fn in_baskets(
+        &self,
+        account: Address,
+        position: B256,
+    ) -> Result<BTreeMap<String, U256>> {
+        let accounts = self.accounts()?;
+        let block = BlockId::number(
+            self.provider
+                .get_block_number()
+                .await
+                .map_err(alloy::contract::Error::from)?,
+        );
+        let stocks = accounts.stocks().block(block).call().await?;
+        let amounts = accounts
+            .inBaskets(account, position)
+            .block(block)
+            .call()
+            .await?;
+        if amounts.len() != stocks.symbols.len() {
+            return Err(Error::Registry(format!(
+                "the accounts name {} assets and {} amounts",
+                stocks.symbols.len(),
+                amounts.len()
+            )));
+        }
+        Ok(stocks.symbols.iter().map(asset_name).zip(amounts).collect())
     }
 
     /// USDG, `.tokens.USDG`.

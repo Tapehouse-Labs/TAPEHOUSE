@@ -2,7 +2,8 @@
 // Usage: PRIVATE_KEY=0x… node examples/devnode.ts RPC_URL DEPLOYMENTS_JSON PAYLOAD_FILE
 // Reads SPY's band and its BandFeed on a dev node, sends RedStone packages from a file through a PackageSource and
 // decodes the band's refusal of their age, then authorizes a fresh address in the margin accounts, which sells 1 SPY
-// short for the account at a QuoterV2 quote and buys it back.
+// short for the account at a QuoterV2 quote and buys it back. Then it mints 1 share of the basket PAIR for the fresh
+// address, which deposits it into its cross position, reads it there as NVDA and SPY, unwraps it and withdraws them.
 import { readFileSync } from 'node:fs'
 import {
   type Address,
@@ -19,6 +20,8 @@ import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import {
   accounts,
   band,
+  basketAbi,
+  baskets,
   CROSS,
   decodeRevert,
   marginAccountsAbi,
@@ -26,6 +29,7 @@ import {
   parseDeployments,
   shortPositionsAbi,
   shorts,
+  stockTokenAbi,
   usdgAbi,
 } from '@tapehouse/sdk'
 
@@ -174,10 +178,49 @@ check(
   'the operator is still authorized',
 )
 
+const basket = deployments.baskets.PAIR as Address
+const marginAccounts = deployments.tapehouse.MarginAccounts as Address
+const holder = operator.account.address
+const { assets: names, tokens } = await baskets.components(owner, deployments, 'PAIR')
+check(names.join() === 'NVDA,SPY', `PAIR holds ${names.join()}`)
+const paid = await baskets.previewMint(owner, deployments, 'PAIR', one)
+for (const [i, token] of tokens.entries())
+  await send(owner, { address: token, abi: stockTokenAbi, functionName: 'approve', args: [basket, paid[i] ?? 0n] })
+await send(owner, baskets.mint(deployments, { basket: 'PAIR', shares: one, receiver: holder, maxAssets: paid }))
+await send(operator, { address: basket, abi: basketAbi, functionName: 'approve', args: [marginAccounts, one] })
+await send(operator, accounts.deposit(deployments, { position: CROSS, token: basket, amount: one, account: holder }))
+const through = await accounts.inBaskets(owner, deployments, holder, CROSS)
+const margined = await accounts.health(owner, deployments, holder, CROSS)
+check(through.NVDA === paid[0] && through.SPY === paid[1], 'the share does not hold what it was minted for')
+const shares = await accounts.collateral(owner, deployments, holder, CROSS, basket)
+const held =
+  `${shares} shares in the cross position hold ${through.NVDA} NVDA and ${through.SPY} SPY; ` +
+  `equity ${margined.equity} requirement ${margined.requirement}`
+await send(operator, accounts.unwrap(deployments, { account: holder, basket: 'PAIR', shares: one }))
+const unwrapped = await Promise.all(
+  tokens.map((token) => accounts.collateral(owner, deployments, holder, CROSS, token)),
+)
+check(
+  unwrapped[0] === through.NVDA && unwrapped[1] === through.SPY,
+  "the unwrap did not put the share's tokens in the position",
+)
+for (const [i, token] of tokens.entries()) {
+  const amount = unwrapped[i] ?? 0n
+  await send(
+    operator,
+    accounts.withdraw(deployments, { position: CROSS, token, amount, account: holder, receiver: holder }),
+  )
+}
+
 console.log(
   `typescript sdk: SPY band state ${quote.state} at ${quote.mid}, ` +
     `feed round ${round.roundId} answers ${round.answer}, ` +
     `seal at ${session.boundaryMs} ${sealing} (sealed ${sealedBand.sealedAt}); writePrices ${stale}; ` +
     `before authorization ${refused}; sold 1 SPY for ${sell.args.proceeds} and bought it back for ${cover.args.cost}`,
 )
+console.log(`basket PAIR: ${held}`)
+console.log(
+  `basket PAIR: unwrapped into ${unwrapped[0]} NVDA and ${unwrapped[1]} SPY in the cross position, then withdrawn`,
+)
 console.log('PASS')
+
