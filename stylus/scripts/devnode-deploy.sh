@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: devnode-deploy.sh RPC_URL PRIVATE_KEY
-# Deploys stub Chainlink aggregators for NVDA, TSLA, SPY and ETH, stub Stock Tokens for NVDA and SPY, a stub
+# Deploys stub Chainlink aggregators for NVDA, TSLA, SPY and ETH, each with a round a day over the nine days before
+# its current one, a few tenths of a percent apart, stub Stock Tokens for NVDA and SPY, a stub
 # USDG and WETH, stub NVDA/USDG and SPY/WETH pools holding the real pools' mean ticks and liquidity on
 # 28 September 2026, the SPY pool with the Stock Token as token0, a stub SPY/USDG pool at SPY's stub price, whose entry
 # gives the shorts SPY's fee tier, a stub swap router that trades NVDA and SPY for USDG at their stub prices and a stub
@@ -17,8 +18,15 @@ target=$root/stylus/target
 mkdir -p "$target"
 
 stub() {
-  forge create --root "$root/contracts" test/devnode/StubAggregator.sol:StubAggregator --rpc-url "$rpc" \
-    --private-key "$key" --broadcast --json --constructor-args 8 "$1" "$now" "$2" | jq -r .deployedTo
+  local feed day
+  feed=$(forge create --root "$root/contracts" test/devnode/StubAggregator.sol:StubAggregator --rpc-url "$rpc" \
+    --private-key "$key" --broadcast --json --constructor-args 8 "$1" $((now - 9 * 86400)) "$2" | jq -r .deployedTo)
+  for day in 8 7 6 5 4 3 2 1; do
+    cast send --rpc-url "$rpc" --private-key "$key" "$feed" "setRound(int256,uint256)" \
+      $(($1 * (10000 + (day % 2 * 2 - 1) * (20 + day * 5)) / 10000)) $((now - day * 86400)) > /dev/null
+  done
+  cast send --rpc-url "$rpc" --private-key "$key" "$feed" "setRound(int256,uint256)" "$1" "$now" > /dev/null
+  echo "$feed"
 }
 
 token() {

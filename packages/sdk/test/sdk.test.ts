@@ -30,6 +30,8 @@ import {
   decodeRevert,
   decodeRevertData,
   type Deployments,
+  gapCover,
+  gapCoverAbi,
   marginAccountsAbi,
   morpho,
   morphoBandOracleAbi,
@@ -596,6 +598,152 @@ describe('basket reads', () => {
 function withBasket(): Deployments {
   return { ...testnet, baskets: { PAIR: bob } }
 }
+
+describe('gap cover', () => {
+  const d: Deployments = { ...robinhood, tapehouse: { GapCover: bob } }
+  const layer = { notional: 10_000_000_000n, deductibleBps: 218n, limitBps: 1_218n }
+
+  test('a purchase carries its layer, its premium limit and its holder', () => {
+    const call = gapCover.buy(d, { asset: 'NVDA', ...layer, maxPremium: 13_908_962n, holder: alice })
+    expect(call.address).toBe(bob)
+    const data = encodeFunctionData(call)
+    expect(data.slice(0, 10)).toBe(toFunctionSelector('buy(bytes32,uint256,uint256,uint256,uint256,address)'))
+    expect(decodeFunctionData({ abi: gapCoverAbi, data }).args).toEqual([
+      toBytes32('NVDA'),
+      10_000_000_000n,
+      218n,
+      1_218n,
+      13_908_962n,
+      alice,
+    ])
+  })
+
+  test('a settlement names the last rounds before the close and the reopen', () => {
+    const call = gapCover.settle(d, {
+      asset: 'SPY',
+      closesMs: 1_790_985_600_000n,
+      referenceRound: (1n << 64n) | 7n,
+      lastRound: (1n << 64n) | 8n,
+    })
+    expect(decodeFunctionData({ abi: gapCoverAbi, data: encodeFunctionData(call) }).args).toEqual([
+      toBytes32('SPY'),
+      1_790_985_600_000n,
+      (1n << 64n) | 7n,
+      (1n << 64n) | 8n,
+    ])
+    expect(encodeFunctionData(gapCover.observe(d, { asset: 'SPY', closesMs: 1n })).slice(0, 10)).toBe(
+      toFunctionSelector('observe(bytes32,uint64)'),
+    )
+    expect(encodeFunctionData(gapCover.release(d, 3n)).slice(0, 10)).toBe(toFunctionSelector('release(uint256)'))
+    expect(encodeFunctionData(gapCover.claim(d, alice)).slice(0, 10)).toBe(toFunctionSelector('claim(address)'))
+    expect(encodeFunctionData(gapCover.record(d))).toBe(toFunctionSelector('record()'))
+    const measure = gapCover.measure(d, 'SPY')
+    expect(measure.address).toBe(bob)
+    expect(decodeFunctionData({ abi: gapCoverAbi, data: encodeFunctionData(measure) }).args).toEqual([toBytes32('SPY')])
+    expect(encodeFunctionData(gapCover.deposit(d, { assets: 5n, receiver: alice })).slice(0, 10)).toBe(
+      toFunctionSelector('deposit(uint256,address)'),
+    )
+    expect(encodeFunctionData(gapCover.redeem(d, { shares: 5n, receiver: alice, owner: alice })).slice(0, 10)).toBe(
+      toFunctionSelector('redeem(uint256,address,address)'),
+    )
+    expect(() => gapCover.record(parseDeployments({ chainId: 1 }))).toThrow(
+      'The registry has no .tapehouse.GapCover.',
+    )
+  })
+
+  const client = (status: number) =>
+    createClient({
+      transport: custom({
+        async request({ method, params }) {
+          if (method !== 'eth_call') throw new Error(`unexpected ${method}`)
+          const [{ to, data }] = params as [{ to: string; data: Hex }]
+          expect(to).toBe(bob)
+          const { functionName, args } = decodeFunctionData({ abi: gapCoverAbi, data })
+          if (functionName === 'quote') {
+            expect(args).toEqual([toBytes32('NVDA'), 10_000_000_000n, 218n, 1_218n])
+            return encodeFunctionResult({ abi: gapCoverAbi, functionName, result: 13_908_962n })
+          }
+          if (functionName === 'pricingGap')
+            return encodeFunctionResult({ abi: gapCoverAbi, functionName, result: [279_862n, 111_945n] })
+          if (functionName === 'series')
+            return encodeFunctionResult({
+              abi: gapCoverAbi,
+              functionName,
+              result: [10_000_000_000n, 22_244_729_849n, 22_280_257_368n, 0, status, false],
+            })
+          if (functionName === 'sales')
+            return encodeFunctionResult({
+              abi: gapCoverAbi,
+              functionName,
+              result: status === 0 ? [1_790_985_600_000n, 1_790_985_600_000n] : [0n, 0n],
+            })
+          if (functionName === 'reopenOf')
+            return encodeFunctionResult({ abi: gapCoverAbi, functionName, result: 1_789_948_800_000n })
+          if (functionName === 'covers')
+            return encodeFunctionResult({
+              abi: gapCoverAbi,
+              functionName,
+              result: [zeroAddress, 0n, 0, 0, `0x${'0'.repeat(64)}`, 0n, 0n],
+            })
+          throw new Error(`unexpected ${functionName}`)
+        },
+      }),
+    })
+
+  test('a quote reads the premium and gives the writers USDG it reserves', async () => {
+    expect(await gapCover.quote(client(0), d, 'NVDA', layer)).toEqual({
+      premium: 13_908_962n,
+      reserve: 1_000_000_000n,
+    })
+    expect(await gapCover.pricingGap(client(0), d, 'NVDA')).toEqual({ gap: 279_862n, weekMove: 111_945n })
+  })
+
+  test('the sales read the closure on sale and when they end, and nothing while none is sold', async () => {
+    expect(await gapCover.sales(client(0), d)).toEqual({
+      closesMs: 1_790_985_600_000n,
+      endsMs: 1_790_985_600_000n,
+    })
+    expect(await gapCover.sales(client(1), d)).toBeUndefined()
+  })
+
+  test('a series reads where it stands and its settlement once settled', async () => {
+    expect(await gapCover.series(client(1), d, 'NVDA', 1_789_776_000_000n)).toEqual({
+      notional: 10_000_000_000n,
+      status: 'settled',
+      settlement: { referencePrice: 22_244_729_849n, price: 22_280_257_368n },
+      flagged: false,
+      reopenMs: 1_789_948_800_000n,
+    })
+    const open = await gapCover.series(client(0), d, 'NVDA', 1_789_776_000_000n)
+    expect(open.status).toBe('open')
+    expect(open.settlement).toBeUndefined()
+    expect((await gapCover.series(client(2), d, 'NVDA', 1_789_776_000_000n)).status).toBe('void')
+    await expect(gapCover.series(client(3), d, 'NVDA', 1_789_776_000_000n)).rejects.toThrow('Unknown series status 3.')
+    expect(await gapCover.cover(client(0), d, 1n)).toBeUndefined()
+  })
+
+  test('a cover pays the fall beyond its deductible up to its limit', () => {
+    const settled = { referencePrice: 200_00000000n, price: 185_00000000n }
+    const fivePercent = { notional: 10_000_000_000n, deductibleBps: 500n, limitBps: 1_500n }
+    expect(gapCover.payout(fivePercent, settled)).toBe(250_000_000n)
+    expect(gapCover.payout(fivePercent, { ...settled, price: 190_00000000n })).toBe(0n)
+    expect(gapCover.payout(fivePercent, { ...settled, price: 210_00000000n })).toBe(0n)
+    expect(gapCover.payout(fivePercent, { ...settled, price: 100_00000000n })).toBe(1_000_000_000n)
+  })
+
+  test("the cover's reverts are decoded", () => {
+    expect(decodeRevertData(encodeErrorResult({ abi: gapCoverAbi, errorName: 'SalesClosed' }))).toEqual({
+      errorName: 'SalesClosed',
+      args: [],
+    })
+    const full = encodeErrorResult({ abi: gapCoverAbi, errorName: 'NoCapacity', args: [2n, 1n] })
+    expect(decodeRevertData(full)).toEqual({ errorName: 'NoCapacity', args: [2n, 1n] })
+    const stale = encodeErrorResult({ abi: gapCoverAbi, errorName: 'StaleReference', args: [267n, 268n] })
+    expect(decodeRevertData(stale)).toEqual({ errorName: 'StaleReference', args: [267n, 268n] })
+    const early = encodeErrorResult({ abi: gapCoverAbi, errorName: 'TooEarlyToMeasure', args: [1_790_899_200_000n] })
+    expect(decodeRevertData(early)).toEqual({ errorName: 'TooEarlyToMeasure', args: [1_790_899_200_000n] })
+  })
+})
 
 function testnetWithShorts(): Deployments {
   return { ...testnet, tapehouse: { ...testnet.tapehouse, ShortPositions: bob } }

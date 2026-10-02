@@ -31,6 +31,7 @@ static ERRORS: LazyLock<HashMap<Selector, AbiError>> = LazyLock::new(|| {
     let mut errors = HashMap::new();
     for json in [
         include_str!("../abi/ShortPositions.json"),
+        include_str!("../abi/GapCover.json"),
         include_str!("../abi/MarginAccounts.json"),
         include_str!("../abi/Basket.json"),
         include_str!("../abi/BandFeed.json"),

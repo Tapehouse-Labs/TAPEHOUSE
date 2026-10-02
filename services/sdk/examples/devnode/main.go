@@ -4,7 +4,9 @@
 // PackageSource and decodes the band's refusal of their age, then authorizes a fresh address in the margin accounts,
 // which sells 1 SPY short for the account at a QuoterV2 quote and buys it back. Then it mints 1 share of the basket
 // PAIR for the fresh address, which deposits it into its cross position, reads it there as NVDA and SPY, unwraps it and
-// withdraws them.
+// withdraws them. Last, it writes gap cover with 1,000 USDG and quotes 1,000 USDG of SPY cover from its smallest
+// deductible: it buys it while the cover's sales are open and reads the series, and otherwise decodes the cover's
+// refusal.
 //
 // Usage: PRIVATE_KEY=0x… go run ./sdk/examples/devnode RPC_URL DEPLOYMENTS_JSON PAYLOAD_FILE
 package main
@@ -29,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/tapehouse/tapehouse/services/sdk"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/basket"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/gapcover"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/marginaccounts"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/shortpositions"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocktoken"
@@ -180,10 +183,37 @@ func main() {
 		send(operator, must(accounts.Withdraw(sdk.Cross, token, unwrapped[i], holder, holder)), nil)
 	}
 
+	gapCover := client.GapCover()
+	writing := big.NewInt(1_000_000_000)
+	coverAddress := deployments.Tapehouse["GapCover"]
+	allowance := new(big.Int).Mul(writing, big.NewInt(2))
+	send(owner, sdk.Tx{To: usdgAddress, Data: must(usdg.NewUsdg().TryPackApprove(coverAddress, allowance))}, nil)
+	send(owner, must(gapCover.Deposit(writing, account)), nil)
+	deductible := must(gapCover.MinDeductible(latest, "SPY"))
+	layer := sdk.Layer{Notional: writing, DeductibleBps: deductible, LimitBps: new(big.Int).Add(deductible, big.NewInt(500))}
+	offer := must(gapCover.Quote(latest, "SPY", layer))
+	check(offer.Premium.Sign() > 0 && offer.Reserve.Cmp(big.NewInt(50_000_000)) == 0,
+		"the quote %+v is not a premium over a reserve of 5%%", offer)
+	sales, onSale, err := gapCover.Sales(latest)
+	check(err == nil, "the sales: %v", err)
+	purchase := must(gapCover.Buy("SPY", layer, offer.Premium, account))
+	outcome := "SalesClosed()"
+	if err := client.Simulate(&bind.CallOpts{Context: ctx, From: account}, purchase); err != nil {
+		check(refusal(err).Name == "SalesClosed", "a purchase outside the sales reverted with %v", err)
+		check(!onSale, "the sales %+v were open and the purchase refused", sales)
+	} else {
+		bought := event(send(owner, purchase, nil), gapcover.NewGapCover().UnpackBoughtEvent)
+		check(bought.Premium.Cmp(offer.Premium) == 0, "the cover was sold for %v, quoted at %v", bought.Premium, offer.Premium)
+		series := must(gapCover.Series(latest, "SPY", bought.ClosesMs))
+		check(series.Status == sdk.SeriesOpen && series.Notional.Cmp(writing) >= 0, "the series %+v does not hold the cover", series)
+		check(onSale && sales.ClosesMs == bought.ClosesMs, "the sales %+v did not name the series the cover joined", sales)
+		outcome = fmt.Sprintf("bought for %v, series over %d open", offer.Premium, bought.ClosesMs)
+	}
+
 	fmt.Printf("go sdk: SPY band state %d at %d, feed round %v answers %v, seal at %d %s (sealed %d); writePrices %v; "+
-		"before authorization %v; sold 1 SPY for %v and bought it back for %v\n",
+		"before authorization %v; sold 1 SPY for %v and bought it back for %v; SPY gap cover from %v bps quoted at %v: %s\n",
 		quote.State, quote.Mid, round.RoundID, round.Answer, session.BoundaryMs, sealing, sealed.SealedAt, stale,
-		refused, sell.Proceeds, cover.Cost)
+		refused, sell.Proceeds, cover.Cost, deductible, offer.Premium, outcome)
 	fmt.Printf("basket PAIR: %v shares in the cross position hold %v NVDA and %v SPY; equity %v requirement %v\n",
 		shares, through["NVDA"], through["SPY"], margined.Equity, margined.Requirement)
 	fmt.Printf("basket PAIR: unwrapped into %v NVDA and %v SPY in the cross position, then withdrawn\n", unwrapped[0], unwrapped[1])

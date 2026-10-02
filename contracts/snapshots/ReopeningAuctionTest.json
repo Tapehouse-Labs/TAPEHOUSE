@@ -1,8 +1,8 @@
 {
   "claim": "137953",
-  "clear": "647905",
-  "clearLargest": "5804629",
+  "clear": "647861",
+  "clearLargest": "5803925",
   "commit": "145147",
-  "enroll": "354049",
+  "enroll": "354027",
   "reveal": "148341"
 }

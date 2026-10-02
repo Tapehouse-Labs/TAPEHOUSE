@@ -7,11 +7,11 @@ use alloy::rpc::json_rpc::ErrorPayload;
 use alloy::sol_types::{Revert as SolidityRevert, SolCall, SolError, SolEvent, SolValue};
 use alloy::transports::mock::Asserter;
 use tapehouse_sdk::bindings::{
-    Band, BandFeed, Basket, MarginAccounts, MorphoBandOracle, ShortPositions, StockToken,
+    Band, BandFeed, Basket, GapCover, MarginAccounts, MorphoBandOracle, ShortPositions, StockToken,
 };
 use tapehouse_sdk::{
-    CROSS, Deployments, Error, NoPrice, OraclePrice, PackageSource, Tapehouse, decode_revert_data,
-    to_bytes32,
+    CROSS, Deployments, Error, Layer, NoPrice, OraclePrice, PackageSource, PricingGap, Sales,
+    SeriesStatus, Tapehouse, decode_revert_data, payout, to_bytes32,
 };
 
 const ALICE: Address = address!("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
@@ -785,4 +785,237 @@ async fn what_a_position_holds_through_its_baskets_is_read_by_asset_at_one_block
         ]
     );
     assert!(asserter.read_q().is_empty());
+}
+
+fn layer() -> Layer {
+    Layer {
+        notional: U256::from(10_000_000_000u64),
+        deductible_bps: U256::from(218),
+        limit_bps: U256::from(1_218),
+    }
+}
+
+#[test]
+fn a_gap_cover_purchase_carries_its_layer_its_premium_limit_and_its_holder() {
+    let mut deployments = registry(4663);
+    deployments.tapehouse.insert("GapCover".into(), BOB);
+    let cover = offline(deployments).gap_cover().unwrap();
+    let l = layer();
+    let buy = cover.buy(
+        b32("NVDA"),
+        l.notional,
+        l.deductible_bps,
+        l.limit_bps,
+        U256::from(13_908_962),
+        ALICE,
+    );
+    let decoded = GapCover::buyCall::abi_decode(buy.calldata()).unwrap();
+    assert_eq!(
+        (
+            decoded.symbol,
+            decoded.notional,
+            decoded.deductibleBps,
+            decoded.limitBps,
+            decoded.maxPremium,
+            decoded.holder
+        ),
+        (
+            b32("NVDA"),
+            l.notional,
+            l.deductible_bps,
+            l.limit_bps,
+            U256::from(13_908_962),
+            ALICE
+        )
+    );
+    let reference = alloy::primitives::aliases::U80::from((1u128 << 64) | 7);
+    let last = alloy::primitives::aliases::U80::from((1u128 << 64) | 8);
+    let settle = cover.settle(b32("SPY"), 1_790_985_600_000, reference, last);
+    let decoded = GapCover::settleCall::abi_decode(settle.calldata()).unwrap();
+    assert_eq!(
+        (
+            decoded.symbol,
+            decoded.closesMs,
+            decoded.referenceRound,
+            decoded.lastRound
+        ),
+        (b32("SPY"), 1_790_985_600_000, reference, last)
+    );
+    let measure = cover.measure(b32("SPY"));
+    assert_eq!(
+        GapCover::measureCall::abi_decode(measure.calldata())
+            .unwrap()
+            .symbol,
+        b32("SPY")
+    );
+    assert_eq!(*cover.address(), BOB);
+    assert_eq!(
+        offline(Deployments::parse(r#"{"chainId":1}"#).unwrap())
+            .gap_cover()
+            .unwrap_err()
+            .to_string(),
+        "the registry has no .tapehouse.GapCover"
+    );
+}
+
+#[tokio::test]
+async fn a_gap_cover_quote_reads_the_premium_and_gives_the_writers_usdg_it_reserves() {
+    let asserter = Asserter::new();
+    let mut deployments = registry(4663);
+    deployments.tapehouse.insert("GapCover".into(), BOB);
+    let tapehouse = Tapehouse::new(
+        ProviderBuilder::new().connect_mocked_client(asserter.clone()),
+        deployments,
+    );
+    asserter.push_success(&Bytes::from(U256::from(13_908_962).abi_encode()));
+    let quote = tapehouse.quote_gap_cover("NVDA", layer()).await.unwrap();
+    assert_eq!(
+        (quote.premium, quote.reserve),
+        (U256::from(13_908_962), U256::from(1_000_000_000u64))
+    );
+    asserter.push_success(&Bytes::from(
+        (U256::from(279_862), U256::from(111_945)).abi_encode_params(),
+    ));
+    assert_eq!(
+        tapehouse.gap_cover_pricing_gap("NVDA").await.unwrap(),
+        PricingGap {
+            gap: U256::from(279_862),
+            week_move: U256::from(111_945)
+        }
+    );
+}
+
+#[tokio::test]
+async fn a_series_reads_where_it_stands_and_its_settlement_at_one_block() {
+    let asserter = Asserter::new();
+    let mut deployments = registry(4663);
+    deployments.tapehouse.insert("GapCover".into(), BOB);
+    let tapehouse = Tapehouse::new(
+        ProviderBuilder::new().connect_mocked_client(asserter.clone()),
+        deployments,
+    );
+    for status in [1u8, 2, 3] {
+        asserter.push_success(&U64::from(7));
+        asserter.push_success(&Bytes::from(GapCover::seriesCall::abi_encode_returns(
+            &GapCover::seriesReturn {
+                notional: 10_000_000_000,
+                referencePrice: 22_244_729_849,
+                price: 22_280_257_368,
+                shift: 0,
+                status,
+                flagged: false,
+            },
+        )));
+        if status < 3 {
+            asserter.push_success(&Bytes::from(U256::from(1_789_948_800_000u64).abi_encode()));
+        }
+    }
+    let series = tapehouse
+        .gap_cover_series("NVDA", 1_789_776_000_000)
+        .await
+        .unwrap();
+    assert_eq!(series.status, SeriesStatus::Settled);
+    assert_eq!(
+        (series.reference_price, series.price, series.flagged),
+        (22_244_729_849, 22_280_257_368, false)
+    );
+    assert_eq!(
+        (series.notional, series.reopen_ms),
+        (
+            U256::from(10_000_000_000u64),
+            U256::from(1_789_948_800_000u64)
+        )
+    );
+    let void = tapehouse.gap_cover_series("NVDA", 1).await.unwrap();
+    assert_eq!(void.status, SeriesStatus::Void);
+    assert_eq!(
+        tapehouse
+            .gap_cover_series("NVDA", 1)
+            .await
+            .unwrap_err()
+            .to_string(),
+        "unknown series status 3"
+    );
+    assert!(asserter.read_q().is_empty());
+}
+
+#[tokio::test]
+async fn the_gap_cover_sales_read_the_closure_on_sale_and_when_they_end() {
+    let asserter = Asserter::new();
+    let mut deployments = registry(4663);
+    deployments.tapehouse.insert("GapCover".into(), BOB);
+    let tapehouse = Tapehouse::new(
+        ProviderBuilder::new().connect_mocked_client(asserter.clone()),
+        deployments,
+    );
+    for (closes, ends) in [(1_790_985_600_000u64, 1_790_985_600_000u64), (0, 0)] {
+        asserter.push_success(&Bytes::from(GapCover::salesCall::abi_encode_returns(
+            &GapCover::salesReturn {
+                closesMs: closes,
+                endsMs: ends,
+            },
+        )));
+    }
+    assert_eq!(
+        tapehouse.gap_cover_sales().await.unwrap(),
+        Some(Sales {
+            closes_ms: 1_790_985_600_000,
+            ends_ms: 1_790_985_600_000
+        })
+    );
+    assert_eq!(tapehouse.gap_cover_sales().await.unwrap(), None);
+}
+
+#[test]
+fn a_gap_cover_pays_the_fall_beyond_its_deductible_up_to_its_limit() {
+    let layer = Layer {
+        notional: U256::from(10_000_000_000u64),
+        deductible_bps: U256::from(500),
+        limit_bps: U256::from(1_500),
+    };
+    for (price, paid) in [
+        (210e8 as u64, 0u64),
+        (200e8 as u64, 0),
+        (190e8 as u64, 0),
+        (185e8 as u64, 250_000_000),
+        (100e8 as u64, 1_000_000_000),
+    ] {
+        assert_eq!(
+            payout(layer, 200e8 as u64, price),
+            U256::from(paid),
+            "{price}"
+        );
+    }
+    let full = GapCover::NoCapacity {
+        need: U256::from(2),
+        free: U256::from(1),
+    }
+    .abi_encode();
+    assert_eq!(
+        decode_revert_data(&full).unwrap().to_string(),
+        "NoCapacity(2, 1)"
+    );
+    assert_eq!(
+        decode_revert_data(&GapCover::SalesClosed {}.abi_encode())
+            .unwrap()
+            .name,
+        "SalesClosed"
+    );
+    let stale = GapCover::StaleReference {
+        deductibleBps: U256::from(267),
+        minimum: U256::from(268),
+    }
+    .abi_encode();
+    assert_eq!(
+        decode_revert_data(&stale).unwrap().to_string(),
+        "StaleReference(267, 268)"
+    );
+    let early = GapCover::TooEarlyToMeasure {
+        fromMs: U256::from(1_790_899_200_000u64),
+    }
+    .abi_encode();
+    assert_eq!(
+        decode_revert_data(&early).unwrap().to_string(),
+        "TooEarlyToMeasure(1790899200000)"
+    );
 }

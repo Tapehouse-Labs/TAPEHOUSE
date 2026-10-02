@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import type { McpServer } from '@modelcontextprotocol/server'
-import { accounts, baskets, shorts } from '@tapehouse/sdk'
+import { accounts, baskets, gapCover, gapCoverAbi, shorts } from '@tapehouse/sdk'
 import {
   type Abi,
   type Address,
   encodeFunctionData,
   type EncodeFunctionDataParameters,
   erc20Abi,
+  hexToString,
   maxUint256,
 } from 'viem'
-import { getBlockNumber, readContract } from 'viem/actions'
+import { getBlockNumber, readContract, simulateContract } from 'viem/actions'
 import * as z from 'zod'
 import {
   address,
@@ -17,10 +18,13 @@ import {
   asset,
   basket,
   basketAddress,
+  bps,
   byAsset,
   checksummed,
   collateralAddress,
   type Context,
+  explainRevert,
+  gapCoverAddress,
   position,
   positionId,
   shares,
@@ -522,6 +526,230 @@ export function registerTransactions(server: McpServer, context: Context) {
         calls: [call(cover)],
         quote: { amount, ...buyBack, slippageBps: args.slippageBps },
       }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'gap_cover_buy',
+    {
+      title: 'Buy gap cover',
+      description:
+        "Prepares a purchase of gap cover on an asset for holder over the coming closure, paying notional times the asset's fall from its last Chainlink round before the close to its reopening price beyond deductibleBps, up to limitBps. Its maxPremium is the cover's quote at this block, so it reverts with PremiumAboveLimit rather than pay more, and from's USDG is approved for exactly that premium where its allowance is short. Refused while no cover is on sale, as the purchase would revert with SalesClosed. The cover is held by holder and cannot be transferred.",
+      input: z.strictObject({
+        from: address('The address that pays the premium and signs.'),
+        asset,
+        notional: units('The notional, in USDG base units (6 decimals).'),
+        deductibleBps: bps("The fall the cover pays beyond, in basis points: at least the quote's minDeductibleBps."),
+        limitBps: bps('The fall the cover pays up to, in basis points: above the deductible, at most 10000.'),
+        holder: address('Who holds the cover and is credited its payout.'),
+      }),
+      output: prepared.extend({
+        quote: z.object({ premium: uint, reserve: uint, closesMs: uint, endsMs: uint }),
+      }),
+      openWorld: true,
+    },
+    async (args) => {
+      const cover = gapCoverAddress(d)
+      const from = checksummed(args.from)
+      const blockNumber = await getBlockNumber(client, { cacheTime: 0 })
+      const sales = await gapCover.sales(client, d, { blockNumber })
+      if (sales === undefined)
+        throw new Error(
+          `No cover is on sale at block ${blockNumber}: the purchase would revert with ${explainRevert({ errorName: 'SalesClosed', args: [] })}. gap_cover_sales reads whether it is.`,
+        )
+      const layer = {
+        notional: BigInt(args.notional),
+        deductibleBps: BigInt(args.deductibleBps),
+        limitBps: BigInt(args.limitBps),
+      }
+      const offer = await gapCover.quote(client, d, args.asset, layer, { blockNumber })
+      const purchase = gapCover.buy(d, {
+        asset: args.asset,
+        ...layer,
+        maxPremium: offer.premium,
+        holder: checksummed(args.holder),
+      })
+      return {
+        chainId,
+        signer: from,
+        quote: { ...offer, ...sales },
+        calls: await approved(context, from, cover, [[tokenAddress(d, 'USDG'), offer.premium]], purchase, blockNumber),
+      }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'gap_cover_release',
+    {
+      title: 'Release a gap cover',
+      description:
+        "Prepares the release of cover id once its series has settled or is void, which anyone may send: it credits the holder the payout, or the premium of a void series, frees the writers' reserve and adds the premium less the payout to their USDG. The holder then claims with gap_cover_claim. Refused before the series settles, as the release would revert with NotSettled.",
+      input: z.strictObject({ id: units('The cover, as Bought numbered it.') }),
+      output: prepared.extend({ holder: z.string(), payout: uint, refund: uint }),
+      openWorld: true,
+    },
+    async (args) => {
+      gapCoverAddress(d)
+      const id = BigInt(args.id)
+      const blockNumber = await getBlockNumber(client, { cacheTime: 0 })
+      const held = await gapCover.cover(client, d, id, { blockNumber })
+      if (held === undefined)
+        throw new Error(
+          `Cover ${id} does not exist or has been released: the release would revert with ${explainRevert({ errorName: 'NoCover', args: [id] })}.`,
+        )
+      const asset = hexToString(held.symbol, { size: 32 })
+      const series = await gapCover.series(client, d, asset, held.closesMs, { blockNumber })
+      if (series.status === 'open')
+        throw new Error(
+          `Cover ${id}'s series has not settled: the release would revert with ${explainRevert({ errorName: 'NotSettled', args: [id] })}.`,
+        )
+      return {
+        chainId,
+        signer: 'anyone',
+        holder: held.holder,
+        payout: series.settlement === undefined ? 0n : gapCover.payout(held, series.settlement),
+        refund: series.status === 'void' ? held.premium : 0n,
+        calls: [call(gapCover.release(d, id))],
+      }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'gap_cover_claim',
+    {
+      title: 'Claim gap cover credits',
+      description:
+        'Prepares the claim of the USDG credited to holder by its released covers, sent to receiver. The holder signs it. Refused while nothing is credited.',
+      input: z.strictObject({
+        holder: address('The holder the credits are owed to, who signs.'),
+        receiver: address('Who receives the USDG.'),
+      }),
+      output: prepared.extend({ amount: uint.describe('The USDG the claim sends, in base units.') }),
+      openWorld: true,
+    },
+    async (args) => {
+      gapCoverAddress(d)
+      const holder = checksummed(args.holder)
+      const amount = await gapCover.payouts(client, d, holder)
+      if (amount === 0n) throw new Error(`Nothing is credited to ${holder}.`)
+      return { chainId, signer: holder, amount, calls: [call(gapCover.claim(d, checksummed(args.receiver)))] }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'gap_cover_deposit',
+    {
+      title: 'Write gap cover',
+      description:
+        "Prepares a deposit of from's USDG into the gap cover's writers' vault, for shares to receiver, preceded by an approval for exactly that amount where from's allowance is short. Every cover reserves its whole payout from the writers' USDG, and their premiums join it at release. Deposits are open only before the sales end, while every outstanding cover is over the coming closure: refused beyond what the vault takes now.",
+      input: z.strictObject({
+        from: address('The address that sends the USDG and signs.'),
+        assets: units('The USDG, in base units (6 decimals).'),
+        receiver: address('Who receives the shares.'),
+      }),
+      output: prepared.extend({ shares: uint.describe('The shares the deposit mints at this block, 12 decimals.') }),
+      openWorld: true,
+    },
+    async (args) => {
+      const cover = gapCoverAddress(d)
+      const from = checksummed(args.from)
+      const receiver = checksummed(args.receiver)
+      const assets = BigInt(args.assets)
+      const blockNumber = await getBlockNumber(client, { cacheTime: 0 })
+      const vault = { address: cover, abi: gapCoverAbi, blockNumber } as const
+      const [most, shares] = await Promise.all([
+        readContract(client, { ...vault, functionName: 'maxDeposit', args: [receiver] }),
+        readContract(client, { ...vault, functionName: 'previewDeposit', args: [assets] }),
+      ])
+      if (assets > most)
+        throw new Error(
+          `The vault takes at most ${most} now: the deposit would revert with ${explainRevert({ errorName: 'ERC4626ExceededMaxDeposit', args: [receiver, assets, most] })}.`,
+        )
+      const deposit = gapCover.deposit(d, { assets, receiver })
+      return {
+        chainId,
+        signer: from,
+        shares,
+        calls: await approved(context, from, cover, [[tokenAddress(d, 'USDG'), assets]], deposit, blockNumber),
+      }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'gap_cover_redeem',
+    {
+      title: "Redeem a writer's shares",
+      description:
+        "Prepares a redemption of owner's shares of the gap cover's writers' vault for USDG to receiver, signed by owner or an address it allowed to spend them. Redemptions wait until every cover is released: refused beyond what owner may redeem now.",
+      input: z.strictObject({
+        shares: units('The shares, in base units (12 decimals).'),
+        receiver: address('Who receives the USDG.'),
+        owner: address('Whose shares are redeemed.'),
+      }),
+      output: prepared.extend({ assets: uint.describe('The USDG the redemption gives at this block, in base units.') }),
+      openWorld: true,
+    },
+    async (args) => {
+      const cover = gapCoverAddress(d)
+      const owner = checksummed(args.owner)
+      const shares = BigInt(args.shares)
+      const blockNumber = await getBlockNumber(client, { cacheTime: 0 })
+      const vault = { address: cover, abi: gapCoverAbi, blockNumber } as const
+      const [most, assets] = await Promise.all([
+        readContract(client, { ...vault, functionName: 'maxRedeem', args: [owner] }),
+        readContract(client, { ...vault, functionName: 'previewRedeem', args: [shares] }),
+      ])
+      if (shares > most)
+        throw new Error(
+          `${owner} may redeem at most ${most} shares now: the redemption would revert with ${explainRevert({ errorName: 'ERC4626ExceededMaxRedeem', args: [owner, shares, most] })}.`,
+        )
+      return {
+        chainId,
+        signer: `${owner}, or an address it allowed to spend the shares`,
+        assets,
+        calls: [call(gapCover.redeem(d, { shares, receiver: checksummed(args.receiver), owner }))],
+      }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'gap_cover_measure',
+    {
+      title: "Measure an asset's week",
+      description:
+        "Prepares the measurement of an asset's week for the closure on sale, which anyone may send: the cover keeps the realised move of the trading week before the close, which its series' covers are priced at, so that the series' first buyer does not pay for reading it from the feed. Gives the move, in millionths. Refused outside the sales, as the measurement would revert with SalesClosed, and before the week's last day, a day before the close, has passed (TooEarlyToMeasure).",
+      input: z.strictObject({ asset }),
+      output: prepared.extend({
+        closesMs: uint.describe('The close that keys the series, in milliseconds.'),
+        weekMove: uint.describe(
+          'The realised move of the week before the close, in millionths; 18446744073709551615 for a week the feed cannot show.',
+        ),
+      }),
+      openWorld: true,
+    },
+    async (args) => {
+      gapCoverAddress(d)
+      const blockNumber = await getBlockNumber(client, { cacheTime: 0 })
+      const sales = await gapCover.sales(client, d, { blockNumber })
+      if (sales === undefined)
+        throw new Error(
+          `No cover is on sale at block ${blockNumber}: the measurement would revert with ${explainRevert({ errorName: 'SalesClosed', args: [] })}. gap_cover_sales reads whether it is.`,
+        )
+      const measure = gapCover.measure(d, args.asset)
+      const { result } = await simulateContract(client, { ...measure, blockNumber })
+      return { chainId, signer: 'anyone', closesMs: sales.closesMs, weekMove: result, calls: [call(measure)] }
     },
   )
 }

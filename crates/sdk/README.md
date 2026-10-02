@@ -1,6 +1,6 @@
 # tapehouse-sdk
 
-Typed reads and transactions for [Tapehouse](https://github.com/Tapehouse-Labs/TAPEHOUSE)'s price band, its feeds, the margin accounts, the baskets, the short positions and the Morpho oracles, on [alloy](https://alloy.rs).
+Typed reads and transactions for [Tapehouse](https://github.com/Tapehouse-Labs/TAPEHOUSE)'s price band, its feeds, the margin accounts, the baskets, the short positions, the Morpho oracles and the gap cover, on [alloy](https://alloy.rs).
 
 ```toml
 [dependencies]
@@ -26,14 +26,15 @@ let receipt = tapehouse
     .await?;
 ```
 
-- `band`, `band_feed`, `accounts`, `basket`, `shorts`, `usdg`, `stock_token`, `token_price` and `share_price`: the contracts, at the registry's addresses. A `.chainlink` feed is typed by what it prices: `TokenPriceFeed` on Robinhood Chain, `SharePriceFeed` on Arbitrum One.
+- `band`, `band_feed`, `accounts`, `basket`, `shorts`, `gap_cover`, `usdg`, `stock_token`, `token_price` and `share_price`: the contracts, at the registry's addresses. A `.chainlink` feed is typed by what it prices: `TokenPriceFeed` on Robinhood Chain, `SharePriceFeed` on Arbitrum One.
 - `morpho_oracle` and `oracle_price`: an asset's Morpho oracle from `.morphoOracles`, and its `price()` as `OraclePrice`: a price, or no price, never zero, where it reverts with `NoAnswer` or `SequencerNotSettled`, with the reason (`NoPrice::Stale`, `Halted` or `SequencerNotSettled`) read at one block.
 - `write_prices`: the band's `writePrices`, with the signed RedStone packages a `PackageSource` of your own supplies. The crate holds no API key.
 - `quote_sale` and `quote_cover`: the limits of a sale and a buy-back, from Uniswap's QuoterV2, with a slippage of 0 to 10,000 basis points.
+- `quote_gap_cover`, `gap_cover_pricing_gap` and `gap_cover_series`: a gap cover's premium with the writers' USDG it reserves, the weekend gap it prices at, which follows the week before the close, and a series as open, settled with its reference and reopening prices, or void, read at one block; `payout`, what a settled cover pays.
 - `repayment`: the debt and premium a full repayment takes, both read at one block; `collateral`, `leverage` and `liquidation_price` of a position.
 - `unwrap` of a basket in a cross position, `in_baskets`, what a position holds of each Stock Token through its baskets, read at one block, and a basket's `basket_components`, `preview_mint`, `preview_redeem`, `basket_target` and `pending_target`. A basket's address deposits and withdraws its shares, in the cross position alone.
-- `Error`: `Registry`, `Argument` (a slippage above 10,000 basis points, or a name longer than 32 bytes), `Revert`, `Contract` and `Source`, with the underlying error as its `source()`.
-- `decode_revert` and `Error::Revert`: the name and arguments of any revert of the contracts, the baskets, the band, the Stock Tokens, USDG, or Solidity's `Error(string)` and `Panic`.
+- `Error`: `Registry`, `Argument` (a slippage above 10,000 basis points, or a name longer than 32 bytes), `Revert`, `Unexpected` (a read the crate does not know), `Contract` and `Source`, with the underlying error as its `source()`.
+- `decode_revert` and `Error::Revert`: the name and arguments of any revert of the contracts, the baskets, the gap cover, the band, the Stock Tokens, USDG, or Solidity's `Error(string)` and `Panic`.
 
 `examples/devnode.rs` runs all of it against a local Nitro dev node; it reads the account owner's key from `PRIVATE_KEY` in its environment, never from its command line.
 

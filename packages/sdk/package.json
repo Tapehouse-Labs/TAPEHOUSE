@@ -1,7 +1,7 @@
 {
   "name": "@tapehouse/sdk",
   "version": "0.1.0",
-  "description": "Typed reads and transactions for Tapehouse's price band, margin accounts, baskets and short positions, on viem.",
+  "description": "Typed reads and transactions for Tapehouse's price band, margin accounts, baskets, short positions and gap cover, on viem.",
   "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",

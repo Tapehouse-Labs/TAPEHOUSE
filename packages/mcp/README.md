@@ -1,6 +1,6 @@
 # @tapehouse/mcp
 
-A [Model Context Protocol](https://modelcontextprotocol.io) server through which an AI agent reads [Tapehouse](https://github.com/Tapehouse-Labs/TAPEHOUSE)'s price band, its feeds, the Morpho oracles, the baskets of Stock Tokens, the margin accounts and the short positions, and prepares their transactions for a wallet to sign. It never holds a key.
+A [Model Context Protocol](https://modelcontextprotocol.io) server through which an AI agent reads [Tapehouse](https://github.com/Tapehouse-Labs/TAPEHOUSE)'s price band, its feeds, the Morpho oracles, the baskets of Stock Tokens, the margin accounts, the short positions and the gap cover, and prepares their transactions for a wallet to sign. It never holds a key.
 
 Built on the official TypeScript SDK, `@modelcontextprotocol/server`, for the 2026-07-28 specification; it serves clients of the 2025 revisions too. Every read and call goes through `@tapehouse/sdk`.
 
@@ -51,12 +51,18 @@ Every tool is read-only: the reads take the chain's state at one block and name 
 | `accounts_collateral`, `accounts_leverage` | What a margin position holds of a token or of a basket's shares, and its leverage |
 | `accounts_liquidation_price`, `accounts_repayment`, `accounts_is_authorized` | The price at which a position falls short once it borrows more, what repays it, and whether an address may act for an account |
 | `shorts_position`, `shorts_health`, `shorts_restriction` | A short, its health at the band's high edge, and the short-sale restriction after a 10% fall |
+| `gap_cover_sales`, `gap_cover_quote` | Whether gap cover is on sale, for which closure and until when; and a cover's premium with the writers' USDG it reserves, its smallest deductible, and the weekend gap it prices at, which follows the week's realised move, with that move |
+| `gap_cover_series`, `gap_cover_position`, `gap_cover_vault` | A series as open, settled with its reference and reopening prices, or void; a cover with what its release credits and the holder's unclaimed USDG; and the writers' vault, with a writer's shares and what it may deposit and redeem now |
 | `accounts_set_authorization` | The call with which an account lets an address, such as an agent's own wallet, act for it, with `grants`, everything that lets it do; or the call that stops it |
 | `accounts_deposit`, `accounts_withdraw`, `accounts_borrow`, `accounts_repay` | The margin accounts' calls, a deposit or repayment preceded by an approval where the allowance is short; a basket's key deposits and withdraws its shares, in the cross position alone |
 | `accounts_unwrap` | The call that redeems a basket's shares in a cross position into the Stock Tokens they hold, which the position then holds at the same equity and requirement |
 | `baskets_mint`, `baskets_redeem` | A mint of a basket's shares paid in kind, its `maxAssets` what `baskets_preview_mint` reads, each Stock Token approved for exactly its part where the allowance is short; and a redemption in kind, with what it gives |
 | `shorts_deposit`, `shorts_withdraw` | The USDG of a short, in and out |
 | `shorts_sell`, `shorts_cover` | A short sale and a buy-back, their limits Uniswap QuoterV2's quote less or plus the slippage the caller states, within the server's cap; `max` buys back all a short owes |
+| `gap_cover_buy` | A purchase of gap cover, its `maxPremium` the quote at the block it reads, the premium approved in USDG for exactly that where the allowance is short; refused with `SalesClosed` outside the sales |
+| `gap_cover_release`, `gap_cover_claim` | The release of a settled or void cover, which anyone may send, with the payout or refund it credits; and the holder's claim of its credits |
+| `gap_cover_deposit`, `gap_cover_redeem` | A writer's deposit, approved for exactly its USDG, and redemption, each refused beyond what the vault takes now: deposits close at the sales' end, redemptions wait for every cover's release |
+| `gap_cover_measure` | The measurement of an asset's week for the closure on sale, which anyone may send, with the move the series keeps, so that its first buyer does not pay for reading it; refused with `SalesClosed` outside the sales and with `TooEarlyToMeasure` before the week's last day has passed |
 
 A prepared transaction names its signer and lists its calls in order, each with `to`, `data`, `value`, the function and its arguments by name. An agent that borrows, withdraws or trades for an account needs the account's `setAuthorization` first: the margin accounts and the shorts revert with `Unauthorized(caller, account)` until then, and the server explains every revert by name and arguments.
 

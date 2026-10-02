@@ -8,8 +8,8 @@ use alloy::primitives::{Address, B256, Bytes, U256, aliases::U24};
 use alloy::providers::Provider;
 
 use crate::bindings::{
-    Aggregator, Band, BandFeed, Basket, IQuoterV2, MarginAccounts, MorphoBandOracle, QuoterV2,
-    ShortPositions, StockToken, Usdg,
+    Aggregator, Band, BandFeed, Basket, GapCover, IQuoterV2, MarginAccounts, MorphoBandOracle,
+    QuoterV2, ShortPositions, StockToken, Usdg,
 };
 use crate::deployments::{Deployments, SharePriceFeed, TokenPriceFeed, entry, to_bytes32};
 use crate::{Error, Result, Revert};
@@ -97,6 +97,93 @@ pub struct PendingTarget {
     pub units: Vec<U256>,
     /// When they take effect.
     pub effective_at: u64,
+}
+
+/// The layer a gap cover pays: the fall beyond `deductible_bps`, up to `limit_bps`, on `notional` USDG.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Layer {
+    /// The cover's notional, in USDG.
+    pub notional: U256,
+    /// The fall it pays beyond, in basis points.
+    pub deductible_bps: U256,
+    /// The fall it pays up to, in basis points.
+    pub limit_bps: U256,
+}
+
+/// A gap cover's premium at the weekend gap of `PricingGap` and the band's centre now, and the writers' USDG it
+/// reserves.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CoverQuote {
+    /// The premium, in USDG: the buy's `maxPremium` at most.
+    pub premium: U256,
+    /// What the cover reserves of the writers' USDG: its notional times its limit less its deductible.
+    pub reserve: U256,
+}
+
+/// The weekend gap the gap cover prices an asset at, and the realised move of the trading week before the close on sale
+/// that it follows, both in millionths: during the sales twice the move, at least 55% of the engine's gap and at most
+/// eight times it; outside them the engine's gap and a move of zero. A move of 2^64 - 1 is a week the feed cannot show,
+/// which prices at the most.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PricingGap {
+    /// The weekend gap the cover prices at.
+    pub gap: U256,
+    /// The realised move of the week before the close on sale.
+    pub week_move: U256,
+}
+
+/// Where a gap cover series stands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SeriesStatus {
+    /// Still to settle.
+    Open,
+    /// Settled at its reopening price.
+    Settled,
+    /// Void, because it could not settle on a price the band vouched for or no one settled it within a week: its
+    /// covers refund their premiums.
+    Void,
+}
+
+/// An asset's gap cover series over one closure.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Series {
+    /// The notional covered, in USDG.
+    pub notional: U256,
+    /// Where it stands.
+    pub status: SeriesStatus,
+    /// The reference price, in USD with 8 decimals, once settled.
+    pub reference_price: u64,
+    /// The reopening price, in USD with 8 decimals, once settled.
+    pub price: u64,
+    /// Whether it settled on the band's median centre rather than the first round.
+    pub flagged: bool,
+    /// Its reopen, in milliseconds; zero while not recorded.
+    pub reopen_ms: U256,
+}
+
+/// The closure on sale: the close that keys its series and when its sales end, in milliseconds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Sales {
+    /// The close that keys the series of the closure on sale.
+    pub closes_ms: u64,
+    /// When its sales end.
+    pub ends_ms: u64,
+}
+
+/// What a gap cover paying `layer` pays once its series settled at `price` against `reference_price`: its notional
+/// times the fall beyond its deductible, up to its limit, before any shortfall a wipe leaves.
+pub fn payout(layer: Layer, reference_price: u64, price: u64) -> U256 {
+    if price >= reference_price {
+        return U256::ZERO;
+    }
+    let reference = U256::from(reference_price);
+    let fall =
+        (U256::from(reference_price - price) * U256::from(BPS)).min(reference * layer.limit_bps);
+    let deductible = reference * layer.deductible_bps;
+    if fall <= deductible {
+        return U256::ZERO;
+    }
+    layer.notional * (fall - deductible) / (reference * U256::from(BPS))
 }
 
 const BPS: u64 = 10_000;
@@ -246,6 +333,87 @@ impl<P: Provider + Clone> Tapehouse<P> {
             )));
         }
         Ok(stocks.symbols.iter().map(asset_name).zip(amounts).collect())
+    }
+
+    /// The gap cover, `.tapehouse.GapCover`: its sales, settlement, releases and the writers' vault.
+    pub fn gap_cover(&self) -> Result<GapCover::GapCoverInstance<P>> {
+        let address = entry(&self.deployments.tapehouse, "GapCover", ".tapehouse")?;
+        Ok(GapCover::new(address, self.provider.clone()))
+    }
+
+    /// The premium of gap cover on `asset` paying `layer` at the weekend gap of `PricingGap` and the band's centre now,
+    /// and the writers' USDG it reserves.
+    pub async fn quote_gap_cover(&self, asset: &str, layer: Layer) -> Result<CoverQuote> {
+        let premium = self
+            .gap_cover()?
+            .quote(
+                to_bytes32(asset)?,
+                layer.notional,
+                layer.deductible_bps,
+                layer.limit_bps,
+            )
+            .call()
+            .await?;
+        Ok(CoverQuote {
+            premium,
+            reserve: (layer.notional * (layer.limit_bps - layer.deductible_bps))
+                .div_ceil(U256::from(BPS)),
+        })
+    }
+
+    /// The weekend gap the gap cover prices `asset` at now, and the week's realised move it follows.
+    pub async fn gap_cover_pricing_gap(&self, asset: &str) -> Result<PricingGap> {
+        let out = self
+            .gap_cover()?
+            .pricingGap(to_bytes32(asset)?)
+            .call()
+            .await?;
+        Ok(PricingGap {
+            gap: out.gap,
+            week_move: out.weekMove,
+        })
+    }
+
+    /// The closure gap cover is on sale for now; `None` while no cover is sold.
+    pub async fn gap_cover_sales(&self) -> Result<Option<Sales>> {
+        let out = self.gap_cover()?.sales().call().await?;
+        Ok((out.endsMs != 0).then_some(Sales {
+            closes_ms: out.closesMs,
+            ends_ms: out.endsMs,
+        }))
+    }
+
+    /// `asset`'s gap cover series over the closure from `closes_ms`, and its reopen, both read at the latest block.
+    pub async fn gap_cover_series(&self, asset: &str, closes_ms: u64) -> Result<Series> {
+        let cover = self.gap_cover()?;
+        let block = BlockId::number(
+            self.provider
+                .get_block_number()
+                .await
+                .map_err(alloy::contract::Error::from)?,
+        );
+        let out = cover
+            .series(to_bytes32(asset)?, closes_ms)
+            .block(block)
+            .call()
+            .await?;
+        let status = match out.status {
+            0 => SeriesStatus::Open,
+            1 => SeriesStatus::Settled,
+            2 => SeriesStatus::Void,
+            other => {
+                return Err(Error::Unexpected(format!("unknown series status {other}")));
+            }
+        };
+        let reopen_ms = cover.reopenOf(closes_ms).block(block).call().await?;
+        Ok(Series {
+            notional: U256::from(out.notional),
+            status,
+            reference_price: out.referencePrice,
+            price: out.price,
+            flagged: out.flagged,
+            reopen_ms,
+        })
     }
 
     /// USDG, `.tokens.USDG`.

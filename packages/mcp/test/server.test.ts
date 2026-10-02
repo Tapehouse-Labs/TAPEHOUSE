@@ -16,6 +16,7 @@ import {
   http,
   maxUint256,
   toFunctionSelector,
+  zeroAddress,
 } from 'viem'
 import { afterEach, describe, expect, test } from 'vitest'
 import {
@@ -23,6 +24,7 @@ import {
   basketAbi,
   CROSS,
   type Deployments,
+  gapCoverAbi,
   marginAccountsAbi,
   morphoBandOracleAbi,
   parseDeployments,
@@ -43,11 +45,12 @@ const accounts: Address = '0x5FbDB2315678afecb367f032d93F642f64180aa3'
 const shorts: Address = '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512'
 const oracle: Address = '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0'
 const pair: Address = '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9'
+const cover: Address = '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9'
 const nvda = robinhood.tokens.NVDA as Address
 const spy = robinhood.tokens.SPY as Address
 const deployments: Deployments = {
   ...robinhood,
-  tapehouse: { Band: band, MarginAccounts: accounts, ShortPositions: shorts },
+  tapehouse: { Band: band, MarginAccounts: accounts, ShortPositions: shorts, GapCover: cover },
   morphoOracles: { NVDA: oracle, SPY: oracle },
   baskets: { PAIR: pair },
 }
@@ -57,6 +60,7 @@ const abis: Record<string, Abi> = {
   [shorts]: shortPositionsAbi,
   [oracle]: morphoBandOracleAbi,
   [pair]: basketAbi,
+  [cover]: gapCoverAbi,
   [robinhood.uniswapV3.QuoterV2 as string]: quoterV2Abi,
 }
 
@@ -163,6 +167,11 @@ describe('tools', () => {
       'shorts_position',
       'shorts_health',
       'shorts_restriction',
+      'gap_cover_sales',
+      'gap_cover_quote',
+      'gap_cover_series',
+      'gap_cover_position',
+      'gap_cover_vault',
       'accounts_set_authorization',
       'accounts_deposit',
       'accounts_withdraw',
@@ -175,6 +184,12 @@ describe('tools', () => {
       'shorts_withdraw',
       'shorts_sell',
       'shorts_cover',
+      'gap_cover_buy',
+      'gap_cover_release',
+      'gap_cover_claim',
+      'gap_cover_deposit',
+      'gap_cover_redeem',
+      'gap_cover_measure',
     ])
     for (const tool of tools) {
       expect(tool.name).toMatch(/^[a-z_]{1,64}$/)
@@ -688,6 +703,312 @@ describe('baskets', () => {
     expect(structured.baskets).toEqual({ PAIR: pair })
     const { tools } = await mcp.listTools()
     expect(tools.find((tool) => tool.name === 'registry')?.outputSchema?.properties).toHaveProperty('baskets')
+  })
+})
+
+const usdg = robinhood.tokens.USDG as Address
+const onSale = { sales: [1_790_985_600_000n, 1_790_985_600_000n] }
+const closed = { sales: [0n, 0n] }
+const coverOne = {
+  covers: [bob, 1_789_776_000_000n, 218, 1_218, toBytes32('NVDA'), 10_000_000_000n, 13_908_962n],
+  reopenOf: 1_789_948_800_000n,
+}
+const settledSeries = (status: number) => ({
+  series: [10_000_000_000n, 200_00000000n, 185_00000000n, 0, status, true],
+})
+
+describe('gap cover', () => {
+  test('the sales, a quote, a series, a cover and the vault are read at one block', async () => {
+    const { client, calls } = chain({
+      ...onSale,
+      quote: 21_416_957n,
+      minDeductible: 513n,
+      pricingGap: [279_862n, 111_945n],
+      capacity: 99_000_000_000n,
+      ...coverOne,
+      ...settledSeries(1),
+      payouts: 5_000_000n,
+      held: 100_000_000_000n,
+      reserved: 1_000_000_000n,
+      premiums: 21_416_957n,
+      owed: 5_000_000n,
+      outstanding: 1n,
+      totalSupply: 100_000_000_000_000_000n,
+      balanceOf: 40_000_000_000_000_000n,
+      maxDeposit: maxUint256,
+      maxRedeem: 0n,
+      convertToAssets: 40_000_000_000n,
+    })
+    const mcp = await legacy(client)
+    expect((await call(mcp, 'gap_cover_sales', {})).structured).toEqual({
+      blockNumber: '7',
+      onSale: true,
+      closesMs: '1790985600000',
+      endsMs: '1790985600000',
+    })
+    const layer = { asset: 'NVDA', notional: '10000000000', deductibleBps: 600, limitBps: 1600 }
+    expect((await call(mcp, 'gap_cover_quote', layer)).structured).toEqual({
+      blockNumber: '7',
+      asset: 'NVDA',
+      premium: '21416957',
+      reserve: '1000000000',
+      minDeductibleBps: '513',
+      gap: '279862',
+      weekMove: '111945',
+      capacity: '99000000000',
+      onSale: true,
+    })
+    expect((await call(mcp, 'gap_cover_series', { asset: 'NVDA', closesMs: '1789776000000' })).structured).toEqual({
+      blockNumber: '7',
+      asset: 'NVDA',
+      closesMs: '1789776000000',
+      notional: '10000000000',
+      status: 'settled',
+      referencePrice: '20000000000',
+      price: '18500000000',
+      flagged: true,
+      reopenMs: '1789948800000',
+    })
+    expect((await call(mcp, 'gap_cover_position', { id: '1' })).structured).toEqual({
+      blockNumber: '7',
+      id: '1',
+      holder: bob,
+      asset: 'NVDA',
+      closesMs: '1789776000000',
+      notional: '10000000000',
+      deductibleBps: '218',
+      limitBps: '1218',
+      premium: '13908962',
+      series: {
+        notional: '10000000000',
+        status: 'settled',
+        referencePrice: '20000000000',
+        price: '18500000000',
+        flagged: true,
+        reopenMs: '1789948800000',
+      },
+      payout: '532000000',
+      refund: null,
+      credited: '5000000',
+    })
+    expect((await call(mcp, 'gap_cover_vault', { owner: alice })).structured).toEqual({
+      blockNumber: '7',
+      held: '100000000000',
+      reserved: '1000000000',
+      capacity: '99000000000',
+      premiums: '21416957',
+      owed: '5000000',
+      outstanding: '1',
+      totalShares: '100000000000000000',
+      writer: {
+        owner: alice,
+        shares: '40000000000000000',
+        assets: '40000000000',
+        maxDeposit: maxUint256.toString(),
+        maxRedeem: '0',
+      },
+    })
+    expect((await call(mcp, 'gap_cover_vault', {})).structured.writer).toBeNull()
+    expect(new Set(calls.map(({ to, block }) => `${to}@${block}`))).toEqual(new Set([`${cover}@0x7`]))
+    expect(calls.find(({ functionName }) => functionName === 'pricingGap')?.args).toEqual([toBytes32('NVDA')])
+  })
+
+  test('a cover released or never bought, and a layer the cover refuses, are explained', async () => {
+    const mcp = await legacy(
+      chain({
+        ...closed,
+        covers: [zeroAddress, 0n, 0, 0, toBytes32(''), 0n, 0n],
+        quote: {
+          revert: encodeErrorResult({ abi: gapCoverAbi, errorName: 'InvalidLayer', args: [500n, 1500n, 513n] }),
+        },
+        minDeductible: 513n,
+        pricingGap: [279_862n, 111_945n],
+        capacity: 0n,
+      }).client,
+    )
+    expect((await call(mcp, 'gap_cover_position', { id: '9' })).text).toBe(
+      'Cover 9 does not exist or has been released.',
+    )
+    const refused = await call(mcp, 'gap_cover_quote', {
+      asset: 'NVDA',
+      notional: '1',
+      deductibleBps: 500,
+      limitBps: 1500,
+    })
+    expect(refused.result.isError).toBe(true)
+    expect(refused.text).toBe('The call reverted with InvalidLayer(500, 1500, 513).')
+    const wide = await call(mcp, 'gap_cover_quote', {
+      asset: 'NVDA',
+      notional: '1',
+      deductibleBps: 0,
+      limitBps: 10_001,
+    })
+    expect(wide.result.isError).toBe(true)
+  })
+
+  test('a purchase pays at most the quote, its USDG approved for exactly the premium where the allowance falls short', async () => {
+    const args = {
+      from: bob,
+      asset: 'NVDA',
+      notional: '10000000000',
+      deductibleBps: 600,
+      limitBps: 1600,
+      holder: alice,
+    }
+    const short = chain({ ...onSale, quote: 21_416_957n, allowance: 0n })
+    const { structured } = await call(await legacy(short.client), 'gap_cover_buy', args)
+    expect(structured).toMatchObject({
+      chainId: 4663,
+      signer: bob,
+      quote: { premium: '21416957', reserve: '1000000000', closesMs: '1790985600000', endsMs: '1790985600000' },
+      calls: [
+        { to: usdg, functionName: 'approve', args: { spender: cover, amount: '21416957' } },
+        {
+          to: cover,
+          functionName: 'buy',
+          args: {
+            symbol: toBytes32('NVDA'),
+            notional: '10000000000',
+            deductibleBps: '600',
+            limitBps: '1600',
+            maxPremium: '21416957',
+            holder: alice,
+          },
+        },
+      ],
+    })
+    const [, bought] = structured.calls as [unknown, { data: Hex }]
+    expect(bought.data.slice(0, 10)).toBe(toFunctionSelector('buy(bytes32,uint256,uint256,uint256,uint256,address)'))
+    expect(new Set(short.calls.map(({ block }) => block))).toEqual(new Set(['0x7']))
+    const enough = chain({ ...onSale, quote: 21_416_957n, allowance: 21_416_957n })
+    const direct = (await call(await legacy(enough.client), 'gap_cover_buy', args)).structured
+    expect((direct.calls as { functionName: string }[]).map(({ functionName }) => functionName)).toEqual(['buy'])
+  })
+
+  test('outside the sales a purchase is refused with SalesClosed before anything else is read', async () => {
+    const { client, calls } = chain(closed)
+    const { result, text } = await call(await legacy(client), 'gap_cover_buy', {
+      from: bob,
+      asset: 'NVDA',
+      notional: '1',
+      deductibleBps: 600,
+      limitBps: 1600,
+      holder: bob,
+    })
+    expect(result.isError).toBe(true)
+    expect(text).toBe(
+      'No cover is on sale at block 7: the purchase would revert with SalesClosed(). gap_cover_sales reads whether it is.',
+    )
+    expect(calls.map(({ functionName }) => functionName)).toEqual(['sales'])
+  })
+
+  test('a release names what it credits, and a claim what it sends', async () => {
+    const settled = await legacy(chain({ ...coverOne, ...settledSeries(1) }).client)
+    expect((await call(settled, 'gap_cover_release', { id: '1' })).structured).toMatchObject({
+      signer: 'anyone',
+      holder: bob,
+      payout: '532000000',
+      refund: '0',
+      calls: [{ to: cover, functionName: 'release', args: { id: '1' } }],
+    })
+    const voided = await legacy(chain({ ...coverOne, ...settledSeries(2) }).client)
+    expect((await call(voided, 'gap_cover_release', { id: '1' })).structured).toMatchObject({
+      payout: '0',
+      refund: '13908962',
+    })
+    const open = await legacy(chain({ ...coverOne, ...settledSeries(0) }).client)
+    expect((await call(open, 'gap_cover_release', { id: '1' })).text).toBe(
+      "Cover 1's series has not settled: the release would revert with NotSettled(1).",
+    )
+    const gone = await legacy(chain({ covers: [zeroAddress, 0n, 0, 0, toBytes32(''), 0n, 0n] }).client)
+    expect((await call(gone, 'gap_cover_release', { id: '2' })).text).toBe(
+      'Cover 2 does not exist or has been released: the release would revert with NoCover(2).',
+    )
+    const owed = await legacy(chain({ payouts: 532_000_000n }).client)
+    expect((await call(owed, 'gap_cover_claim', { holder: bob, receiver: alice })).structured).toMatchObject({
+      signer: bob,
+      amount: '532000000',
+      calls: [{ to: cover, functionName: 'claim', args: { receiver: alice } }],
+    })
+    const none = await legacy(chain({ payouts: 0n }).client)
+    expect((await call(none, 'gap_cover_claim', { holder: bob, receiver: bob })).text).toBe(
+      `Nothing is credited to ${bob}.`,
+    )
+  })
+
+  test('writers deposit with an exact approval and redeem, each within what the vault takes now', async () => {
+    const open = chain({ maxDeposit: maxUint256, previewDeposit: 2_000_000_000_000_000n, allowance: 0n })
+    const deposit = { from: bob, assets: '2000000000', receiver: bob }
+    expect((await call(await legacy(open.client), 'gap_cover_deposit', deposit)).structured).toMatchObject({
+      signer: bob,
+      shares: '2000000000000000',
+      calls: [
+        { to: usdg, functionName: 'approve', args: { spender: cover, amount: '2000000000' } },
+        { to: cover, functionName: 'deposit', args: { assets: '2000000000', receiver: bob } },
+      ],
+    })
+    const shut = await legacy(chain({ maxDeposit: 0n, previewDeposit: 1n }).client)
+    expect((await call(shut, 'gap_cover_deposit', deposit)).text).toBe(
+      `The vault takes at most 0 now: the deposit would revert with ERC4626ExceededMaxDeposit(${bob}, 2000000000, 0).`,
+    )
+    const redeem = { shares: '5', receiver: alice, owner: bob }
+    const free = await legacy(chain({ maxRedeem: 5n, previewRedeem: 4n }).client)
+    expect((await call(free, 'gap_cover_redeem', redeem)).structured).toMatchObject({
+      signer: `${bob}, or an address it allowed to spend the shares`,
+      assets: '4',
+      calls: [{ to: cover, functionName: 'redeem', args: { shares: '5', receiver: alice, owner: bob } }],
+    })
+    const locked = await legacy(chain({ maxRedeem: 0n, previewRedeem: 4n }).client)
+    expect((await call(locked, 'gap_cover_redeem', redeem)).text).toBe(
+      `${bob} may redeem at most 0 shares now: the redemption would revert with ERC4626ExceededMaxRedeem(${bob}, 5, 0).`,
+    )
+  })
+
+  test('a measurement names the week it keeps, and is refused outside the sales and before the week has passed', async () => {
+    const ready = chain({ ...onSale, measure: 111_945n })
+    expect((await call(await legacy(ready.client), 'gap_cover_measure', { asset: 'NVDA' })).structured).toMatchObject({
+      chainId: 4663,
+      signer: 'anyone',
+      closesMs: '1790985600000',
+      weekMove: '111945',
+      calls: [{ to: cover, functionName: 'measure', args: { symbol: toBytes32('NVDA') } }],
+    })
+    expect(ready.calls.map(({ functionName, block }) => [functionName, block])).toEqual([
+      ['sales', '0x7'],
+      ['measure', '0x7'],
+    ])
+    const early = encodeErrorResult({ abi: gapCoverAbi, errorName: 'TooEarlyToMeasure', args: [1_790_899_200_000n] })
+    const soon = await legacy(chain({ ...onSale, measure: { revert: early } }).client)
+    expect((await call(soon, 'gap_cover_measure', { asset: 'NVDA' })).text).toBe(
+      'The call reverted with TooEarlyToMeasure(1790899200000).',
+    )
+    const shut = chain(closed)
+    const { result, text } = await call(await legacy(shut.client), 'gap_cover_measure', { asset: 'NVDA' })
+    expect(result.isError).toBe(true)
+    expect(text).toBe(
+      'No cover is on sale at block 7: the measurement would revert with SalesClosed(). gap_cover_sales reads whether it is.',
+    )
+    expect(shut.calls.map(({ functionName }) => functionName)).toEqual(['sales'])
+  })
+
+  test('a registry without the gap cover is named before any call', async () => {
+    const { client, methods } = chain({})
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    const without = { ...deployments, tapehouse: { Band: band } }
+    await createServer({ client, deployments: without, maxSlippageBps: 100, rateLimit: new RateLimit(120) }).connect(
+      serverTransport,
+    )
+    const mcp = new Client({ name: 'test', version: '1.0.0' })
+    await mcp.connect(clientTransport)
+    open.push(mcp)
+    for (const [name, args] of [
+      ['gap_cover_vault', {}],
+      ['gap_cover_deposit', { from: bob, assets: '1', receiver: bob }],
+      ['gap_cover_series', { asset: 'NVDA', closesMs: '1' }],
+    ] as const) {
+      expect((await call(mcp, name, args)).text).toBe('The registry has no .tapehouse.GapCover.')
+    }
+    expect(methods).toEqual([])
   })
 })
 

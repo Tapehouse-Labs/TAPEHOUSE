@@ -7,8 +7,9 @@
 
 Usage: uv run --script devnode.py RPC_URL DEPLOYMENTS_JSON SERVER_JS
 
-Reads SPY's band, both Morpho oracles and the basket PAIR on a dev node, refuses a slippage above the server's cap, and
-prepares an authorization for the registry's margin accounts, signing nothing.
+Reads SPY's band, both Morpho oracles, the basket PAIR and whether gap cover is on sale on a dev node, quotes SPY cover,
+refuses a slippage above the server's cap, and prepares an authorization for the registry's margin accounts, signing
+nothing.
 """
 
 import asyncio
@@ -42,7 +43,7 @@ async def main(rpc: str, registry: str, server: str) -> None:
             return result.structured_content
 
         tools = (await client.list_tools()).tools
-        check(len(tools) == 35, f"{len(tools)} tools")
+        check(len(tools) == 46, f"{len(tools)} tools")
         check(all(tool.annotations.read_only_hint and tool.output_schema for tool in tools), "a tool is not read-only")
 
         spy = await use("band_quote", {"asset": "SPY"})
@@ -55,6 +56,12 @@ async def main(rpc: str, registry: str, server: str) -> None:
 
         pair = await use("baskets_components", {"basket": "PAIR"})
         check([c["asset"] for c in pair["components"]] == ["NVDA", "SPY"], f"PAIR: {pair}")
+
+        sales = await use("gap_cover_sales", {})
+        offer = await use(
+            "gap_cover_quote", {"asset": "SPY", "notional": "1000000000", "deductibleBps": 9000, "limitBps": 10000}
+        )
+        check(offer["onSale"] == sales["onSale"] and int(offer["premium"]) > 0, f"SPY gap cover: {offer}")
 
         refused = await client.call_tool(
             "shorts_sell", {"account": OPERATOR, "asset": "SPY", "amount": "1", "slippageBps": 10_000}
@@ -75,6 +82,7 @@ async def main(rpc: str, registry: str, server: str) -> None:
         f"python client over stdio, protocol 2025-11-25: SPY band {spy['state']} at {spy['mid']}, "
         f"its Morpho oracle {priced['price']}; NVDA's oracle no price ({nvda['noPrice']}); "
         f"basket PAIR of NVDA and SPY at {pair['address']}; "
+        f"SPY gap cover from 90% quoted at {offer['premium']}, {'on sale' if sales['onSale'] else 'not on sale'}; "
         f"setAuthorization prepared for {call['to']}"
     )
     print("PASS")

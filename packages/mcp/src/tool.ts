@@ -73,6 +73,9 @@ export const basket = z
   .regex(name, 'not a basket key')
   .describe("The basket's key in the registry's .tapehouse.Baskets, such as PAIR.")
 
+/** A share of a price, in basis points from 1 to 10,000. */
+export const bps = (description: string) => z.number().int().min(1).max(10_000).describe(description)
+
 /** A decimal string of a whole number. */
 export const uint = z.string().regex(/^\d+$/)
 
@@ -101,6 +104,13 @@ export function tokenAddress(deployments: Deployments, symbol: string): Address 
 export function basketAddress(deployments: Deployments, key: string): Address {
   const found = Object.hasOwn(deployments.baskets, key) ? deployments.baskets[key] : undefined
   if (found === undefined) throw new Error(`The registry has no .tapehouse.Baskets.${key}.`)
+  return found
+}
+
+/** The registry's gap cover, `.tapehouse.GapCover`. */
+export function gapCoverAddress(deployments: Deployments): Address {
+  const found = Object.hasOwn(deployments.tapehouse, 'GapCover') ? deployments.tapehouse.GapCover : undefined
+  if (found === undefined) throw new Error('The registry has no .tapehouse.GapCover.')
   return found
 }
 

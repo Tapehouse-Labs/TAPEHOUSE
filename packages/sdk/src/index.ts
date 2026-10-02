@@ -17,6 +17,8 @@ export {
   tokenPriceFeed,
 } from './deployments.js'
 export { decodeRevert, decodeRevertData, errorsAbi, type Revert } from './errors.js'
+export * as gapCover from './gapCover.js'
+export type { Layer, SeriesStatus, Settlement } from './gapCover.js'
 export * from './generated.js'
 export * as morpho from './morpho.js'
 export type { NoPrice, OraclePrice } from './morpho.js'

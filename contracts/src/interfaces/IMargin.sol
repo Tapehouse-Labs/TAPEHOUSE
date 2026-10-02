@@ -27,6 +27,10 @@ interface IMargin {
     /// basis points.
     function weekendLeverage() external view returns (uint32);
 
+    /// @notice The weekend gap of `symbol` and its floor, in centi-basis-points: the mean of the largest 1% of the asset's
+    /// weekend moves.
+    function weekendGap(bytes32 symbol) external view returns (uint32 value, uint32 floor);
+
     /// @notice The Chainlink feed that prices WETH.
     function ethUsdFeed() external view returns (address);
 

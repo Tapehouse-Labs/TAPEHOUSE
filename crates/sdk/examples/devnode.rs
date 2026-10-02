@@ -3,6 +3,8 @@
 //! decodes the band's refusal of their age, then authorizes a fresh address in the margin accounts, which sells 1 SPY
 //! short for the account at a QuoterV2 quote and buys it back. Then it mints 1 share of the basket PAIR for the fresh
 //! address, which deposits it into its cross position, reads it there as NVDA and SPY, unwraps it and withdraws them.
+//! Last, it writes gap cover with 1,000 USDG and quotes 1,000 USDG of SPY cover from its smallest deductible: it buys it
+//! while the cover's sales are open and reads the series, and otherwise decodes the cover's refusal.
 //!
 //! Usage: `PRIVATE_KEY=0x… cargo run --example devnode -- RPC_URL DEPLOYMENTS_JSON PAYLOAD_FILE`
 
@@ -12,8 +14,10 @@ use alloy::providers::{Provider, ProviderBuilder};
 use alloy::rpc::types::{BlockId, TransactionRequest};
 use alloy::signers::local::PrivateKeySigner;
 use alloy::sol_types::SolEvent;
-use tapehouse_sdk::bindings::{MarginAccounts, ShortPositions};
-use tapehouse_sdk::{CROSS, Deployments, Error, PackageSource, Revert, Tapehouse, to_bytes32};
+use tapehouse_sdk::bindings::{GapCover, MarginAccounts, ShortPositions};
+use tapehouse_sdk::{
+    CROSS, Deployments, Error, Layer, PackageSource, Revert, SeriesStatus, Tapehouse, to_bytes32,
+};
 
 struct FileSource(String);
 
@@ -339,9 +343,83 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
     }
 
+    let writing = U256::from(1_000_000_000u64);
+    owner
+        .usdg()?
+        .approve(deployments.tapehouse["GapCover"], writing * U256::from(2))
+        .send()
+        .await?
+        .get_receipt()
+        .await?;
+    owner
+        .gap_cover()?
+        .deposit(writing, account)
+        .send()
+        .await?
+        .get_receipt()
+        .await?;
+    let deductible = owner.gap_cover()?.minDeductible(spy).call().await?;
+    let layer = Layer {
+        notional: writing,
+        deductible_bps: deductible,
+        limit_bps: deductible + U256::from(500),
+    };
+    let offer = owner.quote_gap_cover("SPY", layer).await?;
+    check(
+        !offer.premium.is_zero() && offer.reserve == U256::from(50_000_000u64),
+        "the quote is not a premium over a reserve of 5%",
+    )?;
+    let sales = owner.gap_cover_sales().await?;
+    let gap_cover = owner.gap_cover()?;
+    let purchase = gap_cover.buy(
+        spy,
+        layer.notional,
+        layer.deductible_bps,
+        layer.limit_bps,
+        offer.premium,
+        account,
+    );
+    let outcome = match purchase.call().await {
+        Ok(_) => {
+            let receipt = purchase.send().await?.get_receipt().await?;
+            check(receipt.status(), "the purchase reverted")?;
+            let bought = event::<GapCover::Bought>(&receipt)?;
+            check(
+                bought.premium == offer.premium,
+                "the cover was not sold at its quote",
+            )?;
+            let series = owner.gap_cover_series("SPY", bought.closesMs).await?;
+            check(
+                series.status == SeriesStatus::Open && series.notional >= writing,
+                "the series does not hold the cover",
+            )?;
+            check(
+                sales.is_some_and(|s| s.closes_ms == bought.closesMs),
+                "the sales did not name the series the cover joined",
+            )?;
+            format!(
+                "bought for {}, series over {} open",
+                offer.premium, bought.closesMs
+            )
+        }
+        Err(error) => {
+            let revert = refusal::<()>(Err(error))?;
+            check(
+                revert.name == "SalesClosed",
+                format!("a purchase outside the sales reverted with {revert}"),
+            )?;
+            check(
+                sales.is_none(),
+                "the sales were open and the purchase refused",
+            )?;
+            revert.to_string()
+        }
+    };
+
     println!(
         "rust sdk: SPY band state {} at {}, feed round {} answers {}, seal at {} {sealing} (sealed {}); writePrices {stale}; \
-         before authorization {refused}; sold 1 SPY for {} and bought it back for {}",
+         before authorization {refused}; sold 1 SPY for {} and bought it back for {}; SPY gap cover from {deductible} bps \
+         quoted at {}: {outcome}",
         quote.state,
         quote.mid,
         round._0,
@@ -349,7 +427,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         session.boundaryMs,
         sealed.sealedAt,
         sell.proceeds,
-        cover.cost
+        cover.cost,
+        offer.premium
     );
     println!(
         "basket PAIR: {shares} shares in the cross position hold {} NVDA and {} SPY; equity {} requirement {}",

@@ -4,14 +4,17 @@
 // client on the 2026-07-28 protocol: checks that the listener refuses another site's Host and Origin, reads SPY's and
 // NVDA's bands and Morpho oracles against the SDK, then has the account authorize a fresh address through a prepared
 // call, fund its SPY short, and the address sell 1 SPY short and buy it back. Then the account mints the address a
-// share of the basket PAIR, which it deposits into its cross position, reads there as NVDA and SPY, and unwraps. Every
-// call is prepared by the server and signed here.
+// share of the basket PAIR, which it deposits into its cross position, reads there as NVDA and SPY, and unwraps. Last,
+// the account writes gap cover with 1,000 USDG and quotes 1,000 USDG of SPY cover from its smallest deductible: it buys
+// it while the cover's sales are open and reads its series, then finds its redemption refused until the cover is
+// released; outside the sales it has the purchase refused with SalesClosed and takes its USDG back. Every call is
+// prepared by the server and signed here.
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { readFileSync } from 'node:fs'
 import { request } from 'node:http'
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
-import { band, marginAccountsAbi, morpho, parseDeployments, shortPositionsAbi } from '@tapehouse/sdk'
+import { band, gapCoverAbi, marginAccountsAbi, morpho, parseDeployments, shortPositionsAbi } from '@tapehouse/sdk'
 import {
   type Address,
   createWalletClient,
@@ -102,7 +105,7 @@ try {
   await mcp.connect(new StreamableHTTPClientTransport(url))
   check(mcp.getProtocolEra() === 'modern', 'the client did not reach the 2026-07-28 protocol')
   const { tools } = await mcp.listTools()
-  check(tools.length === 35 && tools.every((tool) => tool.annotations?.readOnlyHint), 'the tools are not all listed')
+  check(tools.length === 46 && tools.every((tool) => tool.annotations?.readOnlyHint), 'the tools are not all listed')
 
   const spy = await use('band_quote', { asset: 'SPY' })
   const at = { blockNumber: BigInt(spy.blockNumber as string) }
@@ -185,6 +188,62 @@ try {
   const left = await use('accounts_collateral', { account: holder, position: 'CROSS', token: 'PAIR' })
   check(nvdaHeld.amount === nvdaPaid && left.amount === '0', "the unwrap did not put the share's NVDA in the position")
 
+  const writing = '1000000000'
+  const sales = await use('gap_cover_sales')
+  const [written] = await sign(
+    owner,
+    await use('gap_cover_deposit', { from: account, assets: writing, receiver: account }),
+  )
+  check(written?.status === 'success', 'the deposit with the writers reverted')
+  const vault = await use('gap_cover_vault', { owner: account })
+  const writer = vault.writer as { shares: string; assets: string; maxRedeem: string }
+  check(BigInt(writer.assets) >= BigInt(writing) - 1n, 'the writer does not hold what it deposited')
+  const probe = await use('gap_cover_quote', {
+    asset: 'SPY',
+    notional: writing,
+    deductibleBps: 9_000,
+    limitBps: 10_000,
+  })
+  const deductibleBps = Number(probe.minDeductibleBps)
+  const layer = { asset: 'SPY', notional: writing, deductibleBps, limitBps: deductibleBps + 500 }
+  const offer = await use('gap_cover_quote', layer)
+  check(offer.reserve === '50000000' && BigInt(offer.premium as string) > 0n, 'the quote is not a premium over 5%')
+  check(offer.onSale === sales.onSale, 'the quote and the sales disagree on whether cover is sold')
+  const week = sales.onSale ? await use('gap_cover_measure', { asset: 'SPY' }) : undefined
+  if (week !== undefined) await sign(owner, week)
+  const purchase = await mcp.callTool({
+    name: 'gap_cover_buy',
+    arguments: { from: account, ...layer, holder: account },
+  })
+  const [said] = purchase.content as [{ type: string; text: string }]
+  let outcome: string
+  if (sales.onSale) {
+    check(purchase.isError !== true, `gap_cover_buy failed: ${said.text}`)
+    const receipts = await sign(owner, purchase.structuredContent as Record<string, unknown>)
+    const [bought] = parseEventLogs({ abi: gapCoverAbi, eventName: 'Bought', logs: receipts.at(-1)?.logs ?? [] })
+    check(
+      bought !== undefined && bought.args.premium.toString() === offer.premium,
+      'the cover was not sold at its quote',
+    )
+    const id = bought.args.id.toString()
+    const held = await use('gap_cover_position', { id })
+    const series = held.series as { status: string }
+    check(held.holder === account && series.status === 'open', 'the cover is not held in an open series')
+    const locked = await mcp.callTool({
+      name: 'gap_cover_redeem',
+      arguments: { shares: writer.shares, receiver: account, owner: account },
+    })
+    const [refusal] = locked.content as [{ type: string; text: string }]
+    check(locked.isError === true && refusal.text.includes('ERC4626ExceededMaxRedeem'), 'a writer left early')
+    outcome = `the week kept at ${week?.weekMove}, bought cover ${id} for ${offer.premium}, its series open, the writer locked in`
+  } else {
+    check(purchase.isError === true && said.text.includes('SalesClosed()'), `outside the sales: ${said.text}`)
+    await sign(owner, await use('gap_cover_redeem', { shares: writer.shares, receiver: account, owner: account }))
+    const left = await use('gap_cover_vault', { owner: account })
+    check((left.writer as { shares: string }).shares === '0', 'the writer did not take its USDG back')
+    outcome = 'refused with SalesClosed(), the writer took its USDG back'
+  }
+
   await sign(owner, await use('accounts_set_authorization', { operator: operator.account.address, allowed: false }))
   const after = await use('accounts_is_authorized', { account, operator: operator.account.address })
   check(after.authorized === false, 'the operator is still authorized')
@@ -194,7 +253,9 @@ try {
       `SPY band ${spy.state} at ${spy.mid}, ` +
       `its Morpho oracle ${priced.price}; NVDA's oracle no price (${nvda.noPrice}); ` +
       `sold 1 SPY for ${sell.args.proceeds} and bought it back for ${cover.args.cost}; ` +
-      `minted 1 PAIR for ${nvdaPaid} NVDA and ${spyPaid} SPY, deposited it and unwrapped it; every call prepared unsigned`,
+      `minted 1 PAIR for ${nvdaPaid} NVDA and ${spyPaid} SPY, deposited it and unwrapped it; ` +
+      `SPY gap cover from ${deductibleBps} bps at gap ${offer.gap} quoted at ${offer.premium}: ${outcome}; ` +
+      'every call prepared unsigned',
   )
   console.log('PASS')
 } finally {

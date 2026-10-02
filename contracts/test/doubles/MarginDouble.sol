@@ -15,6 +15,7 @@ contract MarginDouble is IMargin {
     uint8 public missing;
     uint8 public regime = 2;
     uint64 public poolPrice;
+    mapping(bytes32 symbol => uint32) public gaps;
 
     constructor(bytes32[] memory assets_, address band_, address ethUsdFeed_) {
         _assets = assets_;
@@ -28,6 +29,10 @@ contract MarginDouble is IMargin {
 
     function setOpen(uint256 openRateBps_) external {
         openRateBps = openRateBps_;
+    }
+
+    function setWeekendGap(bytes32 symbol, uint32 gap) external {
+        gaps[symbol] = gap;
     }
 
     function setPool(uint64 poolPrice_) external {
@@ -69,6 +74,11 @@ contract MarginDouble is IMargin {
             uint256 quantity = uint256(quantities[i] < 0 ? -quantities[i] : quantities[i]);
             addOn += quantity * (prices[i] - poolPrice) / 1e8;
         }
+    }
+
+    function weekendGap(bytes32 symbol) external view returns (uint32, uint32) {
+        require(gaps[symbol] != 0, "UnknownAsset");
+        return (gaps[symbol], gaps[symbol]);
     }
 
     function weekendLeverage() external pure returns (uint32) {

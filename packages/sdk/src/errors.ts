@@ -4,6 +4,7 @@ import {
   bandAbi,
   bandFeedAbi,
   basketAbi,
+  gapCoverAbi,
   marginAccountsAbi,
   morphoBandOracleAbi,
   shortPositionsAbi,
@@ -13,6 +14,7 @@ import {
 
 const items = [
   ...shortPositionsAbi,
+  ...gapCoverAbi,
   ...marginAccountsAbi,
   ...basketAbi,
   ...bandFeedAbi,

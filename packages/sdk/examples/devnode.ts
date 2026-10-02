@@ -4,6 +4,8 @@
 // decodes the band's refusal of their age, then authorizes a fresh address in the margin accounts, which sells 1 SPY
 // short for the account at a QuoterV2 quote and buys it back. Then it mints 1 share of the basket PAIR for the fresh
 // address, which deposits it into its cross position, reads it there as NVDA and SPY, unwraps it and withdraws them.
+// Last, it writes gap cover with 1,000 USDG and quotes 1,000 USDG of SPY cover from its smallest deductible: it buys it
+// while the cover's sales are open and reads the series, and otherwise decodes the cover's refusal.
 import { readFileSync } from 'node:fs'
 import {
   type Address,
@@ -24,6 +26,8 @@ import {
   baskets,
   CROSS,
   decodeRevert,
+  gapCover,
+  gapCoverAbi,
   marginAccountsAbi,
   type PackageSource,
   parseDeployments,
@@ -212,11 +216,40 @@ for (const [i, token] of tokens.entries()) {
   )
 }
 
+const writing = 1_000_000_000n
+const coverAddress = deployments.tapehouse.GapCover as Address
+await send(owner, { address: usdg, abi: usdgAbi, functionName: 'approve', args: [coverAddress, 2n * writing] })
+await send(owner, gapCover.deposit(deployments, { assets: writing, receiver: account }))
+const deductibleBps = await gapCover.minDeductible(owner, deployments, 'SPY')
+const layer = { notional: writing, deductibleBps, limitBps: deductibleBps + 500n }
+const offer = await gapCover.quote(owner, deployments, 'SPY', layer)
+const onSale = await gapCover.sales(owner, deployments)
+check(offer.premium > 0n && offer.reserve === writing / 20n, 'the quote is not a premium over a reserve of 5%')
+const purchase = gapCover.buy(deployments, { asset: 'SPY', ...layer, maxPremium: offer.premium, holder: account })
+const outcome = await owner.simulateContract({ ...purchase, account }).then(
+  async () => {
+    const receipt = await send(owner, purchase)
+    const [bought] = parseEventLogs({ abi: gapCoverAbi, eventName: 'Bought', logs: receipt.logs })
+    check(bought?.args.premium === offer.premium, 'the cover was not sold at its quote')
+    const sold = await gapCover.series(owner, deployments, 'SPY', bought.args.closesMs)
+    check(sold.status === 'open' && sold.notional >= writing, 'the series does not hold the cover')
+    check(onSale?.closesMs === bought.args.closesMs, 'the sales did not name the series the cover joined')
+    return `bought for ${offer.premium}, series over ${bought.args.closesMs} ${sold.status}`
+  },
+  (error: unknown) => {
+    const revert = decodeRevert(error)
+    check(revert?.errorName === 'SalesClosed', 'a purchase outside the sales did not revert with SalesClosed')
+    check(onSale === undefined, 'the sales were open and the purchase refused')
+    return 'SalesClosed()'
+  },
+)
+
 console.log(
   `typescript sdk: SPY band state ${quote.state} at ${quote.mid}, ` +
     `feed round ${round.roundId} answers ${round.answer}, ` +
     `seal at ${session.boundaryMs} ${sealing} (sealed ${sealedBand.sealedAt}); writePrices ${stale}; ` +
-    `before authorization ${refused}; sold 1 SPY for ${sell.args.proceeds} and bought it back for ${cover.args.cost}`,
+    `before authorization ${refused}; sold 1 SPY for ${sell.args.proceeds} and bought it back for ${cover.args.cost}; ` +
+    `SPY gap cover from ${deductibleBps} bps quoted at ${offer.premium}: ${outcome}`,
 )
 console.log(`basket PAIR: ${held}`)
 console.log(

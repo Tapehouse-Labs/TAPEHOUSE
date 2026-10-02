@@ -15,6 +15,7 @@ import (
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/band"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/bandfeed"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/basket"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/gapcover"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/marginaccounts"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/morphobandoracle"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/shortpositions"
@@ -51,6 +52,7 @@ var revertErrors = func() map[[4]byte]abi.Error {
 	errs := map[[4]byte]abi.Error{}
 	for _, metadata := range []*bind.MetaData{
 		&shortpositions.ShortPositionsMetaData,
+		&gapcover.GapCoverMetaData,
 		&marginaccounts.MarginAccountsMetaData,
 		&basket.BasketMetaData,
 		&bandfeed.BandFeedMetaData,

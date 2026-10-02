@@ -14,9 +14,10 @@ UV_VERSION := 0.12.21
 UV_VERSION_RE := $(subst .,\.,$(UV_VERSION))
 GO_TOOLCHAIN := $(shell awk '$$1 == "toolchain" { print $$2 }' services/go.mod)
 SDK_BINDINGS := Aggregator:AggregatorV3Interface.sol/AggregatorV3Interface Band:IBandPrices.sol/IBandPrices \
-	BandFeed:BandFeed.sol/BandFeed Basket:Basket.sol/Basket MarginAccounts:MarginAccounts.sol/MarginAccounts \
-	MorphoBandOracle:MorphoBandOracle.sol/MorphoBandOracle QuoterV2:IQuoterV2.sol/IQuoterV2 \
-	ShortPositions:ShortPositions.sol/ShortPositions StockToken:Interfaces.sol/IStockToken Usdg:IUSDG.sol/IUSDG
+	BandFeed:BandFeed.sol/BandFeed Basket:Basket.sol/Basket GapCover:GapCover.sol/GapCover \
+	MarginAccounts:MarginAccounts.sol/MarginAccounts MorphoBandOracle:MorphoBandOracle.sol/MorphoBandOracle \
+	QuoterV2:IQuoterV2.sol/IQuoterV2 ShortPositions:ShortPositions.sol/ShortPositions StockToken:Interfaces.sol/IStockToken \
+	Usdg:IUSDG.sol/IUSDG
 SDK_GENERATED := crates/sdk/abi services/sdk/bindings packages/sdk/src/generated.ts
 SDK_PAYLOAD := stylus/contracts/band/testdata/nvda-24_7.hex
 BINARYEN_VERSION := $(shell awk '/^\[/ { table = $$0 } table == "[wasm-opt]" && $$1 == "version" { gsub(/"/, "", $$3); print $$3 }' stylus/Stylus.toml)
@@ -62,7 +63,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
 	deploy-band-feeds verify-band-feeds simulate-supply-vault deploy-supply-vault verify-supply-vault \
-	deploy-margin-accounts verify-margin-accounts deploy-liquidator verify-liquidator deploy-gap-backstop verify-gap-backstop deploy-reopening-auction verify-reopening-auction deploy-stock-lending verify-stock-lending deploy-short-positions verify-short-positions deploy-morpho-oracles verify-morpho-oracles deploy-basket verify-baskets deploy-contracts-devnode test-contracts-devnode lint-scripts lint-licenses
+	deploy-margin-accounts verify-margin-accounts deploy-liquidator verify-liquidator deploy-gap-backstop verify-gap-backstop deploy-reopening-auction verify-reopening-auction deploy-stock-lending verify-stock-lending deploy-short-positions verify-short-positions deploy-morpho-oracles verify-morpho-oracles deploy-basket verify-baskets deploy-gap-cover verify-gap-cover deploy-contracts-devnode test-contracts-devnode lint-scripts lint-licenses
 
 all: build
 
@@ -356,6 +357,11 @@ deploy-basket: check-foundry submodules
 		{ echo "Usage: BASKET=<key> NAME=<share name> SYMBOL=<share symbol> ASSETS=<asset>,... UNITS=<raw units per share>,... make deploy-basket CHAIN=<4663|412346> SIGNER='<forge wallet flags of the accounts' owner>' [REGISTRY=<file>]"; exit 1; }
 	@contracts/script/deploy-basket.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
 
+deploy-gap-cover: check-foundry submodules
+	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
+		{ echo "Usage: make deploy-gap-cover CHAIN=<4663|412346> SIGNER='<forge wallet flags>' [REGISTRY=<file>]"; exit 1; }
+	@contracts/script/deploy-gap-cover.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
+
 deploy-contracts-devnode:
 	rm -rf contracts/broadcast/*/412346
 	$(MAKE) deploy-supply-vault CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
@@ -374,6 +380,7 @@ deploy-contracts-devnode:
 	$(MAKE) deploy-morpho-oracles CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
 	BASKET=PAIR NAME="Tapehouse NVDA SPY Basket" SYMBOL=thPAIR ASSETS=NVDA,SPY UNITS=1000000000000000000,500000000000000000 \
 		$(MAKE) deploy-basket CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
+	$(MAKE) deploy-gap-cover CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
 	BAND_ASSETS="NVDA TSLA SPY" contracts/script/deploy-band-feeds.sh $(DEVNODE_RPC_URL) stylus/target/devnode-registry.json \
 		--private-key $(DEVNODE_KEY) > stylus/target/devnode-band-feeds
 	jq --rawfile feeds stylus/target/devnode-band-feeds \
@@ -391,6 +398,7 @@ test-contracts-devnode:
 	contracts/script/devnode-short-positions-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
 	contracts/script/devnode-morpho-oracle-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
 	contracts/script/devnode-basket-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
+	contracts/script/devnode-gap-cover-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
 
 test-sdks-devnode: export PRIVATE_KEY := $(DEVNODE_KEY)
 test-sdks-devnode: check-node check-go check-rust node_modules/.modules.yaml
@@ -460,6 +468,11 @@ verify-baskets: check-foundry submodules
 	@case "$(CHAIN)" in 4663) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
 		{ echo "Usage: make verify-baskets CHAIN=4663, with the chain's RPC URL set"; exit 1; }
 	@contracts/script/verify-baskets.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
+
+verify-gap-cover: check-foundry submodules
+	@case "$(CHAIN)" in 4663) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
+		{ echo "Usage: make verify-gap-cover CHAIN=4663, with the chain's RPC URL set"; exit 1; }
+	@contracts/script/verify-gap-cover.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
 
 verify-band-feeds: check-foundry submodules
 	@case "$(CHAIN)" in 4663|46630|42161) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \

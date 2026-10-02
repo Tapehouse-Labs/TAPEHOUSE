@@ -35,6 +35,13 @@ sol!(
 sol!(
     #[sol(rpc)]
     #[derive(Debug)]
+    GapCover,
+    "abi/GapCover.json"
+);
+
+sol!(
+    #[sol(rpc)]
+    #[derive(Debug)]
     MarginAccounts,
     "abi/MarginAccounts.json"
 );

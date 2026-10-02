@@ -1,7 +1,19 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import type { McpServer } from '@modelcontextprotocol/server'
-import { accounts, band, baskets, morpho, sharePriceFeed, shorts, toBytes32, tokenPriceFeed } from '@tapehouse/sdk'
-import { getBlockNumber } from 'viem/actions'
+import {
+  accounts,
+  band,
+  baskets,
+  gapCover,
+  gapCoverAbi,
+  morpho,
+  sharePriceFeed,
+  shorts,
+  toBytes32,
+  tokenPriceFeed,
+} from '@tapehouse/sdk'
+import { hexToString } from 'viem'
+import { getBlockNumber, readContract } from 'viem/actions'
 import * as z from 'zod'
 import {
   address,
@@ -9,11 +21,13 @@ import {
   asset,
   basket,
   basketAddress,
+  bps,
   byAsset,
   checksummed,
   collateralAddress,
   type Context,
   explainRevert,
+  gapCoverAddress,
   int,
   position,
   positionId,
@@ -50,14 +64,39 @@ const health = {
 }
 const account = address('The account.')
 const target = z.array(z.object({ asset: z.string(), token: z.string(), units: uint }))
+const statuses = ['open', 'settled', 'void'] as const
+const series = {
+  notional: uint.describe('The notional the series covers, in USDG base units (6 decimals).'),
+  status: z.enum(statuses).describe('open until it settles; void refunds every premium.'),
+  referencePrice: uint
+    .nullable()
+    .describe("Once settled, the reference, the feed's last round before the sales ended."),
+  price: uint
+    .nullable()
+    .describe('Once settled, the reopening price: the first round after the reopen, or the median.'),
+  flagged: z.boolean().describe("Whether it settled on the median of the band's centres rather than the first round."),
+  reopenMs: uint.describe('When the closure reopens, in milliseconds; 0 while not recorded.'),
+}
 
 async function at({ client }: Context) {
   return { blockNumber: await getBlockNumber(client, { cacheTime: 0 }) }
 }
 
+async function seriesOf(context: Context, asset: string, closesMs: bigint, read: { blockNumber: bigint }) {
+  const s = await gapCover.series(context.client, context.deployments, asset, closesMs, read)
+  return {
+    notional: s.notional,
+    status: s.status,
+    referencePrice: s.settlement?.referencePrice ?? null,
+    price: s.settlement?.price ?? null,
+    flagged: s.flagged,
+    reopenMs: s.reopenMs,
+  }
+}
+
 /**
- * Registers the tools that read the band, its feeds, Chainlink, the Morpho oracles, the baskets, the accounts and the
- * shorts.
+ * Registers the tools that read the band, its feeds, Chainlink, the Morpho oracles, the baskets, the accounts, the
+ * shorts and the gap cover.
  */
 export function registerReads(server: McpServer, context: Context) {
   const { client, deployments: d } = context
@@ -650,6 +689,214 @@ export function registerReads(server: McpServer, context: Context) {
     async (args) => {
       const read = await at(context)
       return { ...read, asset: args.asset, ...(await shorts.restriction(client, d, args.asset, read)) }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'gap_cover_sales',
+    {
+      title: 'Gap cover sales',
+      description:
+        "Whether gap cover is on sale now: on the last trading day before a weekend or holiday, from the band's session showing the close until the close itself, the 24/5 session's 20:00 ET or, where the feeds follow NYSE's regular hours, the regular close. With the close that keys the series on sale and when the sales end, in milliseconds. A purchase outside them reverts with SalesClosed.",
+      input: z.strictObject({}),
+      output: z.object({
+        ...block,
+        onSale: z.boolean(),
+        closesMs: uint.describe('The close that keys the series on sale; 0 while none is.'),
+        endsMs: uint.describe('When the sales end; 0 while none is on sale.'),
+      }),
+      openWorld: true,
+    },
+    async () => {
+      const read = await at(context)
+      const sales = await gapCover.sales(client, d, read)
+      return { ...read, onSale: sales !== undefined, closesMs: sales?.closesMs ?? 0n, endsMs: sales?.endsMs ?? 0n }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'gap_cover_quote',
+    {
+      title: 'A gap cover quote',
+      description:
+        "The premium of cover on an asset paying notional times its fall over the coming closure beyond deductibleBps, up to limitBps, as the cover prices it now, and the writers' USDG it reserves. It is priced at the weekend gap the cover reads: twice the week's realised move on the asset's Chainlink feed, at least 55% of the engine's gap and at most eight times it; outside the sales at the engine's alone. The smallest deductible starts the fitted tail, raised where the feed's last answer stands above the band's centre.",
+      input: z.strictObject({
+        asset,
+        notional: units('The notional, in USDG base units (6 decimals).'),
+        deductibleBps: bps('The fall the cover pays beyond, in basis points: at least minDeductibleBps.'),
+        limitBps: bps('The fall the cover pays up to, in basis points: above the deductible, at most 10000.'),
+      }),
+      output: z.object({
+        ...block,
+        asset: z.string(),
+        premium: uint.describe('The premium, in USDG base units: what gap_cover_buy pays at most.'),
+        reserve: uint.describe("What the cover reserves of the writers' USDG: notional times the layer, rounded up."),
+        minDeductibleBps: uint,
+        gap: uint.describe('The weekend gap the cover prices at, in millionths.'),
+        weekMove: uint.describe(
+          "The realised move of the trading week before the close on sale, in millionths; 0 outside the sales, 18446744073709551615 for a week the feed cannot show, which prices at eight times the engine's gap.",
+        ),
+        capacity: uint.describe("The writers' USDG free to reserve."),
+        onSale: z.boolean(),
+      }),
+      openWorld: true,
+    },
+    async (args) => {
+      const read = await at(context)
+      const layer = {
+        notional: BigInt(args.notional),
+        deductibleBps: BigInt(args.deductibleBps),
+        limitBps: BigInt(args.limitBps),
+      }
+      const [offer, minimum, priced, capacity, sales] = await Promise.all([
+        gapCover.quote(client, d, args.asset, layer, read),
+        gapCover.minDeductible(client, d, args.asset, read),
+        gapCover.pricingGap(client, d, args.asset, read),
+        gapCover.capacity(client, d, read),
+        gapCover.sales(client, d, read),
+      ])
+      return {
+        ...read,
+        asset: args.asset,
+        ...offer,
+        minDeductibleBps: minimum,
+        ...priced,
+        capacity,
+        onSale: sales !== undefined,
+      }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'gap_cover_series',
+    {
+      title: 'A gap cover series',
+      description:
+        "An asset's gap cover series over the closure keyed by closesMs: the notional it covers, whether it is open, settled at its reference and reopening prices, or void and refunding, and when the closure reopens.",
+      input: z.strictObject({ asset, closesMs: units('The close that keys the series, as gap_cover_sales names it.') }),
+      output: z.object({ ...block, asset: z.string(), closesMs: uint, ...series }),
+      openWorld: true,
+    },
+    async (args) => {
+      gapCoverAddress(d)
+      const read = await at(context)
+      const closesMs = BigInt(args.closesMs)
+      return { ...read, asset: args.asset, closesMs, ...(await seriesOf(context, args.asset, closesMs, read)) }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'gap_cover_position',
+    {
+      title: 'A gap cover',
+      description:
+        'Cover id: its holder, asset, closure, notional, layer and premium, its series, and what releasing it credits the holder once the series has settled or is void: the payout, or the premium back. With the USDG credited to the holder and not yet claimed. A released cover no longer exists.',
+      input: z.strictObject({ id: units('The cover, as Bought numbered it.') }),
+      output: z.object({
+        ...block,
+        id: uint,
+        holder: z.string(),
+        asset: z.string(),
+        closesMs: uint,
+        notional: uint,
+        deductibleBps: uint,
+        limitBps: uint,
+        premium: uint,
+        series: z.object(series),
+        payout: uint.nullable().describe('What its release pays once its series has settled.'),
+        refund: uint.nullable().describe('What its release refunds once its series is void: its premium.'),
+        credited: uint.describe('The USDG credited to the holder and not yet claimed, in base units.'),
+      }),
+      openWorld: true,
+    },
+    async (args) => {
+      const read = await at(context)
+      const id = BigInt(args.id)
+      const held = await gapCover.cover(client, d, id, read)
+      if (held === undefined) throw new Error(`Cover ${id} does not exist or has been released.`)
+      const asset = hexToString(held.symbol, { size: 32 })
+      const [state, credited] = await Promise.all([
+        seriesOf(context, asset, held.closesMs, read),
+        gapCover.payouts(client, d, held.holder, read),
+      ])
+      return {
+        ...read,
+        id,
+        holder: held.holder,
+        asset,
+        closesMs: held.closesMs,
+        notional: held.notional,
+        deductibleBps: held.deductibleBps,
+        limitBps: held.limitBps,
+        premium: held.premium,
+        series: state,
+        payout:
+          state.referencePrice !== null && state.price !== null
+            ? gapCover.payout(held, { referencePrice: state.referencePrice, price: state.price })
+            : null,
+        refund: state.status === 'void' ? held.premium : null,
+        credited,
+      }
+    },
+  )
+
+  tool(
+    server,
+    context,
+    'gap_cover_vault',
+    {
+      title: "The gap cover writers' vault",
+      description:
+        "The ERC-4626 vault of the gap cover's writers: the USDG their shares stand for, what is reserved for outstanding covers, the premiums held until release, the credits not yet claimed, and how many covers are outstanding. With owner, its shares, what they stand for, and how much it may deposit and redeem now: deposits only before the sales end while every outstanding cover is over the coming closure, redemptions only once every cover is released.",
+      input: z.strictObject({ owner: address('A writer whose shares and limits to read.').optional() }),
+      output: z.object({
+        ...block,
+        held: uint.describe("The writers' USDG, reserved or not, in base units."),
+        reserved: uint,
+        capacity: uint,
+        premiums: uint,
+        owed: uint.describe('Payouts and refunds credited to holders and not yet claimed.'),
+        outstanding: uint,
+        totalShares: uint.describe('Shares have 12 decimals.'),
+        writer: z
+          .object({ owner: z.string(), shares: uint, assets: uint, maxDeposit: uint, maxRedeem: uint })
+          .nullable(),
+      }),
+      openWorld: true,
+    },
+    async (args) => {
+      const cover = gapCoverAddress(d)
+      const read = await at(context)
+      const vault = { address: cover, abi: gapCoverAbi, ...read } as const
+      const [held, reserved, capacity, premiums, owed, outstanding, totalShares] = await Promise.all([
+        readContract(client, { ...vault, functionName: 'held' }),
+        readContract(client, { ...vault, functionName: 'reserved' }),
+        readContract(client, { ...vault, functionName: 'capacity' }),
+        readContract(client, { ...vault, functionName: 'premiums' }),
+        readContract(client, { ...vault, functionName: 'owed' }),
+        readContract(client, { ...vault, functionName: 'outstanding' }),
+        readContract(client, { ...vault, functionName: 'totalSupply' }),
+      ])
+      let writer = null
+      if (args.owner !== undefined) {
+        const owner = checksummed(args.owner)
+        const [shares, maxDeposit, maxRedeem] = await Promise.all([
+          readContract(client, { ...vault, functionName: 'balanceOf', args: [owner] }),
+          readContract(client, { ...vault, functionName: 'maxDeposit', args: [owner] }),
+          readContract(client, { ...vault, functionName: 'maxRedeem', args: [owner] }),
+        ])
+        const assets = await readContract(client, { ...vault, functionName: 'convertToAssets', args: [shares] })
+        writer = { owner, shares, assets, maxDeposit, maxRedeem }
+      }
+      return { ...read, held, reserved, capacity, premiums, owed, outstanding, totalShares, writer }
     },
   )
 }

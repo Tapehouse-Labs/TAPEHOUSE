@@ -21,6 +21,7 @@ import (
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/band"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/bandfeed"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/basket"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/gapcover"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/marginaccounts"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/morphobandoracle"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/quoterv2"
@@ -714,6 +715,176 @@ func TestWhatAPositionHoldsThroughItsBasketsIsReadByAssetAtOneBlock(t *testing.T
 	}
 	if len(backend.blocks) != 2 || backend.blocks[0].Int64() != 9 || backend.blocks[1].Int64() != 9 {
 		t.Fatalf("read at %v", backend.blocks)
+	}
+}
+
+func coverLayer() sdk.Layer {
+	return sdk.Layer{Notional: big.NewInt(10_000_000_000), DeductibleBps: big.NewInt(218), LimitBps: big.NewInt(1_218)}
+}
+
+func TestAGapCoverPurchaseCarriesItsLayerItsPremiumLimitAndItsHolder(t *testing.T) {
+	d := registry(t, "4663")
+	d.Tapehouse["GapCover"] = bob
+	cover := sdk.NewClient(nil, d).GapCover()
+	tx, err := cover.Buy("NVDA", coverLayer(), big.NewInt(13_908_962), alice)
+	if err != nil || tx.To != bob {
+		t.Fatalf("buy: %v, %v", tx, err)
+	}
+	args := unpack(t, &gapcover.GapCoverMetaData, "buy", tx.Data)
+	if args[0].([32]byte) != bytes32(t, "NVDA") || args[1].(*big.Int).Int64() != 10_000_000_000 ||
+		args[2].(*big.Int).Int64() != 218 || args[3].(*big.Int).Int64() != 1_218 ||
+		args[4].(*big.Int).Int64() != 13_908_962 || args[5].(common.Address) != alice {
+		t.Fatalf("buy args %v", args)
+	}
+	reference, last := new(big.Int).Lsh(big.NewInt(1), 64), new(big.Int).Lsh(big.NewInt(1), 64)
+	reference.Or(reference, big.NewInt(7))
+	last.Or(last, big.NewInt(8))
+	tx, _ = cover.Settle("SPY", 1_790_985_600_000, reference, last)
+	args = unpack(t, &gapcover.GapCoverMetaData, "settle", tx.Data)
+	if args[0].([32]byte) != bytes32(t, "SPY") || args[1].(uint64) != 1_790_985_600_000 ||
+		args[2].(*big.Int).Cmp(reference) != 0 || args[3].(*big.Int).Cmp(last) != 0 {
+		t.Fatalf("settle args %v", args)
+	}
+	for method, packed := range map[string]func() (sdk.Tx, error){
+		"observe": func() (sdk.Tx, error) { return cover.Observe("SPY", 1) },
+		"release": func() (sdk.Tx, error) { return cover.Release(big.NewInt(3)) },
+		"claim":   func() (sdk.Tx, error) { return cover.Claim(alice) },
+		"record":  cover.Record,
+		"measure": func() (sdk.Tx, error) { return cover.Measure("SPY") },
+		"deposit": func() (sdk.Tx, error) { return cover.Deposit(big.NewInt(5), alice) },
+		"redeem":  func() (sdk.Tx, error) { return cover.Redeem(big.NewInt(5), alice, alice) },
+	} {
+		tx, err := packed()
+		if err != nil || tx.To != bob {
+			t.Fatalf("%s: %v, %v", method, tx, err)
+		}
+		unpack(t, &gapcover.GapCoverMetaData, method, tx.Data)
+	}
+	if _, err := cover.Buy("NVDA", sdk.Layer{}, big.NewInt(1), alice); err == nil {
+		t.Error("a nil layer packed")
+	}
+	empty, _ := sdk.ParseDeployments([]byte(`{"chainId":1}`))
+	if _, err := sdk.NewClient(nil, empty).GapCover().Record(); err == nil || err.Error() != "the registry has no .tapehouse.GapCover" {
+		t.Fatalf("missing: %v", err)
+	}
+}
+
+type coverBackend struct {
+	bind.ContractBackend
+	t      *testing.T
+	status uint8
+	blocks []*big.Int
+}
+
+func (c *coverBackend) HeaderByNumber(context.Context, *big.Int) (*types.Header, error) {
+	return &types.Header{Number: big.NewInt(7)}, nil
+}
+
+func (c *coverBackend) CallContract(_ context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error) {
+	c.blocks = append(c.blocks, block)
+	parsed, _ := gapcover.GapCoverMetaData.ParseABI()
+	method, err := parsed.MethodById(call.Data)
+	if err != nil || *call.To != bob {
+		c.t.Fatalf("%v to %v", err, call.To)
+	}
+	switch method.Name {
+	case "quote":
+		return method.Outputs.Pack(big.NewInt(13_908_962))
+	case "pricingGap":
+		return method.Outputs.Pack(big.NewInt(279_862), big.NewInt(111_945))
+	case "series":
+		return method.Outputs.Pack(big.NewInt(10_000_000_000), uint64(22_244_729_849), uint64(22_280_257_368), uint16(0), c.status, false)
+	case "reopenOf":
+		return method.Outputs.Pack(big.NewInt(1_789_948_800_000))
+	case "sales":
+		if c.status == 0 {
+			return method.Outputs.Pack(uint64(1_790_985_600_000), uint64(1_790_985_600_000))
+		}
+		return method.Outputs.Pack(uint64(0), uint64(0))
+	case "covers":
+		return method.Outputs.Pack(common.Address{}, uint64(0), uint16(0), uint16(0), [32]byte{}, new(big.Int), new(big.Int))
+	}
+	c.t.Fatalf("unexpected %s", method.Name)
+	return nil, nil
+}
+
+func TestAGapCoverQuoteReadsThePremiumAndGivesTheWritersUsdgItReserves(t *testing.T) {
+	d := registry(t, "4663")
+	d.Tapehouse["GapCover"] = bob
+	cover := sdk.NewClient(&coverBackend{t: t}, d).GapCover()
+	quote, err := cover.Quote(&bind.CallOpts{}, "NVDA", coverLayer())
+	if err != nil || quote.Premium.Int64() != 13_908_962 || quote.Reserve.Int64() != 1_000_000_000 {
+		t.Fatalf("quote %+v, %v", quote, err)
+	}
+	priced, err := cover.PricingGap(&bind.CallOpts{}, "NVDA")
+	if err != nil || priced.Gap.Int64() != 279_862 || priced.WeekMove.Int64() != 111_945 {
+		t.Fatalf("pricing gap %+v, %v", priced, err)
+	}
+}
+
+func TestTheSalesReadTheClosureOnSaleAndWhenTheyEnd(t *testing.T) {
+	d := registry(t, "4663")
+	d.Tapehouse["GapCover"] = bob
+	backend := &coverBackend{t: t}
+	cover := sdk.NewClient(backend, d).GapCover()
+	sales, open, err := cover.Sales(&bind.CallOpts{})
+	if err != nil || !open || sales.ClosesMs != 1_790_985_600_000 || sales.EndsMs != 1_790_985_600_000 {
+		t.Fatalf("sales %+v, %v, %v", sales, open, err)
+	}
+	backend.status = 1
+	if _, open, err := cover.Sales(&bind.CallOpts{}); open || err != nil {
+		t.Fatalf("closed sales read as open: %v", err)
+	}
+}
+
+func TestASeriesReadsWhereItStandsAndItsSettlementAtOneBlock(t *testing.T) {
+	d := registry(t, "4663")
+	d.Tapehouse["GapCover"] = bob
+	backend := &coverBackend{t: t, status: 1}
+	cover := sdk.NewClient(backend, d).GapCover()
+	series, err := cover.Series(&bind.CallOpts{}, "NVDA", 1_789_776_000_000)
+	if err != nil || series.Status != sdk.SeriesSettled || series.ReferencePrice != 22_244_729_849 ||
+		series.Price != 22_280_257_368 || series.Flagged || series.ReopenMs.Int64() != 1_789_948_800_000 ||
+		series.Notional.Int64() != 10_000_000_000 {
+		t.Fatalf("series %+v, %v", series, err)
+	}
+	if len(backend.blocks) != 2 || backend.blocks[0].Int64() != 7 || backend.blocks[1].Int64() != 7 {
+		t.Fatalf("read at %v", backend.blocks)
+	}
+	backend.status = 2
+	if series, _ := cover.Series(&bind.CallOpts{}, "NVDA", 1); series.Status != sdk.SeriesVoid {
+		t.Fatalf("void read as %v", series.Status)
+	}
+	backend.status = 3
+	if _, err := cover.Series(&bind.CallOpts{}, "NVDA", 1); err == nil || err.Error() != "unknown series status 3" {
+		t.Fatalf("status 3: %v", err)
+	}
+	if _, held, err := cover.Cover(&bind.CallOpts{}, big.NewInt(1)); held || err != nil {
+		t.Fatalf("a released cover read as held: %v", err)
+	}
+}
+
+func TestACoverPaysTheFallBeyondItsDeductibleUpToItsLimit(t *testing.T) {
+	layer := sdk.Layer{Notional: big.NewInt(10_000_000_000), DeductibleBps: big.NewInt(500), LimitBps: big.NewInt(1_500)}
+	for price, paid := range map[uint64]int64{210e8: 0, 200e8: 0, 190e8: 0, 185e8: 250_000_000, 100e8: 1_000_000_000} {
+		if got := sdk.Payout(layer, 200e8, price); got.Int64() != paid {
+			t.Errorf("at %d: %v, want %d", price, got, paid)
+		}
+	}
+	revert, ok := sdk.DecodeRevertData(encodeError(t, &gapcover.GapCoverMetaData, "NoCapacity", big.NewInt(2), big.NewInt(1)))
+	if !ok || revert.Error() != "NoCapacity(2, 1)" {
+		t.Fatalf("NoCapacity: %v", revert)
+	}
+	if revert, ok := sdk.DecodeRevertData(encodeError(t, &gapcover.GapCoverMetaData, "SalesClosed")); !ok || revert.Name != "SalesClosed" {
+		t.Fatalf("SalesClosed: %v", revert)
+	}
+	stale, ok := sdk.DecodeRevertData(encodeError(t, &gapcover.GapCoverMetaData, "StaleReference", big.NewInt(267), big.NewInt(268)))
+	if !ok || stale.Error() != "StaleReference(267, 268)" {
+		t.Fatalf("StaleReference: %v", stale)
+	}
+	early, ok := sdk.DecodeRevertData(encodeError(t, &gapcover.GapCoverMetaData, "TooEarlyToMeasure", big.NewInt(1_790_899_200_000)))
+	if !ok || early.Error() != "TooEarlyToMeasure(1790899200000)" {
+		t.Fatalf("TooEarlyToMeasure: %v", early)
 	}
 }
 

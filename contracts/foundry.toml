@@ -22,6 +22,7 @@ fs_permissions = [
     { access = "read", path = "../stylus/contracts/margin/testdata" },
     { access = "read", path = "../stylus/contracts/margin/parameters.json" },
     { access = "read", path = "../stylus/contracts/band/testdata" },
+    { access = "read", path = "./test/data" },
 ]
 
 [rpc_endpoints]
