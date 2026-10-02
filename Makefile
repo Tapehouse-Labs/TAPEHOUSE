@@ -49,7 +49,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
 	deploy-band-feeds verify-band-feeds simulate-supply-vault deploy-supply-vault verify-supply-vault \
-	deploy-margin-accounts verify-margin-accounts deploy-liquidator verify-liquidator deploy-gap-backstop verify-gap-backstop deploy-reopening-auction verify-reopening-auction deploy-stock-lending verify-stock-lending deploy-short-positions verify-short-positions deploy-contracts-devnode test-contracts-devnode lint-scripts lint-licenses
+	deploy-margin-accounts verify-margin-accounts deploy-liquidator verify-liquidator deploy-gap-backstop verify-gap-backstop deploy-reopening-auction verify-reopening-auction deploy-stock-lending verify-stock-lending deploy-short-positions verify-short-positions deploy-morpho-oracles verify-morpho-oracles deploy-contracts-devnode test-contracts-devnode lint-scripts lint-licenses
 
 all: build
 
@@ -274,6 +274,11 @@ deploy-short-positions: check-foundry submodules
 		{ echo "Usage: make deploy-short-positions CHAIN=<4663|412346> SIGNER='<forge wallet flags of the accounts' owner>' [REGISTRY=<file>]"; exit 1; }
 	@contracts/script/deploy-short-positions.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
 
+deploy-morpho-oracles: check-foundry submodules
+	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
+		{ echo "Usage: make deploy-morpho-oracles CHAIN=<4663|412346> SIGNER='<forge wallet flags>' [REGISTRY=<file>]"; exit 1; }
+	@contracts/script/deploy-morpho-oracles.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
+
 deploy-contracts-devnode:
 	rm -rf contracts/broadcast/*/412346
 	$(MAKE) deploy-supply-vault CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
@@ -289,6 +294,7 @@ deploy-contracts-devnode:
 	RATE_MODEL=8000,25,100,5000 FEE_SHARE=1500 \
 		$(MAKE) deploy-stock-lending CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
 	$(MAKE) deploy-short-positions CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
+	$(MAKE) deploy-morpho-oracles CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
 
 test-contracts-devnode:
 	contracts/script/devnode-supply-vault-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
@@ -298,6 +304,7 @@ test-contracts-devnode:
 	contracts/script/devnode-reopening-auction-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
 	contracts/script/devnode-stock-lending-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
 	contracts/script/devnode-short-positions-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
+	contracts/script/devnode-morpho-oracle-e2e.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
 
 verify-supply-vault: check-foundry submodules
 	@case "$(CHAIN)" in 4663|46630) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
@@ -338,6 +345,11 @@ verify-short-positions: check-foundry submodules
 	@case "$(CHAIN)" in 4663) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
 		{ echo "Usage: make verify-short-positions CHAIN=4663, with the chain's RPC URL set"; exit 1; }
 	@contracts/script/verify-short-positions.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
+
+verify-morpho-oracles: check-foundry submodules
+	@case "$(CHAIN)" in 4663) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
+		{ echo "Usage: make verify-morpho-oracles CHAIN=4663, with the chain's RPC URL set"; exit 1; }
+	@contracts/script/verify-morpho-oracles.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
 
 verify-band-feeds: check-foundry submodules
 	@case "$(CHAIN)" in 4663|46630|42161) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \

@@ -3,7 +3,7 @@ pragma solidity 0.8.37;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
-import {AggregatorV3Interface, IUniswapV3Factory} from "./conformance/Interfaces.sol";
+import {AggregatorV3Interface, IMorpho, IUniswapV3Factory} from "./conformance/Interfaces.sol";
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {BandFeed} from "../src/BandFeed.sol";
 import {IV3SwapRouter} from "../src/interfaces/IUniswapV3.sol";
@@ -33,7 +33,11 @@ contract RegistryForkTest is Test {
             address token = vm.parseJsonAddress(json, string.concat(".tokens.", symbols[i]));
             assertEq(address(uint160(uint256(vm.load(token, BEACON_SLOT)))), registry, symbols[i]);
         }
-        assertGt(vm.parseJsonAddress(json, ".morpho.Blue").code.length, 0, "morpho.Blue");
+        IMorpho morpho = IMorpho(vm.parseJsonAddress(json, ".morpho.Blue"));
+        assertTrue(morpho.isLltvEnabled(0.625e18), "morpho.Blue");
+        assertTrue(
+            morpho.isIrmEnabled(vm.parseJsonAddress(json, ".morpho.AdaptiveCurveIrm")), "morpho.AdaptiveCurveIrm"
+        );
         IUniswapV3Factory factory = IUniswapV3Factory(vm.parseJsonAddress(json, ".uniswapV3.Factory"));
         assertEq(factory.feeAmountTickSpacing(500), 10, "uniswapV3.Factory");
         IV3SwapRouter router = IV3SwapRouter(vm.parseJsonAddress(json, ".uniswapV3.SwapRouter02"));
