@@ -423,21 +423,21 @@ The dev-node suite measures both on the same calls, in L2 gas. `make devnode dep
 | `scenarioDigest(128)` | 163,408 | 1,678,505 | 10.3× |
 | `scenarioDigest(256)` | 209,547 | 3,167,787 | 15.1× |
 | `scenarioDigest(256,launch)` | 317,868 | 6,502,649 | 20.5× |
-| `requirement(3)` | 284,014 | 3,755,130 | 13.2× |
-| `requirement(6)` | 425,824 | 7,171,396 | 16.8× |
-| `currentRequirement(3)` | 348,196 | 3,816,682 | 11.0× |
-| `currentRequirement(1 of 6)` | 453,033 | 7,189,041 | 15.9× |
+| `requirement(3)` | 287,025 | 3,758,425 | 13.1× |
+| `requirement(6)` | 428,836 | 7,174,691 | 16.7× |
+| `currentRequirement(3)` | 351,236 | 3,820,422 | 10.9× |
+| `currentRequirement(1 of 6)` | 453,061 | 7,189,769 | 15.9× |
 | `assets()` | 94,636 | 42,216 | 0.4× |
 | `volatility(NVDA)` | 99,212 | 46,665 | 0.5× |
 | `correlation(NVDA,SPY)` | 106,019 | 54,471 | 0.5× |
 
-- **Stylus wins wherever the scenario set is walked,** from 4.4× for the 32-point lattice to 20.5× for the six launch assets' full set, and 13.2× and 16.8× for the requirement of three and six assets.
+- **Stylus wins wherever the scenario set is walked,** from 4.4× for the 32-point lattice to 20.5× for the six launch assets' full set, and 13.1× and 16.7× for the requirement of three and six assets.
   - Every call pays about 95,000 to enter the uncached, three-fragment program. That is the cost of `assets()`, intrinsic gas included.
   - Net of it, the three-asset requirement is about 20× cheaper.
   - Generating the 778 rows, `scenarioDigest(256)`, takes about three quarters of the three-asset requirement's gas in Stylus and five sixths in Solidity. The P&L and aggregation over them are the rest, with the pool reads.
 - **Stylus loses the small views,** at about twice the gas: `assets()`, `volatility` and `correlation` read a few words, and entering the program costs more than reading them. On chains with Arbitrum's CacheManager, caching the program lowers that entry cost. One scenario, the smallest walk, is already 2.0× cheaper in Stylus.
 - **A real pool read costs the same work from either side:** both run the pool's own Solidity. In the fork, at block 75,093,578, reading and pricing the six launch pools and ETH/USD adds 458,971 gas to the reference's requirement, 76,495 per pool. The dev node's stub pools cost far less.
-- **`wasm-opt` is worth 2% of size and 3% to 5% of gas.** Deployed without the `[wasm-opt]` tables on the dev node, `margin` compresses to 53,446 bytes against 52,282, and costs 294,039 for the three-asset requirement against 284,014, 219,433 for `scenarioDigest(256)` against 209,547, and 100,055 for `assets()` against 94,636.
+- **`wasm-opt` is worth 2% of size and 3% to 5% of gas.** Deployed without the `[wasm-opt]` tables on the dev node, `margin` compresses to 53,446 bytes against 52,282, and costs about 3.5% more for the three-asset requirement, 219,433 for `scenarioDigest(256)` against 209,547, and 100,055 for `assets()` against 94,636.
 
 ## The supply vault
 

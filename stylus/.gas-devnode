@@ -1,15 +1,15 @@
-BandFeed.latestBand(NVDA) 210704
-BandFeed.latestRoundData(NVDA) 130153
+BandFeed.latestBand(NVDA) 213871
+BandFeed.latestRoundData(NVDA) 133320
 anchor(SPY) 80059
 halt(NVDA) 87376
-legs(NVDA) 106196
+legs(NVDA) 109364
 legs(unknown) 86621
 margin.assets() 94636
 margin.correlation(NVDA,SPY) 106019
-margin.currentRequirement(1 of 6) 453033
-margin.currentRequirement(3) 348196
-margin.requirement(3) 284014
-margin.requirement(6) 425824
+margin.currentRequirement(1 of 6) 453061
+margin.currentRequirement(3) 351236
+margin.requirement(3) 287025
+margin.requirement(6) 428836
 margin.scenario(0) 118013
 margin.scenarioDigest(128) 163408
 margin.scenarioDigest(256) 209547
@@ -21,17 +21,17 @@ margin.setParameters(6) 193983
 margin.setParameters(8) 228221
 margin.volatility(NVDA) 99212
 price(NVDA---24_7) 82278
-quote(NVDA) 128507
-quote(NVDA,oraclePaused) 128442
-quote(NVDA,sequencer) 123439
+quote(NVDA) 131674
+quote(NVDA,oraclePaused) 131609
+quote(NVDA,sequencer) 129463
 quote(NVDA,signedHalt) 80065
-quote(SPY) 132531
+quote(SPY) 135698
 reference.assets() 42216
 reference.correlation(NVDA,SPY) 54471
-reference.currentRequirement(1 of 6) 7189041
-reference.currentRequirement(3) 3816682
-reference.requirement(3) 3755130
-reference.requirement(6) 7171396
+reference.currentRequirement(1 of 6) 7189769
+reference.currentRequirement(3) 3820422
+reference.requirement(3) 3758425
+reference.requirement(6) 7174691
 reference.scenario(0) 232187
 reference.scenarioDigest(128) 1678505
 reference.scenarioDigest(256) 3167787
