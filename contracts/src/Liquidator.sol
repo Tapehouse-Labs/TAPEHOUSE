@@ -162,6 +162,9 @@ contract Liquidator {
     /// @notice Nothing is left to buy: the position owes nothing, holds none of the token, or the hour's share of
     /// it is spent.
     error NothingToBuy();
+    /// @notice The position has lent none of the token that it has not recalled already, or, with a recall open, less
+    /// than the accounts' least recall.
+    error NothingToRecall();
     /// @notice Only the accounts' backstop writes off a position once they have one.
     error NotBackstop(address caller);
     /// @notice Only the reopening auction may.
@@ -327,6 +330,18 @@ contract Liquidator {
         accounts.seize(position, address(usdg), settled, account, address(this));
         // slither-disable-next-line unused-return
         accounts.repay(position, settled, account); // forge-lint: disable-line(unused-return)
+    }
+
+    /// @notice Recalls, for `account`'s `position` once it falls short, all it lent of `token` that it has not
+    /// recalled yet, so that what its lending vault cannot return now comes back within the vault's notice, or by a
+    /// buy-in, for the auction to sell. Anyone may call it, and it returns what it recalled.
+    function recall(address account, bytes32 position, address token) external returns (uint256 amount) {
+        if (!_isShort(_judge(account, position, _closed()))) revert NotLiquidatable(account, position);
+        uint256 lent = accounts.lent(account, position, token);
+        uint256 claimed = accounts.claim(account, position, token);
+        if (lent <= claimed || (claimed != 0 && lent - claimed < accounts.MIN_RECALL())) revert NothingToRecall();
+        amount = lent - claimed;
+        accounts.recall(position, token, amount, account);
     }
 
     /// @notice Writes off what `account`'s `position` still owes once it holds nothing, or only holdings a burn left

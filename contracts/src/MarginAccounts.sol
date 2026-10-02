@@ -83,6 +83,12 @@ contract MarginAccounts is Ownable2Step {
     /// @notice What a lent Stock Token counts for less in a position's equity, in basis points of its value: half the
     /// 10% move an asset's cap allows, the average premium a buy-in of a capped holding pays to bring it back.
     uint256 public constant RECALL_HAIRCUT = 5_00;
+    /// @notice The most recalls of one Stock Token a position may have open at once; its owner may open one fewer, so
+    /// the liquidator always has one.
+    uint256 public constant MAX_RECALLS = 4;
+    /// @notice The least a recall that is not a position's first and whole one may queue, in raw units: a hundredth of
+    /// a token, so no one can hold the queue up with dust.
+    uint256 public constant MIN_RECALL = 1e16;
     uint256 private constant BPS = 10_000;
     uint256 private constant PRICE_UNIT = 1e8;
     uint256 private constant USDG_TO_USD = 1e12;
@@ -148,6 +154,8 @@ contract MarginAccounts is Ownable2Step {
     mapping(address account => mapping(bytes32 position => mapping(uint256 asset => uint256))) private _units;
     mapping(uint256 asset => StockLendingVault) private _lending;
     mapping(address account => mapping(bytes32 position => mapping(uint256 asset => uint256))) private _lent;
+    // slither-disable-next-line uninitialized-state
+    mapping(address account => mapping(bytes32 position => mapping(uint256 asset => uint256[]))) private _recalls;
     Closure private _closure;
 
     /// @notice `caller` deposited `amount` of `token` into `account`'s `position`.
@@ -163,6 +171,10 @@ contract MarginAccounts is Ownable2Step {
     /// @notice `account`'s `position` took back `amount` of `symbol` for `shares` of its lending vault.
     event Unlend(
         address indexed account, bytes32 indexed position, bytes32 indexed symbol, uint256 amount, uint256 shares
+    );
+    /// @notice `account`'s `position` recalled `amount` of what it lent of `symbol`, as the lending vault's `ticket`.
+    event Recall(
+        address indexed account, bytes32 indexed position, bytes32 indexed symbol, uint256 ticket, uint256 amount
     );
     /// @notice `caller` withdrew `amount` of `token` from `account`'s `position` to `receiver`.
     event Withdraw(
@@ -311,6 +323,14 @@ contract MarginAccounts is Ownable2Step {
     error LendingAlreadySet(bytes32 symbol, address current);
     /// @notice The lending vault does not lend the asset's token to these accounts.
     error InvalidLending();
+    /// @notice The lending vault can return only `reachable` of `symbol` to the position now, not `amount`.
+    error OutOfReach(bytes32 symbol, uint256 amount, uint256 reachable);
+    /// @notice The position has `MAX_RECALLS` recalls of `symbol` open.
+    error TooManyRecalls(bytes32 symbol);
+    /// @notice Nothing the position recalled of the token is back yet.
+    error NothingToSettle();
+    /// @notice A recall would queue `amount`, less than `MIN_RECALL`, and is not the position's first and whole one.
+    error RecallTooSmall(uint256 amount);
 
     /// @param band_ The band, which must be the engine's.
     /// @param engine_ The margin engine; its assets are the Stock Tokens the positions take.
@@ -402,8 +422,19 @@ contract MarginAccounts is Ownable2Step {
         if (index == 0) return held;
         uint256 shares = _lent[account][position][--index];
         if (shares == 0) return held;
-        StockLendingVault vault_ = _lending[index];
-        return held + _min(vault_.convertToAssets(shares), vault_.maxWithdraw(address(this)));
+        return held + _min(_lending[index].convertToAssets(shares), _reachable(account, position, index));
+    }
+
+    /// @notice What `account`'s `position` has recalled of `token` and not yet taken back.
+    function claim(address account, bytes32 position, address token) external view returns (uint256) {
+        uint256 index = _indexOfToken[token];
+        return index == 0 ? 0 : _outstanding(account, position, index - 1);
+    }
+
+    /// @notice The lending vault's tickets of what `account`'s `position` has recalled of `token`, oldest first.
+    function recalls(address account, bytes32 position, address token) external view returns (uint256[] memory) {
+        uint256 index = _indexOfToken[token];
+        return index == 0 ? new uint256[](0) : _recalls[account][position][index - 1];
     }
 
     /// @notice The vault through which positions lend `symbol`; zero where there is none.
@@ -722,20 +753,90 @@ contract MarginAccounts is Ownable2Step {
         vault_.deposit(amount, address(this)); // forge-lint: disable-line(unused-return)
     }
 
+    /// @notice Recalls `amount` of what `account`'s `position` lent of a Stock Token: what the lending vault holds
+    /// free comes back into the position's holding at once, and the rest is queued as a ticket at the end of the
+    /// vault's queue, for which every incoming token is held in turn and which the borrower returns within the vault's
+    /// notice or by a buy-in. What comes back for it is the position's, taken in its turn. The account, an address it
+    /// authorized, or the liquidator may.
+    function recall(bytes32 position, address token, uint256 amount, address account) external {
+        if (msg.sender != liquidator) _checkAuthorized(account);
+        uint256 index = _indexOfToken[token];
+        if (index == 0) revert UnsupportedToken(token, position);
+        StockLendingVault vault_ = _lending[--index];
+        if (address(vault_) == address(0)) revert NoLending(_symbols[index]);
+        if (amount == 0) revert ZeroAmount();
+        uint256 outstanding = _outstanding(account, position, index);
+        uint256 lentAssets = _lentAssets(account, position, index);
+        if (outstanding + amount > lentAssets) revert InsufficientCollateral(token, amount);
+        uint256 free = _min(amount, vault_.reachable(new uint256[](0)));
+        uint256 queued = amount - free;
+        // slither-disable-next-line incorrect-equality
+        if (queued != 0 && queued < MIN_RECALL && (outstanding != 0 || amount != lentAssets)) {
+            revert RecallTooSmall(queued);
+        }
+        uint256[] memory ids = new uint256[](0);
+        if (free != 0) (vault_, ids) = _book(account, position, index, free);
+        uint256 ticket = vault_.tickets();
+        if (queued != 0) {
+            uint256[] storage open = _recalls[account][position][index];
+            if (open.length >= (msg.sender == liquidator ? MAX_RECALLS : MAX_RECALLS - 1)) {
+                revert TooManyRecalls(_symbols[index]);
+            }
+            open.push(ticket);
+            emit Recall(account, position, _symbols[index], ticket, queued);
+        }
+        // slither-disable-next-line unused-return
+        if (free != 0) vault_.reclaim(ids, free, address(this)); // forge-lint: disable-line(unused-return)
+        // slither-disable-next-line unused-return
+        if (queued != 0) vault_.recall(queued); // forge-lint: disable-line(unused-return)
+    }
+
     /// @notice Takes `amount` of a Stock Token `account`'s `position` lent back from the asset's lending vault into
-    /// its holding, as far as the vault holds it.
+    /// its holding, as far as the vault can return it to the position: what its recalls may take, oldest first, and
+    /// the vault's tokens no recall waits for.
     function unlend(bytes32 position, address token, uint256 amount, address account) external {
         _checkAuthorized(account);
         uint256 index = _indexOfToken[token];
         if (index == 0) revert UnsupportedToken(token, position);
-        Book storage b = _sync(--index);
-        if (b.scale == 0) revert AssetWrittenOff(_symbols[index]);
-        StockLendingVault vault_ = _reclaim(account, position, index, amount);
-        uint256 units = amount * WAD / b.scale;
-        b.units += SafeCast.toUint128(units);
-        _units[account][position][index] += units;
-        // slither-disable-next-line unused-return
-        vault_.withdraw(amount, address(this), address(this)); // forge-lint: disable-line(unused-return)
+        _unlend(account, position, --index, amount);
+    }
+
+    /// @notice Takes what the lending vault holds for `account`'s `position`'s recall of a Stock Token, if it is the
+    /// next in turn, into the position's holding, so the queue moves on; once nothing the position lent is worth
+    /// anything, gives up its recalls as they come to their turn instead. Anyone may call it.
+    function settle(address account, bytes32 position, address token) external {
+        uint256 index = _indexOfToken[token];
+        if (index == 0) revert UnsupportedToken(token, position);
+        StockLendingVault vault_ = _lending[--index];
+        if (address(vault_) == address(0)) revert NoLending(_symbols[index]);
+        uint256[] storage open = _recalls[account][position][index];
+        uint256 lentAssets = _lentAssets(account, position, index);
+        // slither-disable-next-line incorrect-equality
+        if (lentAssets == 0) {
+            uint256 head = vault_.head();
+            uint256 dropped = 0;
+            while (dropped < open.length && open[dropped] == head + dropped) ++dropped;
+            if (dropped == 0) revert NothingToSettle();
+            uint256[] memory gone = new uint256[](dropped);
+            for (uint256 i; i < dropped; ++i) {
+                gone[i] = open[i];
+            }
+            for (uint256 i = dropped; i < open.length; ++i) {
+                open[i - dropped] = open[i];
+            }
+            for (uint256 i; i < dropped; ++i) {
+                open.pop();
+            }
+            for (uint256 i; i < dropped; ++i) {
+                vault_.forfeit(gone[i]); // forge-lint: disable-line(calls-loop)
+            }
+            return;
+        }
+        uint256 reach = vault_.reachable(open);
+        uint256 free = vault_.idle();
+        uint256 back = _min(reach > free ? reach - free : 0, lentAssets);
+        if (back == 0) revert NothingToSettle();
+        _unlend(account, position, index, back);
     }
 
     /// @notice Withdraws `amount` of `token` from `account`'s `position` to `receiver`. A Stock Token leaves only for
@@ -817,11 +918,13 @@ contract MarginAccounts is Ownable2Step {
             if (amount > held) fromVault = amount - held;
         }
         StockLendingVault vault_ = StockLendingVault(address(0));
-        if (fromVault != 0) vault_ = _reclaim(account, position, index - 1, fromVault);
+        uint256[] memory ids = new uint256[](0);
+        if (fromVault != 0) (vault_, ids) = _reclaim(account, position, index - 1, fromVault);
         if (fromVault != amount) _debit(account, position, token, amount - fromVault);
+        // forge-lint: disable-next-line(reentrancy-events)
         emit Seize(account, position, token, amount, receiver);
         // slither-disable-next-line unused-return
-        if (fromVault != 0) vault_.withdraw(fromVault, receiver, address(this)); // forge-lint: disable-line(unused-return)
+        if (fromVault != 0) vault_.reclaim(ids, fromVault, receiver); // forge-lint: disable-line(unused-return)
         if (fromVault != amount) IERC20(token).safeTransfer(receiver, amount - fromVault);
     }
 
@@ -949,9 +1052,30 @@ contract MarginAccounts is Ownable2Step {
         return p.premium + p.debtShares * (index - p.premiumIndex) / RAY;
     }
 
+    function _unlend(address account, bytes32 position, uint256 index, uint256 amount) private {
+        (StockLendingVault vault_, uint256[] memory ids) = _book(account, position, index, amount);
+        // slither-disable-next-line unused-return
+        vault_.reclaim(ids, amount, address(this)); // forge-lint: disable-line(unused-return)
+    }
+
+    /// @dev Books a return of `amount` lent into the position's holding, before the vault is asked for it.
+    function _book(address account, bytes32 position, uint256 index, uint256 amount)
+        private
+        returns (StockLendingVault vault_, uint256[] memory ids)
+    {
+        Book storage b = _sync(index);
+        if (b.scale == 0) revert AssetWrittenOff(_symbols[index]);
+        (vault_, ids) = _reclaim(account, position, index, amount);
+        uint256 units = amount * WAD / b.scale;
+        b.units += SafeCast.toUint128(units);
+        _units[account][position][index] += units;
+    }
+
+    /// @dev Books a return of `amount` lent through the asset's vault and closes the position's recalls it takes in
+    /// full: returns the vault and the recalls to take from, oldest first.
     function _reclaim(address account, bytes32 position, uint256 index, uint256 amount)
         private
-        returns (StockLendingVault vault_)
+        returns (StockLendingVault vault_, uint256[] memory ids)
     {
         vault_ = _lending[index];
         if (address(vault_) == address(0)) revert NoLending(_symbols[index]);
@@ -959,8 +1083,56 @@ contract MarginAccounts is Ownable2Step {
         uint256 lentShares = _lent[account][position][index];
         uint256 shares = vault_.previewWithdraw(amount);
         if (shares > lentShares) revert InsufficientCollateral(_tokens[index], amount);
+        uint256[] storage open = _recalls[account][position][index];
+        ids = open;
+        uint256 reach = vault_.reachable(ids);
+        if (amount > reach) revert OutOfReach(_symbols[index], amount, reach);
         _lent[account][position][index] = lentShares - shares;
+        _close(vault_, open, ids, amount);
+        // forge-lint: disable-next-line(reentrancy-events)
         emit Unlend(account, position, _symbols[index], amount, shares);
+    }
+
+    /// @dev Keeps in `open` the recalls a return of `amount` leaves open, oldest first: the vault takes from the next
+    /// ticket in turn, and the one after it becomes next once that is taken in full. A ticket the vault's tokens only
+    /// partly meet leaves no free tokens, so a return within reach never takes more than it holds.
+    function _close(StockLendingVault vault_, uint256[] storage open, uint256[] memory ids, uint256 amount) private {
+        uint256 head = vault_.head();
+        uint256 reached = vault_.served();
+        uint256 kept = 0;
+        for (uint256 i; i < ids.length; ++i) {
+            if (ids[i] == head && amount != 0) {
+                // slither-disable-next-line unused-return,calls-loop
+                (, uint256 end,,) = vault_.ticket(ids[i]); // forge-lint: disable-line(unused-return, calls-loop)
+                uint256 part = _min(amount, end - reached);
+                amount -= part;
+                reached += part;
+                if (reached == end) {
+                    ++head;
+                    continue;
+                }
+            }
+            open[kept++] = ids[i];
+        }
+        while (open.length > kept) open.pop();
+    }
+
+    function _rest(StockLendingVault vault_, uint256 id) private view returns (uint256) {
+        // slither-disable-next-line unused-return,calls-loop
+        (uint256 start, uint256 end, uint256 taken,) = vault_.ticket(id); // forge-lint: disable-line(unused-return, calls-loop)
+        return end - start - taken;
+    }
+
+    function _outstanding(address account, bytes32 position, uint256 index) private view returns (uint256 assets) {
+        uint256[] storage open = _recalls[account][position][index];
+        StockLendingVault vault_ = _lending[index];
+        for (uint256 i; i < open.length; ++i) {
+            assets += _rest(vault_, open[i]);
+        }
+    }
+
+    function _reachable(address account, bytes32 position, uint256 index) private view returns (uint256) {
+        return _lending[index].reachable(_recalls[account][position][index]);
     }
 
     function _lentByAccounts(uint256 index) private view returns (uint256) {

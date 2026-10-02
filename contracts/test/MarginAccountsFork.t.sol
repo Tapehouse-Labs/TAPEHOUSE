@@ -15,6 +15,7 @@ import {IBand} from "../src/interfaces/IBand.sol";
 import {IMargin} from "../src/interfaces/IMargin.sol";
 import {IUSDG} from "../src/interfaces/IUSDG.sol";
 import {BandDouble} from "./doubles/BandDouble.sol";
+import {IUniswapV3SwapPool, PoolBorrowerDouble} from "./doubles/PoolBorrowerDouble.sol";
 import {IStockToken, IStockTokenRegistry} from "./conformance/Interfaces.sol";
 import {MarginReference} from "./reference/MarginReference.sol";
 
@@ -467,7 +468,7 @@ contract MarginAccountsForkTest is Test {
         );
         vm.prank(bob);
         accounts.lend(CROSS, address(nvda), 1e18, bob);
-        vm.expectPartialRevert(bytes4(keccak256("ERC4626ExceededMaxWithdraw(address,uint256,uint256)")));
+        vm.expectRevert(abi.encodeWithSelector(MarginAccounts.OutOfReach.selector, NVDA, 1e18, 0));
         vm.prank(alice);
         accounts.unlend(CROSS, address(nvda), 1e18, alice);
         vm.prank(ADMIN_BURNER);
@@ -486,6 +487,42 @@ contract MarginAccountsForkTest is Test {
         vm.stopPrank();
         assertEq(IERC20(address(nvda)).balanceOf(alice), 60e18 + back);
         assertApproxEqAbs(back, 30e18, 1);
+    }
+
+    function test_ARecallIsBoughtInWithRealUsdgFromTheRealNvdaPool() public {
+        IStockToken nvda = IStockToken(_token("NVDA"));
+        StockLendingVault lending = new StockLendingVault(
+            IERC20(address(nvda)), address(this), SupplyVault.RateModel(80_00, 25, 1_00, 50_00), 10_00
+        );
+        IUniswapV3SwapPool pool = IUniswapV3SwapPool(
+            vm.parseJsonAddress(vm.readFile("../deployments/4663.json"), ".uniswapV3.NVDA_USDG_500")
+        );
+        PoolBorrowerDouble borrower = new PoolBorrowerDouble(lending, usdg, pool);
+        lending.setDepositor(address(accounts));
+        lending.setBorrower(address(borrower));
+        accounts.setLending(NVDA, lending);
+        _deposit(CROSS, "NVDA", 100e18);
+        vm.startPrank(alice);
+        accounts.lend(CROSS, address(nvda), 100e18, alice);
+        vm.stopPrank();
+        borrower.borrow(90e18);
+        deal(address(usdg), address(borrower), 100_000e6);
+        vm.prank(alice);
+        accounts.recall(CROSS, address(nvda), 40e18, alice);
+        assertEq(accounts.collateral(alice, CROSS, address(nvda)), 10e18);
+        assertEq(accounts.claim(alice, CROSS, address(nvda)), 30e18);
+        skip(1 days);
+        lending.buyIn(0);
+        assertEq(lending.claimable(0), 30e18);
+        assertGt(borrower.paid(), 0);
+        uint256 back = accounts.sellable(alice, CROSS, address(nvda));
+        assertApproxEqAbs(back, 40e18, 1);
+        vm.startPrank(alice);
+        accounts.settle(alice, CROSS, address(nvda));
+        accounts.withdraw(CROSS, address(nvda), back, alice, alice);
+        vm.stopPrank();
+        assertEq(IERC20(address(nvda)).balanceOf(alice), back);
+        emit log_named_decimal_uint("USDG paid for 30 NVDA", borrower.paid(), 6);
     }
 
     function _permit(IStockToken token, Vm.Wallet memory wallet, uint256 value)

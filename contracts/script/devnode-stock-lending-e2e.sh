@@ -3,8 +3,9 @@
 # Usage: devnode-stock-lending-e2e.sh RPC_URL PRIVATE_KEY DEPLOYMENTS_JSON
 # Checks SPY's stock lending vault on the dev node: it is the accounts' lending vault for SPY, takes deposits from them
 # alone, and has no borrower yet. A position lends 4 of its 10 SPY: the tokens leave its holding for the vault, and its
-# equity falls by the recall haircut on what it lent, while the engine still sees all 10. It takes them back, and its
-# equity is what it was. Prints the L2 gas of the loan and of its return.
+# equity falls by the recall haircut on what it lent, while the engine still sees all 10. It recalls them, which the
+# vault, holding them free, returns at once with no ticket, and its equity is what it was. Prints the L2 gas of the
+# loan and of the recall.
 set -euo pipefail
 
 rpc=$1 key=$2 registry=$3
@@ -49,9 +50,13 @@ read -r lent_equity lent_requirement <<<"$(health)"
 haircut=$(calc "round(($before - $lent_equity) * 10000 * $held / ($before * $four))")
 [ "$lent_requirement" = "$requirement" ] || fail "the engine no longer sees all the SPY: $requirement became $lent_requirement"
 [ "$haircut" = 500 ] || fail "lending 4 SPY took $(calc "$before - $lent_equity") off the equity, not 5% of their value"
-unlend_gas=$(l2_gas "$(cast calldata "unlend(bytes32,address,uint256,address)" "$position" "$spy" "$four" "$me")")
-send "$accounts" "unlend(bytes32,address,uint256,address)" "$position" "$spy" "$four" "$me"
+recall_gas=$(l2_gas "$(cast calldata "recall(bytes32,address,uint256,address)" "$position" "$spy" "$four" "$me")")
+send "$accounts" "recall(bytes32,address,uint256,address)" "$position" "$spy" "$four" "$me"
+[ "$(read_ "$accounts" "collateral(address,bytes32,address)(uint256)" "$me" "$position" "$spy")" = "$held" ] ||
+  fail "the vault did not return the 4 SPY it held at once"
+[ "$(read_ "$accounts" "lent(address,bytes32,address)(uint256)" "$me" "$position" "$spy")" = 0 ] || fail "the position still lends SPY"
+[ "$(read_ "$lending" "tickets()(uint64)")" = 0 ] || fail "the recall queued a ticket the vault's own tokens could meet"
 read -r after _ <<<"$(health)"
 [ "$after" = "$before" ] || fail "taking the SPY back left the equity at $after, not $before"
-echo "stock lending $lending: SPY's, lent 4 SPY at a 5% haircut on $before of equity, the engine unchanged, and took them back; lend $lend_gas L2 gas, unlend $unlend_gas"
+echo "stock lending $lending: SPY's, lent 4 SPY at a 5% haircut on $before of equity, the engine unchanged, and recalled them, which the vault returned at once; lend $lend_gas L2 gas, recall $recall_gas"
 echo "PASS"

@@ -429,9 +429,7 @@ contract MarginAccountsLendingTest is Test {
             abi.encodeWithSelector(MarginAccounts.InsufficientCollateral.selector, address(nvda), 5 * SHARE)
         );
         accounts.unlend(CROSS, address(nvda), 5 * SHARE, alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(ERC4626.ERC4626ExceededMaxWithdraw.selector, address(accounts), 2 * SHARE, SHARE)
-        );
+        vm.expectRevert(abi.encodeWithSelector(MarginAccounts.OutOfReach.selector, NVDA, 2 * SHARE, SHARE));
         accounts.unlend(CROSS, address(nvda), 2 * SHARE, alice);
         vm.expectEmit(address(accounts));
         emit MarginAccounts.Unlend(alice, CROSS, NVDA, SHARE, SHARE);
@@ -545,9 +543,7 @@ contract MarginAccountsLendingTest is Test {
         assertEq(accounts.collateral(alice, CROSS, address(nvda)), 0);
         assertEq(accounts.lent(alice, CROSS, address(nvda)), 3 * SHARE);
         assertEq(accounts.sellable(alice, CROSS, address(nvda)), 0);
-        vm.expectRevert(
-            abi.encodeWithSelector(ERC4626.ERC4626ExceededMaxWithdraw.selector, address(accounts), SHARE, 0)
-        );
+        vm.expectRevert(abi.encodeWithSelector(MarginAccounts.OutOfReach.selector, NVDA, SHARE, 0));
         vm.prank(address(liquidator));
         accounts.seize(CROSS, address(nvda), SHARE, alice, buyer);
         vm.expectRevert(MarginAccounts.PositionNotEmpty.selector);

@@ -7,6 +7,7 @@ import {IERC20, IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extens
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import {IStockLendingBorrower} from "./interfaces/IStockLendingBorrower.sol";
 import {IStockToken, IStockTokenRegistry} from "./interfaces/IStockToken.sol";
 import {SupplyVault} from "./SupplyVault.sol";
 
@@ -15,8 +16,10 @@ import {SupplyVault} from "./SupplyVault.sol";
 /// multiplier, pass through every loan. Its one depositor, the margin accounts, set once, lends the tokens of the
 /// positions that choose to; its one borrower, set once, borrows them open-term at a fee set by utilisation on a
 /// two-slope curve, paid in the token. The owner takes `feeShare` of the fee as shares; lenders keep the rest. The
-/// borrower may take at most `MAX_UTILIZATION` of the vault; what stays idle is lenders' to take back, first come,
-/// first served.
+/// borrower may take at most `MAX_UTILIZATION` of the vault. The depositor recalls what its lenders want back as
+/// tickets in one queue: every token that comes into the vault is held for the tickets in the order they were
+/// recalled, before anyone may borrow or withdraw it, and each ticket is taken in turn; once a ticket's `NOTICE` runs
+/// out, anyone may force the borrower to buy in what the vault does not yet hold for it.
 /// @dev The vault counts its tokens itself, as those it holds plus what the borrower owes, so tokens sent to it
 /// directly change no share's value. The debt grows by a borrow index with 27 decimals. The issuer can pause the
 /// token, blocklist the vault and burn from it: while the token is paused, the vault blocklisted or its balance below
@@ -33,6 +36,9 @@ contract StockLendingVault is ERC4626, Ownable2Step {
     uint16 public constant MAX_OPTIMAL = 99_00;
     /// @notice The highest fee the curve may reach, in basis points a year: 1,000%.
     uint32 public constant MAX_RATE = 1000_00;
+    /// @notice How long the borrower has to return a recalled ticket before anyone may force a buy-in: one day, as US
+    /// equities settle.
+    uint64 public constant NOTICE = 1 days;
 
     uint256 private constant BPS = 10_000;
     uint256 private constant WAD = 1e18;
@@ -48,7 +54,7 @@ contract StockLendingVault is ERC4626, Ownable2Step {
     address public depositor;
     /// @notice The only address that may borrow.
     address public borrower;
-    /// @notice The tokens the vault holds, by its own count.
+    /// @notice The tokens the vault holds that no ticket waits for, by its own count.
     uint128 public idle;
     /// @notice The borrower's debt divided by the borrow index at which it was taken.
     uint128 public scaledDebt;
@@ -56,7 +62,25 @@ contract StockLendingVault is ERC4626, Ownable2Step {
     uint128 public borrowIndex;
     /// @notice When the fee last accrued.
     uint64 public lastAccrual;
+    /// @notice How many tickets the depositor has recalled; each is numbered in turn from zero.
+    uint64 public tickets;
+    /// @notice The ticket taken next: those before it are taken or given up.
+    uint64 public head;
+    /// @notice All the depositor has recalled, in tokens: where the queue ends.
+    uint128 public requested;
+    /// @notice How far the queue has tokens: up to here, every ticket is taken, given up, or held for.
+    uint128 public assigned;
+    /// @notice How far the queue is taken or given up.
+    uint128 public served;
     SupplyVault.RateModel private _rateModel;
+    mapping(uint256 id => Ticket) private _tickets;
+
+    /// @notice A recalled ticket: it runs from the end of the one before it to `end` in the queue of all recalls, and
+    /// its notice runs out at `dueAt`.
+    struct Ticket {
+        uint128 end;
+        uint64 dueAt;
+    }
 
     /// @notice The depositor was set.
     event DepositorSet(address indexed depositor);
@@ -73,6 +97,14 @@ contract StockLendingVault is ERC4626, Ownable2Step {
     event Repay(uint256 assets);
     /// @notice The vault's count of the tokens it holds fell to its balance.
     event Sync(uint256 idle);
+    /// @notice The depositor recalled `assets` as `ticket`, whose notice runs out at `dueAt`.
+    event Recall(uint256 indexed ticket, uint256 assets, uint64 dueAt);
+    /// @notice The depositor took `assets` of what it recalled, from `ticket`.
+    event Take(uint256 indexed ticket, uint256 assets);
+    /// @notice The depositor gave up `assets` of `ticket`.
+    event Forfeit(uint256 indexed ticket, uint256 assets);
+    /// @notice The borrower bought in and returned `assets`, all the vault did not yet hold up to the end of `ticket`.
+    event BuyIn(uint256 indexed ticket, uint256 assets);
 
     /// @notice `account` is not the depositor.
     error NotDepositor(address account);
@@ -90,6 +122,17 @@ contract StockLendingVault is ERC4626, Ownable2Step {
     error InvalidFeeShare();
     /// @notice The owner cannot renounce: the vault needs one to set its depositor, borrower and rate model.
     error OwnershipCannotBeRenounced();
+    /// @notice The ticket's notice has not run out, or the vault holds all of the queue up to its end, or the borrower
+    /// owes nothing to return.
+    error NotDue();
+    /// @notice Only ticket `head`, the next in turn, may be given up.
+    error NotHead(uint256 head);
+    /// @notice The borrower's buy-in left `outstanding` of what it was asked unreturned.
+    error BuyInFailed(uint256 outstanding);
+    /// @notice The token is paused, the vault blocklisted or its tokens burnt, so nothing can come back.
+    error Unavailable();
+    /// @notice The depositor may take only `reachable` of the vault's tokens with these tickets, not `assets`.
+    error OutOfReach(uint256 assets, uint256 reachable);
 
     /// @param token The Stock Token lent.
     /// @param initialOwner The owner, who sets the depositor and the borrower once and the rate model within its
@@ -165,14 +208,134 @@ contract StockLendingVault is ERC4626, Ownable2Step {
         _transferIn(msg.sender, repaid);
     }
 
+    /// @notice Recalls `assets` for the depositor's lenders as a ticket at the end of the queue, and returns its number, `id`.
+    /// Every incoming token is held for the tickets in turn; what the vault does not hold of a ticket, the borrower must
+    /// return within `NOTICE`, as far as it owes it. Only the depositor may.
+    function recall(uint256 assets) external returns (uint256 id) {
+        if (msg.sender != depositor) revert NotDepositor(msg.sender);
+        uint128 end = requested + SafeCast.toUint128(assets);
+        uint64 due = SafeCast.toUint64(block.timestamp + NOTICE);
+        id = tickets++;
+        _tickets[id] = Ticket(end, due);
+        requested = end;
+        _assign();
+        // forge-lint: disable-next-line(reentrancy-events)
+        emit Recall(id, assets, due);
+    }
+
+    /// @notice Sends `assets` of the vault's tokens to `receiver` for the depositor, from what the next ticket in turn
+    /// holds if it is one of `ids`, and the rest from the tokens no ticket waits for; it burns the shares they are
+    /// worth, and returns them. Only the depositor may, while the token trades and the vault is not blocklisted.
+    function reclaim(uint256[] calldata ids, uint256 assets, address receiver) external returns (uint256 shares) {
+        if (msg.sender != depositor) revert NotDepositor(msg.sender);
+        if (_unavailable()) revert Unavailable();
+        uint256 free = idle;
+        uint256 reach = free;
+        uint256 left = assets;
+        for (uint256 i; i < ids.length; ++i) {
+            uint256 held = claimable(ids[i]);
+            reach += held;
+            uint256 part = Math.min(left, held);
+            // slither-disable-next-line incorrect-equality
+            if (part == 0) continue;
+            _take(ids[i], part);
+            left -= part;
+        }
+        if (left > free) revert OutOfReach(assets, reach);
+        shares = previewWithdraw(assets);
+        _withdraw(msg.sender, receiver, msg.sender, assets, shares);
+    }
+
+    /// @notice Gives up what is left of ticket `id`, the next in turn, as when the lender it was recalled for has
+    /// nothing left lent: the tokens held for it go to the tickets after it, or are free. Only the depositor may.
+    function forfeit(uint256 id) external {
+        if (msg.sender != depositor) revert NotDepositor(msg.sender);
+        if (id != head || id >= tickets) revert NotHead(head);
+        uint256 end = _tickets[id].end;
+        uint256 from = served;
+        uint256 met = assigned;
+        idle += SafeCast.toUint128(Math.min(met, end) - from);
+        if (met < end) assigned = SafeCast.toUint128(end);
+        served = SafeCast.toUint128(end);
+        ++head;
+        _assign();
+        // forge-lint: disable-next-line(reentrancy-events)
+        emit Forfeit(id, end - from);
+    }
+
+    /// @notice Has the borrower buy in and return all the vault does not yet hold of the queue up to the end of ticket
+    /// `id`, whose notice has run out, as far as it owes it, or reverts. Notices run out in the tickets' order, so the
+    /// latest ticket whose notice has run out asks for all that is due. Anyone may call it, while the token trades and
+    /// the vault is not blocklisted.
+    function buyIn(uint256 id) external {
+        // forge-lint: disable-next-line(block-timestamp)
+        if (id >= tickets || _tickets[id].dueAt > block.timestamp) revert NotDue();
+        uint256 end = _tickets[id].end;
+        uint256 met = assigned;
+        uint256 owed = end > met ? Math.min(end - met, debt()) : 0;
+        // slither-disable-next-line incorrect-equality
+        if (owed == 0) revert NotDue();
+        if (_unavailable()) revert Unavailable();
+        IStockLendingBorrower(borrower).buyIn(owed);
+        uint256 back = assigned;
+        if (back < met + owed) revert BuyInFailed(met + owed - back);
+        // forge-lint: disable-next-line(reentrancy-events)
+        emit BuyIn(id, owed);
+    }
+
+    /// @notice What the depositor may take now for ticket `id`: what the vault holds for it if it is the next in turn,
+    /// and nothing otherwise.
+    function claimable(uint256 id) public view returns (uint256) {
+        if (id != head || id >= tickets) return 0;
+        return Math.min(assigned, _tickets[id].end) - served;
+    }
+
+    /// @notice What the depositor may take now with tickets `ids`, oldest first: the vault's tokens no ticket waits
+    /// for, and what it holds for those of `ids` that come in turn, each after the one before is taken in full; zero
+    /// while the token is paused, the vault blocklisted or its tokens burnt.
+    function reachable(uint256[] calldata ids) external view returns (uint256 assets) {
+        if (_unavailable()) return 0;
+        assets = idle;
+        uint256 next = head;
+        uint256 reached = served;
+        uint256 met = assigned;
+        for (uint256 i = 0; i < ids.length && ids[i] == next; ++i) {
+            uint256 end = _tickets[next].end;
+            assets += Math.min(met, end) - reached;
+            if (met < end) break;
+            (next, reached) = (next + 1, end);
+        }
+    }
+
+    /// @notice Ticket `id`'s place in the queue, from `start` to `end`, what of it was taken or given up, and when its
+    /// notice runs out.
+    function ticket(uint256 id) external view returns (uint256 start, uint256 end, uint256 taken, uint64 dueAt) {
+        Ticket memory t = _tickets[id];
+        start = _start(id);
+        end = t.end;
+        dueAt = t.dueAt;
+        if (id < head) taken = end - start;
+        else if (id == head) taken = served - start;
+    }
+
+    /// @notice The tokens the vault holds for tickets: the queue from where it is taken to where it is held.
+    function locked() public view returns (uint256) {
+        return uint256(assigned) - served;
+    }
+
     /// @notice Brings the vault's count of the tokens it holds down to its balance, as after the issuer burns from
-    /// the vault: a loss to this vault's lenders alone. It never counts tokens sent to the vault directly. Anyone may
-    /// call it.
+    /// the vault: a loss to this vault's lenders alone. The tokens no ticket waits for go first, then those held for
+    /// the latest tickets, which wait again. It never counts tokens sent to the vault directly. Anyone may call it.
     function sync() external {
         uint256 balance = IERC20(asset()).balanceOf(address(this));
-        if (balance < idle) {
+        uint256 free = idle;
+        uint256 held = locked();
+        if (balance < free + held) {
             _accrue();
-            idle = SafeCast.toUint128(balance);
+            uint256 lost = free + held - balance;
+            uint256 fromFree = Math.min(free, lost);
+            idle = SafeCast.toUint128(free - fromFree);
+            assigned -= SafeCast.toUint128(lost - fromFree);
             // forge-lint: disable-next-line(reentrancy-events)
             emit Sync(balance);
         }
@@ -183,16 +346,17 @@ contract StockLendingVault is ERC4626, Ownable2Step {
         return _divUp(scaledDebt * _currentIndex(), RAY);
     }
 
-    /// @notice What the borrower may still borrow: the vault's tokens up to `MAX_UTILIZATION` of its assets.
+    /// @notice What the borrower may still borrow: the vault's tokens up to `MAX_UTILIZATION` of its assets, less
+    /// those that tickets wait for.
     function borrowable() public view returns (uint256) {
         uint256 owed = debt();
-        uint256 cap = (owed + idle) * MAX_UTILIZATION / BPS;
-        return cap > owed ? cap - owed : 0;
+        uint256 cap = (owed + idle + locked()) * MAX_UTILIZATION / BPS;
+        return cap > owed ? Math.min(cap - owed, idle) : 0;
     }
 
     /// @notice The share of the vault's assets lent, with 18 decimals.
     function utilization() public view returns (uint256) {
-        return _utilization(debt(), idle);
+        return _utilization(debt(), idle + locked());
     }
 
     /// @notice The fee the borrower pays now, a year, with 18 decimals.
@@ -208,7 +372,7 @@ contract StockLendingVault is ERC4626, Ownable2Step {
 
     /// @inheritdoc ERC4626
     function totalAssets() public view override returns (uint256) {
-        return idle + debt();
+        return idle + locked() + debt();
     }
 
     /// @inheritdoc ERC4626
@@ -263,6 +427,7 @@ contract StockLendingVault is ERC4626, Ownable2Step {
 
     function _transferIn(address from, uint256 assets) internal override {
         idle += SafeCast.toUint128(assets); // forge-lint: disable-line(missing-events-arithmetic)
+        _assign();
         super._transferIn(from, assets);
     }
 
@@ -315,7 +480,7 @@ contract StockLendingVault is ERC4626, Ownable2Step {
         // slither-disable-next-line incorrect-equality
         if (scaledDebt == 0) return index;
         uint256 lent = _divUp(scaledDebt * index, RAY);
-        uint256 rate = _borrowRate(_utilization(lent, idle));
+        uint256 rate = _borrowRate(_utilization(lent, idle + locked()));
         return index + index * rate * (block.timestamp - lastAccrual) / (WAD * YEAR);
     }
 
@@ -341,10 +506,32 @@ contract StockLendingVault is ERC4626, Ownable2Step {
             return true;
         }
         try IERC20(asset()).balanceOf(address(this)) returns (uint256 balance) {
-            return balance < idle;
+            return balance < idle + locked();
         } catch {
             return true;
         }
+    }
+
+    function _start(uint256 id) private view returns (uint256) {
+        return id == 0 ? 0 : _tickets[id - 1].end;
+    }
+
+    function _assign() private {
+        uint256 free = idle;
+        uint256 move = Math.min(free, uint256(requested) - assigned);
+        // slither-disable-next-line incorrect-equality
+        if (move == 0) return;
+        idle = SafeCast.toUint128(free - move);
+        assigned += SafeCast.toUint128(move); // forge-lint: disable-line(missing-events-arithmetic)
+    }
+
+    function _take(uint256 id, uint256 assets) private {
+        served += SafeCast.toUint128(assets);
+        idle += SafeCast.toUint128(assets);
+        // slither-disable-next-line incorrect-equality
+        if (served == _tickets[id].end) ++head;
+        // forge-lint: disable-next-line(reentrancy-events)
+        emit Take(id, assets);
     }
 
     function _divUp(uint256 a, uint256 b) private pure returns (uint256) {

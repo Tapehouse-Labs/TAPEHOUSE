@@ -10,6 +10,7 @@ import {IBand} from "../src/interfaces/IBand.sol";
 import {IMargin} from "../src/interfaces/IMargin.sol";
 import {IUSDG} from "../src/interfaces/IUSDG.sol";
 import {BandDouble} from "./doubles/BandDouble.sol";
+import {BorrowerDouble} from "./doubles/BorrowerDouble.sol";
 import {MarginDouble} from "./doubles/MarginDouble.sol";
 import {StubAggregator} from "./devnode/StubAggregator.sol";
 import {StubStockToken} from "./devnode/StubStockToken.sol";
@@ -21,12 +22,12 @@ contract StockLendingHandler is Test {
     StubStockToken internal immutable nvda;
     MarginAccounts internal immutable accounts;
     StockLendingVault internal immutable lending;
-    address internal immutable borrower;
+    BorrowerDouble internal immutable borrower;
     address[2] internal holders = [makeAddr("alice"), makeAddr("bob")];
     bool public borrowedPastTheCap;
     uint256 public burnt;
 
-    constructor(StubStockToken nvda_, MarginAccounts accounts_, StockLendingVault lending_, address borrower_) {
+    constructor(StubStockToken nvda_, MarginAccounts accounts_, StockLendingVault lending_, BorrowerDouble borrower_) {
         (nvda, accounts, lending, borrower) = (nvda_, accounts_, lending_, borrower_);
     }
 
@@ -73,18 +74,38 @@ contract StockLendingHandler is Test {
         uint256 available = lending.borrowable();
         if (available == 0) return;
         amount = bound(amount, 1, available);
-        vm.prank(borrower);
-        lending.borrow(amount, borrower);
+        borrower.borrow(amount);
         if (lending.debt() * 10_000 > lending.totalAssets() * 9_000 + 10_000) borrowedPastTheCap = true;
     }
 
     function repay(uint256 amount) external {
         uint256 owed = lending.debt();
         if (owed == 0) return;
-        amount = bound(amount, 1, owed);
-        nvda.mint(borrower, amount);
-        vm.prank(borrower);
-        lending.repay(amount);
+        borrower.repay(bound(amount, 1, owed));
+    }
+
+    function recall(uint256 who, uint256 amount) external {
+        address account = holders[who % 2];
+        uint256 lent = accounts.lent(account, CROSS, address(nvda));
+        uint256 claimed = accounts.claim(account, CROSS, address(nvda));
+        if (lent <= claimed || accounts.recalls(account, CROSS, address(nvda)).length == 3) return;
+        amount = bound(amount, 1, lent - claimed);
+        if (amount < 1e16 && (claimed != 0 || amount != lent)) amount = lent - claimed < 1e16 ? 0 : 1e16;
+        if (amount == 0) return;
+        vm.prank(account);
+        accounts.recall(CROSS, address(nvda), amount, account);
+    }
+
+    function buyIn() external {
+        skip(1 days);
+        uint256 count = lending.tickets();
+        if (count != 0) {
+            try lending.buyIn(count - 1) {} catch {}
+        }
+    }
+
+    function settle(uint256 who) external {
+        try accounts.settle(holders[who % 2], CROSS, address(nvda)) {} catch {}
     }
 
     function wait(uint256 time) external {
@@ -92,9 +113,9 @@ contract StockLendingHandler is Test {
     }
 
     function burn(uint256 amount) external {
-        uint256 idle = lending.idle();
-        if (idle == 0) return;
-        amount = bound(amount, 1, idle);
+        uint256 held = lending.idle() + lending.locked();
+        if (held == 0) return;
+        amount = bound(amount, 1, held);
         nvda.adminBurn(address(lending), amount);
         lending.sync();
         burnt += amount;
@@ -138,12 +159,10 @@ contract StockLendingInvariantTest is Test {
         lending = new StockLendingVault(
             IERC20(address(nvda)), address(this), SupplyVault.RateModel(80_00, 25, 1_00, 50_00), 10_00
         );
-        address borrower = makeAddr("borrower");
+        BorrowerDouble borrower = new BorrowerDouble(lending, nvda);
         lending.setDepositor(address(accounts));
-        lending.setBorrower(borrower);
+        lending.setBorrower(address(borrower));
         accounts.setLending("NVDA", lending);
-        vm.prank(borrower);
-        nvda.approve(address(lending), type(uint256).max);
         handler = new StockLendingHandler(nvda, accounts, lending, borrower);
         targetContract(address(handler));
     }
@@ -155,8 +174,8 @@ contract StockLendingInvariantTest is Test {
     }
 
     function invariant_TheVaultHoldsTheTokensItCounts() public view {
-        assertGe(nvda.balanceOf(address(lending)), lending.idle());
-        assertEq(lending.totalAssets(), lending.idle() + lending.debt());
+        assertGe(nvda.balanceOf(address(lending)), lending.idle() + lending.locked());
+        assertEq(lending.totalAssets(), lending.idle() + lending.locked() + lending.debt());
     }
 
     function invariant_ThePositionsLendWhatTheAccountsHoldOfTheVault() public view {
@@ -167,6 +186,16 @@ contract StockLendingInvariantTest is Test {
         uint256 held = lending.convertToAssets(lending.balanceOf(address(accounts)));
         assertLe(lent, held);
         assertGe(lent + 2, held);
+    }
+
+    function invariant_TheVaultsOpenTicketsAreThePositions() public view {
+        uint256 claimed;
+        for (uint256 i; i < 2; ++i) {
+            claimed += accounts.claim(handler.holder(i), bytes32(0), address(nvda));
+        }
+        assertEq(lending.requested() - lending.served(), claimed);
+        assertEq(lending.locked(), lending.assigned() - lending.served());
+        assertLe(lending.assigned(), lending.requested());
     }
 
     function invariant_TheBorrowerNeverTakesMoreThanNinetyPercent() public view {
