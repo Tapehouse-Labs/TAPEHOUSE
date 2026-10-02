@@ -12,6 +12,9 @@ import {
   encodeFunctionResult,
   type Hex,
   hexToBigInt,
+  padHex,
+  parseEventLogs,
+  toEventSelector,
   toFunctionSelector,
   zeroAddress,
 } from 'viem'
@@ -26,6 +29,8 @@ import {
   decodeRevertData,
   type Deployments,
   marginAccountsAbi,
+  morpho,
+  morphoBandOracleAbi,
   type PackageSource,
   parseDeployments,
   quoterV2Abi,
@@ -81,6 +86,40 @@ describe('deployments', () => {
     ).toThrow('.tokens.USDG is not an address.')
     expect(() => parseDeployments({ tokens: {} })).toThrow('The registry has no chainId.')
     expect(() => parseDeployments({ chainId: 1, tokens: { USDG: 1 } })).toThrow('.tokens.USDG is not an address.')
+  })
+
+  test("Morpho Blue and the band's Morpho oracles are read from .morpho and .morphoOracles", async () => {
+    expect(robinhood.morpho).toEqual({
+      Blue: '0x9D53d5E3bd5E8d4Cbfa6DB1ca238AEA02E651010',
+      AdaptiveCurveIrm: '0x2BD3d5965B26B51814AC95127B2b80dD6CcC0fa1',
+    })
+    expect(parseDeployments({ chainId: 412346, morphoOracles: { NVDA: alice } }).morphoOracles).toEqual({ NVDA: alice })
+    expect(testnet.morphoOracles).toEqual({})
+    await expect(
+      morpho.price(createClient({ transport: custom({ request: async () => '0x7' }) }), testnet, 'NVDA'),
+    ).rejects.toThrow('The registry has no .morphoOracles.NVDA.')
+  })
+
+  test("Morpho Blue's markets are read from .morpho.Markets as 32-byte ids", () => {
+    const id = '0x3a85e619751152991742810df6ec69ce473daef99e28a64ab2340d7b7ccfee49'
+    const d = parseDeployments({
+      chainId: 412346,
+      morpho: { Blue: alice, Markets: { NVDA_USDG: `0x${id.slice(2).toUpperCase()}` } },
+    })
+    expect(d.morpho).toEqual({ Blue: alice })
+    expect(d.morphoMarkets).toEqual({ NVDA_USDG: id })
+    expect(robinhood.morphoMarkets).toEqual({})
+    for (const wrong of [alice, `${id}00`, id.slice(0, 65), 7])
+      expect(() => parseDeployments({ chainId: 1, morpho: { Markets: { NVDA_USDG: wrong } } })).toThrow(
+        '.morpho.Markets.NVDA_USDG is not a 32-byte id.',
+      )
+  })
+
+  test('a name every object inherits is not an entry of the registry', () => {
+    for (const name of ['constructor', '__proto__', 'toString']) {
+      expect(() => tokenPriceFeed(robinhood, name)).toThrow(`The registry has no .chainlink.${name}.`)
+      expect(() => band.seal(robinhood, name)).toThrow(`The registry has no .bandFeeds.${name}.`)
+    }
   })
 
   test('the stock lending vaults are read from .tapehouse.StockLending', () => {
@@ -301,6 +340,151 @@ describe('account reads', () => {
     expect(await accounts.collateral(client, testnet, alice, CROSS, bob)).toBe(2n * 10n ** 18n)
     expect(await accounts.leverage(client, testnet, alice, CROSS)).toBe(25_000n)
     expect(await accounts.liquidationPrice(client, testnet, alice, CROSS, 'SPY', 5n)).toBe(69_412_000_000n)
+  })
+})
+
+describe('Morpho oracles', () => {
+  const bandAddress = '0xa70118d3324D90532E7D2854627b13CacE305641'
+  const d: Deployments = { ...testnet, morphoOracles: { NVDA: bob } }
+  const symbol = toBytes32('NVDA')
+  const blocks: bigint[] = []
+  const chain = ({
+    price,
+    halt = [false, 0n, 0n, false],
+    step = 0,
+  }: {
+    price: bigint | Hex
+    halt?: readonly [boolean, bigint, bigint, boolean]
+    step?: number
+  }) =>
+    createClient({
+      transport: custom(
+        {
+          async request({ method, params }) {
+            if (method === 'eth_blockNumber') return '0x7'
+            if (method !== 'eth_call') throw new Error(`unexpected ${method}`)
+            const [{ to, data }, block] = params as [{ to: string; data: Hex }, Hex | 'latest']
+            if (block !== 'latest') blocks.push(hexToBigInt(block))
+            if (to === bandAddress) {
+              expect(decodeFunctionData({ abi: bandAbi, data })).toEqual({
+                functionName: 'corporateAction',
+                args: [symbol],
+              })
+              return encodeFunctionResult({ abi: bandAbi, functionName: 'corporateAction', result: [step, 0n, 0n, 0n] })
+            }
+            expect(to).toBe(bob)
+            const { functionName } = decodeFunctionData({ abi: morphoBandOracleAbi, data })
+            if (functionName === 'price' && typeof price !== 'bigint')
+              throw Object.assign(new Error('execution reverted'), { code: 3, data: price })
+            const result = {
+              price,
+              halt,
+              band: bandAddress,
+              symbol,
+              collateralToken: alice,
+              loanToken: testnet.tokens.USDG,
+              scaleFactor: 10n ** 16n,
+              owner: alice,
+            } as const
+            if (!(functionName in result)) throw new Error(`unexpected ${functionName}`)
+            return encodeFunctionResult({
+              abi: morphoBandOracleAbi,
+              functionName: functionName as keyof typeof result,
+              result: result[functionName as keyof typeof result],
+            })
+          },
+        },
+        { retryCount: 0 },
+      ),
+    })
+  const noAnswer = encodeErrorResult({ abi: morphoBandOracleAbi, errorName: 'NoAnswer', args: [symbol] })
+
+  test('an oracle answers its price at one block', async () => {
+    expect(await morpho.price(chain({ price: 765_517_754_420_000_000_000_000_000n }), d, 'NVDA')).toEqual({
+      price: 765_517_754_420_000_000_000_000_000n,
+    })
+    expect(blocks.splice(0)).toEqual([7n])
+  })
+
+  test('NoAnswer with no halt, pause or unconfirmed step is a stale band, never a price of zero', async () => {
+    expect(await morpho.price(chain({ price: noAnswer }), d, 'NVDA')).toEqual({
+      price: undefined,
+      noPrice: 'stale',
+      revert: { errorName: 'NoAnswer', args: [symbol] },
+    })
+    expect(blocks.splice(0)).toEqual([7n, 7n, 7n, 7n, 7n])
+  })
+
+  test("NoAnswer under a signed halt, the issuer's pause or an unconfirmed step is a halt", async () => {
+    for (const halted of [
+      chain({ price: noAnswer, halt: [true, 1_790_200_000n, 1_790_196_400n, false] }),
+      chain({ price: noAnswer, halt: [false, 0n, 0n, true] }),
+      chain({ price: noAnswer, step: 2 }),
+    ])
+      expect(await morpho.price(halted, d, 'NVDA')).toMatchObject({ price: undefined, noPrice: 'halted' })
+    blocks.length = 0
+  })
+
+  test('SequencerNotSettled is no price, and any other revert an error', async () => {
+    const sequencer = encodeErrorResult({ abi: morphoBandOracleAbi, errorName: 'SequencerNotSettled' })
+    expect(await morpho.price(chain({ price: sequencer }), d, 'NVDA')).toEqual({
+      price: undefined,
+      noPrice: 'sequencerNotSettled',
+      revert: { errorName: 'SequencerNotSettled', args: [] },
+    })
+    await expect(morpho.price(chain({ price: '0x' }), d, 'NVDA')).rejects.toThrow('reverted')
+    blocks.length = 0
+  })
+
+  test("an oracle's band, symbol, tokens, scale, owner and halt are read", async () => {
+    const client = chain({ price: 1n, halt: [true, 1_790_200_000n, 1_790_196_400n, false] })
+    expect(await morpho.oracle(client, d, 'NVDA')).toEqual({
+      address: bob,
+      band: bandAddress,
+      symbol,
+      collateralToken: alice,
+      loanToken: testnet.tokens.USDG,
+      scaleFactor: 10n ** 16n,
+      owner: alice,
+    })
+    expect(blocks.splice(0)).toEqual([7n, 7n, 7n, 7n, 7n, 7n])
+    expect(await morpho.halt(client, d, 'NVDA')).toEqual({
+      signedHalt: true,
+      until: 1_790_200_000n,
+      issuedAt: 1_790_196_400n,
+      oraclePaused: false,
+    })
+    blocks.length = 0
+  })
+
+  test("a re-point's AssetMismatch and BandSet are decoded", () => {
+    const mismatch = encodeErrorResult({
+      abi: morphoBandOracleAbi,
+      errorName: 'AssetMismatch',
+      args: [bandAddress, bob],
+    })
+    expect(decodeRevertData(mismatch)).toEqual({ errorName: 'AssetMismatch', args: [bandAddress, bob] })
+    const [set] = parseEventLogs({
+      abi: morphoBandOracleAbi,
+      logs: [
+        {
+          address: bob,
+          topics: [
+            toEventSelector('BandSet(address,address)'),
+            padHex(alice, { size: 32 }),
+            padHex(bandAddress, { size: 32 }),
+          ],
+          data: '0x',
+          blockHash: null,
+          blockNumber: null,
+          logIndex: null,
+          transactionHash: null,
+          transactionIndex: null,
+          removed: false,
+        },
+      ],
+    })
+    expect(set).toMatchObject({ eventName: 'BandSet', args: { previousBand: alice, newBand: bandAddress } })
   })
 })
 

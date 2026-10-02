@@ -1,6 +1,6 @@
 # @tapehouse/sdk
 
-Typed reads and transactions for [Tapehouse](https://github.com/Tapehouse-Labs/TAPEHOUSE)'s price band, its feeds, the margin accounts and the short positions, on [viem](https://viem.sh).
+Typed reads and transactions for [Tapehouse](https://github.com/Tapehouse-Labs/TAPEHOUSE)'s price band, its feeds, the margin accounts, the short positions and the Morpho oracles, on [viem](https://viem.sh).
 
 ```bash
 pnpm add @tapehouse/sdk viem
@@ -30,6 +30,7 @@ await client.writeContract(request)
 - `band`: the band's `quote`, `session`, `halt` and stored `price`; each asset's `BandFeed` (`latestRound`, `latestBand`, `sealed`, `seal`); `chainlinkRound` of a `.chainlink` feed; and `writePrices` with the signed RedStone packages a `PackageSource` of your own supplies. The SDK holds no API key.
 - `accounts`: `setAuthorization`, `deposit`, `withdraw`, `borrow`, `repay`, `isAuthorized`, `health`, `collateral`, `leverage`, `liquidationPrice`, and `repayment`, the debt and premium a full repayment takes, both read at one block.
 - `shorts`: `deposit`, `withdraw`, `sell`, `cover`, `liquidate`, `mark`, the views `position`, `health`, `epoch`, `book`, `restriction` and `fee`, and `quoteSale` and `quoteCover`, the limits of a sale and a buy-back from Uniswap's QuoterV2, with a slippage of 0 to 10,000 basis points.
+- `morpho`: an asset's Morpho oracle from `.morphoOracles`, its `price`, which is no price, never zero, where it reverts with `NoAnswer` or `SequencerNotSettled`, and says why (`stale`, `halted` or `sequencerNotSettled`), its `halt`, and the `oracle` itself: band, symbol, tokens, scale and owner.
 - `decodeRevert`: the name and arguments of any revert of the contracts, the band, the Stock Tokens, USDG, or Solidity's `Error(string)` and `Panic`.
 - `tokenPriceFeed` and `sharePriceFeed`: a `.chainlink` feed typed by what it prices, the Stock Token on Robinhood Chain and the share on Arbitrum One.
 - The contracts' ABIs, `as const`, generated from the Solidity build.

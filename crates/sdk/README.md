@@ -1,6 +1,6 @@
 # tapehouse-sdk
 
-Typed reads and transactions for [Tapehouse](https://github.com/Tapehouse-Labs/TAPEHOUSE)'s price band, its feeds, the margin accounts and the short positions, on [alloy](https://alloy.rs).
+Typed reads and transactions for [Tapehouse](https://github.com/Tapehouse-Labs/TAPEHOUSE)'s price band, its feeds, the margin accounts, the short positions and the Morpho oracles, on [alloy](https://alloy.rs).
 
 ```toml
 [dependencies]
@@ -27,6 +27,7 @@ let receipt = tapehouse
 ```
 
 - `band`, `band_feed`, `accounts`, `shorts`, `usdg`, `stock_token`, `token_price` and `share_price`: the contracts, at the registry's addresses. A `.chainlink` feed is typed by what it prices: `TokenPriceFeed` on Robinhood Chain, `SharePriceFeed` on Arbitrum One.
+- `morpho_oracle` and `oracle_price`: an asset's Morpho oracle from `.morphoOracles`, and its `price()` as `OraclePrice`: a price, or no price, never zero, where it reverts with `NoAnswer` or `SequencerNotSettled`, with the reason (`NoPrice::Stale`, `Halted` or `SequencerNotSettled`) read at one block.
 - `write_prices`: the band's `writePrices`, with the signed RedStone packages a `PackageSource` of your own supplies. The crate holds no API key.
 - `quote_sale` and `quote_cover`: the limits of a sale and a buy-back, from Uniswap's QuoterV2, with a slippage of 0 to 10,000 basis points.
 - `repayment`: the debt and premium a full repayment takes, both read at one block; `collateral`, `leverage` and `liquidation_price` of a position.

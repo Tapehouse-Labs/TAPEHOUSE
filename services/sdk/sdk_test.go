@@ -21,6 +21,7 @@ import (
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/band"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/bandfeed"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/marginaccounts"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/morphobandoracle"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/quoterv2"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/shortpositions"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocktoken"
@@ -398,6 +399,189 @@ func TestAPositionsCollateralLeverageAndLiquidationPriceAreRead(t *testing.T) {
 	}
 }
 
+func TestMorphoBlueAndTheBandsMorphoOraclesAreRead(t *testing.T) {
+	robinhood := registry(t, "4663")
+	if robinhood.Morpho["Blue"] != common.HexToAddress("0x9D53d5E3bd5E8d4Cbfa6DB1ca238AEA02E651010") ||
+		robinhood.Morpho["AdaptiveCurveIrm"] != common.HexToAddress("0x2BD3d5965B26B51814AC95127B2b80dD6CcC0fa1") {
+		t.Fatalf("4663 morpho: %v", robinhood.Morpho)
+	}
+	d, err := sdk.ParseDeployments([]byte(`{"chainId":412346,"morphoOracles":{"NVDA":"` + bob.Hex() + `"}}`))
+	if err != nil || d.MorphoOracles["NVDA"] != bob {
+		t.Fatalf("morphoOracles: %v, %v", d, err)
+	}
+	if _, err := sdk.NewClient(nil, registry(t, "46630")).MorphoOracles().Price(&bind.CallOpts{}, "NVDA"); err == nil ||
+		err.Error() != "the registry has no .morphoOracles.NVDA" {
+		t.Fatalf("a missing oracle: %v", err)
+	}
+}
+
+func TestMorphoBluesMarketsAreReadFromMarketsAs32ByteIDs(t *testing.T) {
+	id := "0x3a85e619751152991742810df6ec69ce473daef99e28a64ab2340d7b7ccfee49"
+	d, err := sdk.ParseDeployments([]byte(`{"chainId":412346,"morpho":{"Blue":"` + alice.Hex() +
+		`","Markets":{"NVDA_USDG":"0x` + strings.ToUpper(id[2:]) + `"}}}`))
+	if err != nil || len(d.Morpho) != 1 || d.Morpho["Blue"] != alice || d.MorphoMarkets["NVDA_USDG"] != common.HexToHash(id) {
+		t.Fatalf("morpho: %v, %v", d, err)
+	}
+	if markets := registry(t, "4663").MorphoMarkets; len(markets) != 0 {
+		t.Fatalf("4663 markets: %v", markets)
+	}
+	for _, wrong := range []string{`"` + alice.Hex() + `"`, `"` + id + `00"`, `"` + id[:65] + `"`} {
+		_, err := sdk.ParseDeployments([]byte(`{"chainId":1,"morpho":{"Markets":{"NVDA_USDG":` + wrong + `}}}`))
+		if err == nil || err.Error() != ".morpho.Markets.NVDA_USDG is not a 32-byte id" {
+			t.Fatalf("%s: %v", wrong, err)
+		}
+	}
+}
+
+var bandAddress = common.HexToAddress("0xa70118d3324D90532E7D2854627b13CacE305641")
+
+type oracleChain struct {
+	bind.ContractBackend
+	t      *testing.T
+	price  []byte
+	revert []byte
+	halt   []any
+	step   uint8
+	blocks []*big.Int
+}
+
+func (o *oracleChain) HeaderByNumber(context.Context, *big.Int) (*types.Header, error) {
+	return &types.Header{Number: big.NewInt(7)}, nil
+}
+
+func (o *oracleChain) CallContract(_ context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error) {
+	o.blocks = append(o.blocks, block)
+	if *call.To == bandAddress {
+		parsed, _ := band.BandMetaData.ParseABI()
+		method, err := parsed.MethodById(call.Data)
+		if err != nil || method.Name != "corporateAction" {
+			o.t.Fatalf("band %v, %v", method, err)
+		}
+		return method.Outputs.Pack(o.step, uint64(0), new(big.Int), new(big.Int))
+	}
+	parsed, _ := morphobandoracle.MorphoBandOracleMetaData.ParseABI()
+	method, err := parsed.MethodById(call.Data)
+	if err != nil || *call.To != bob {
+		o.t.Fatalf("oracle %v at %v, %v", method, call.To, err)
+	}
+	switch method.Name {
+	case "price":
+		if o.revert != nil {
+			return nil, rpcError{hexutil.Encode(o.revert)}
+		}
+		return o.price, nil
+	case "halt":
+		return method.Outputs.Pack(o.halt...)
+	case "band":
+		return method.Outputs.Pack(bandAddress)
+	case "symbol":
+		return method.Outputs.Pack(bytes32(o.t, "NVDA"))
+	case "collateralToken", "owner":
+		return method.Outputs.Pack(alice)
+	case "loanToken":
+		return method.Outputs.Pack(bob)
+	case "scaleFactor":
+		return method.Outputs.Pack(big.NewInt(1e16))
+	}
+	o.t.Fatalf("unexpected %s", method.Name)
+	return nil, nil
+}
+
+func oracles(t *testing.T, chain *oracleChain) *sdk.MorphoOracles {
+	d := registry(t, "46630")
+	d.MorphoOracles["NVDA"] = bob
+	chain.t = t
+	if chain.halt == nil {
+		chain.halt = []any{false, uint64(0), uint64(0), false}
+	}
+	return sdk.NewClient(chain, d).MorphoOracles()
+}
+
+func TestAnOracleAnswersItsPriceAtOneBlock(t *testing.T) {
+	price, _ := abi.Arguments{{Type: uint256Type}}.Pack(new(big.Int).Mul(big.NewInt(765_517_754_420), big.NewInt(1e15)))
+	chain := &oracleChain{price: price}
+	answer, err := oracles(t, chain).Price(&bind.CallOpts{}, "NVDA")
+	if err != nil || answer.Price == nil || answer.Price.String() != "765517754420000000000000000" || answer.NoPrice != "" {
+		t.Fatalf("price %+v, %v", answer, err)
+	}
+	if len(chain.blocks) != 1 || chain.blocks[0].Int64() != 7 {
+		t.Fatalf("read at %v", chain.blocks)
+	}
+}
+
+func TestNoAnswerWithNoHaltPauseOrStepIsAStaleBandNeverAPriceOfZero(t *testing.T) {
+	data := encodeError(t, &morphobandoracle.MorphoBandOracleMetaData, "NoAnswer", bytes32(t, "NVDA"))
+	chain := &oracleChain{revert: data}
+	answer, err := oracles(t, chain).Price(&bind.CallOpts{}, "NVDA")
+	if err != nil || answer.Price != nil || answer.NoPrice != sdk.NoPriceStale || answer.Revert.Name != "NoAnswer" {
+		t.Fatalf("stale %+v, %v", answer, err)
+	}
+	for _, block := range chain.blocks {
+		if block.Int64() != 7 {
+			t.Fatalf("read at %v", chain.blocks)
+		}
+	}
+	if len(chain.blocks) != 5 {
+		t.Fatalf("%d reads", len(chain.blocks))
+	}
+}
+
+func TestNoAnswerUnderASignedHaltThePauseOrAnUnconfirmedStepIsAHalt(t *testing.T) {
+	data := encodeError(t, &morphobandoracle.MorphoBandOracleMetaData, "NoAnswer", bytes32(t, "NVDA"))
+	for _, chain := range []*oracleChain{
+		{revert: data, halt: []any{true, uint64(1_790_200_000), uint64(1_790_196_400), false}},
+		{revert: data, halt: []any{false, uint64(0), uint64(0), true}},
+		{revert: data, step: 2},
+	} {
+		answer, err := oracles(t, chain).Price(&bind.CallOpts{}, "NVDA")
+		if err != nil || answer.Price != nil || answer.NoPrice != sdk.NoPriceHalted {
+			t.Fatalf("halted %+v, %v", answer, err)
+		}
+	}
+}
+
+func TestSequencerNotSettledIsNoPriceAndAnyOtherRevertAnError(t *testing.T) {
+	data := encodeError(t, &morphobandoracle.MorphoBandOracleMetaData, "SequencerNotSettled")
+	answer, err := oracles(t, &oracleChain{revert: data}).Price(&bind.CallOpts{}, "NVDA")
+	if err != nil || answer.Price != nil || answer.NoPrice != sdk.NoPriceSequencerNotSettled || answer.Revert.Name != "SequencerNotSettled" {
+		t.Fatalf("sequencer %+v, %v", answer, err)
+	}
+	if answer, err := oracles(t, &oracleChain{revert: []byte{}}).Price(&bind.CallOpts{}, "NVDA"); err == nil {
+		t.Fatalf("an empty revert answered %+v", answer)
+	}
+}
+
+func TestAnOraclesBandSymbolTokensScaleOwnerAndHaltAreRead(t *testing.T) {
+	chain := &oracleChain{halt: []any{true, uint64(1_790_200_000), uint64(1_790_196_400), false}}
+	oracle, err := oracles(t, chain).Oracle(&bind.CallOpts{}, "NVDA")
+	if err != nil || oracle.Address != bob || oracle.Band != bandAddress || oracle.Symbol != bytes32(t, "NVDA") ||
+		oracle.CollateralToken != alice || oracle.LoanToken != bob || oracle.ScaleFactor.Int64() != 1e16 || oracle.Owner != alice {
+		t.Fatalf("oracle %+v, %v", oracle, err)
+	}
+	if len(chain.blocks) != 6 || chain.blocks[5].Int64() != 7 {
+		t.Fatalf("read at %v", chain.blocks)
+	}
+	halt, err := oracles(t, chain).Halt(&bind.CallOpts{}, "NVDA")
+	if err != nil || !halt.SignedHalt || halt.Until != 1_790_200_000 || halt.IssuedAt != 1_790_196_400 || halt.OraclePaused {
+		t.Fatalf("halt %+v, %v", halt, err)
+	}
+}
+
+func TestARepointsAssetMismatchAndBandSetAreDecoded(t *testing.T) {
+	revert, ok := sdk.DecodeRevertData(encodeError(t, &morphobandoracle.MorphoBandOracleMetaData, "AssetMismatch", bandAddress, bob))
+	if !ok || revert.Error() != "AssetMismatch("+bandAddress.Hex()+", "+bob.Hex()+")" {
+		t.Fatalf("%v", revert)
+	}
+	parsed, _ := morphobandoracle.MorphoBandOracleMetaData.ParseABI()
+	set, err := morphobandoracle.NewMorphoBandOracle().UnpackBandSetEvent(&types.Log{
+		Address: bob,
+		Topics:  []common.Hash{parsed.Events["BandSet"].ID, common.BytesToHash(alice[:]), common.BytesToHash(bandAddress[:])},
+	})
+	if err != nil || set.PreviousBand != alice || set.NewBand != bandAddress {
+		t.Fatalf("BandSet %+v, %v", set, err)
+	}
+}
+
 func unpack(t *testing.T, metadata *bind.MetaData, method string, data []byte) []any {
 	t.Helper()
 	parsed, err := metadata.ParseABI()
@@ -436,6 +620,8 @@ func bytes32(t *testing.T, name string) [32]byte {
 	}
 	return word
 }
+
+var uint256Type = mustType("uint256")
 
 func mustType(name string) abi.Type {
 	typ, err := abi.NewType(name, "", nil)

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-// Package sdk reads Tapehouse's price band, its feeds, the margin accounts and the short positions, and packs their
-// transactions, over go-ethereum bindings generated from the contracts' ABIs. Addresses come from a chain's registry,
-// deployments/<chainId>.json, read at runtime.
+// Package sdk reads Tapehouse's price band, its feeds, the margin accounts, the short positions and the Morpho oracles,
+// and packs their transactions, over go-ethereum bindings generated from the contracts' ABIs. Addresses come from a
+// chain's registry, deployments/<chainId>.json, read at runtime.
 package sdk
 
 import (

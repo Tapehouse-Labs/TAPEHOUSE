@@ -4,11 +4,14 @@ use std::error::Error as _;
 use alloy::primitives::{Address, B256, Bytes, U64, U256, address, aliases::U24};
 use alloy::providers::{Provider, ProviderBuilder};
 use alloy::rpc::json_rpc::ErrorPayload;
-use alloy::sol_types::{Revert as SolidityRevert, SolCall, SolError, SolValue};
+use alloy::sol_types::{Revert as SolidityRevert, SolCall, SolError, SolEvent, SolValue};
 use alloy::transports::mock::Asserter;
-use tapehouse_sdk::bindings::{Band, BandFeed, MarginAccounts, ShortPositions, StockToken};
+use tapehouse_sdk::bindings::{
+    Band, BandFeed, MarginAccounts, MorphoBandOracle, ShortPositions, StockToken,
+};
 use tapehouse_sdk::{
-    CROSS, Deployments, Error, PackageSource, Tapehouse, decode_revert_data, to_bytes32,
+    CROSS, Deployments, Error, NoPrice, OraclePrice, PackageSource, Tapehouse, decode_revert_data,
+    to_bytes32,
 };
 
 const ALICE: Address = address!("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
@@ -423,4 +426,224 @@ async fn a_positions_collateral_leverage_and_liquidation_price_are_read() {
             .unwrap(),
         U256::from(69_412_000_000u64)
     );
+}
+
+const BAND: Address = address!("0xa70118d3324D90532E7D2854627b13CacE305641");
+
+#[test]
+fn morpho_blue_and_the_bands_morpho_oracles_are_read() {
+    let robinhood = registry(4663);
+    assert_eq!(
+        robinhood.morpho["Blue"],
+        address!("0x9D53d5E3bd5E8d4Cbfa6DB1ca238AEA02E651010")
+    );
+    assert_eq!(
+        robinhood.morpho["AdaptiveCurveIrm"],
+        address!("0x2BD3d5965B26B51814AC95127B2b80dD6CcC0fa1")
+    );
+    let deployments = Deployments::parse(&format!(
+        r#"{{"chainId":412346,"morphoOracles":{{"NVDA":"{BOB}"}}}}"#
+    ))
+    .unwrap();
+    assert_eq!(deployments.morpho_oracles["NVDA"], BOB);
+    assert_eq!(
+        offline(registry(46630))
+            .morpho_oracle("NVDA")
+            .unwrap_err()
+            .to_string(),
+        "the registry has no .morphoOracles.NVDA"
+    );
+}
+
+#[test]
+fn morpho_blues_markets_are_read_from_markets_as_32_byte_ids() {
+    let id = "0x3a85e619751152991742810df6ec69ce473daef99e28a64ab2340d7b7ccfee49";
+    let deployments = Deployments::parse(&format!(
+        r#"{{"chainId":412346,"morpho":{{"Blue":"{ALICE}","Markets":{{"NVDA_USDG":"0x{}"}}}}}}"#,
+        id[2..].to_uppercase()
+    ))
+    .unwrap();
+    assert_eq!(deployments.morpho.len(), 1);
+    assert_eq!(deployments.morpho["Blue"], ALICE);
+    assert_eq!(
+        deployments.morpho_markets["NVDA_USDG"],
+        id.parse::<B256>().unwrap()
+    );
+    assert!(registry(4663).morpho_markets.is_empty());
+    for wrong in [
+        format!(r#""{ALICE}""#),
+        format!(r#""{id}00""#),
+        format!(r#""{}""#, &id[..65]),
+        format!(r#""{}""#, &id[2..]),
+        "7".into(),
+    ] {
+        assert_eq!(
+            Deployments::parse(&format!(
+                r#"{{"chainId":1,"morpho":{{"Markets":{{"NVDA_USDG":{wrong}}}}}}}"#
+            ))
+            .unwrap_err()
+            .to_string(),
+            ".morpho.Markets.NVDA_USDG is not a 32-byte id",
+            "{wrong}"
+        );
+    }
+}
+
+fn oracles(asserter: &Asserter) -> Tapehouse<impl Provider + Clone> {
+    let mut deployments = registry(46630);
+    deployments.morpho_oracles.insert("NVDA".into(), BOB);
+    Tapehouse::new(
+        ProviderBuilder::new().connect_mocked_client(asserter.clone()),
+        deployments,
+    )
+}
+
+fn revert(asserter: &Asserter, data: Vec<u8>) {
+    asserter.push_failure(ErrorPayload {
+        code: 3,
+        message: "execution reverted".into(),
+        data: Some(serde_json::value::to_raw_value(&Bytes::from(data)).unwrap()),
+    });
+}
+
+fn no_answer(asserter: &Asserter, halt: (bool, u64, u64, bool), step: u8) {
+    asserter.push_success(&U64::from(7));
+    revert(
+        asserter,
+        MorphoBandOracle::NoAnswer {
+            symbol: b32("NVDA"),
+        }
+        .abi_encode(),
+    );
+    asserter.push_success(&Bytes::from(halt.abi_encode_params()));
+    asserter.push_success(&Bytes::from(BAND.abi_encode()));
+    asserter.push_success(&Bytes::from(b32("NVDA").abi_encode()));
+    asserter.push_success(&Bytes::from(
+        (U256::from(step), U256::ZERO, U256::ZERO, U256::ZERO).abi_encode_params(),
+    ));
+}
+
+#[tokio::test]
+async fn an_oracle_answers_its_price() {
+    let asserter = Asserter::new();
+    let price = U256::from(765_517_754_420u64) * U256::from(10u64.pow(15));
+    asserter.push_success(&U64::from(7));
+    asserter.push_success(&Bytes::from(price.abi_encode()));
+    assert_eq!(
+        oracles(&asserter).oracle_price("NVDA").await.unwrap(),
+        OraclePrice::Price(price)
+    );
+    assert!(asserter.read_q().is_empty());
+}
+
+#[tokio::test]
+async fn no_answer_with_no_halt_pause_or_step_is_a_stale_band_never_a_price_of_zero() {
+    let asserter = Asserter::new();
+    no_answer(&asserter, (false, 0, 0, false), 0);
+    let OraclePrice::NoPrice { reason, revert } =
+        oracles(&asserter).oracle_price("NVDA").await.unwrap()
+    else {
+        panic!("a price without an answer");
+    };
+    assert_eq!(reason, NoPrice::Stale);
+    assert_eq!(revert.to_string(), format!("NoAnswer({})", b32("NVDA")));
+    assert!(asserter.read_q().is_empty());
+}
+
+#[tokio::test]
+async fn no_answer_under_a_signed_halt_the_pause_or_an_unconfirmed_step_is_a_halt() {
+    for (halt, step) in [
+        ((true, 1_790_200_000, 1_790_196_400, false), 0),
+        ((false, 0, 0, true), 0),
+        ((false, 0, 0, false), 2),
+    ] {
+        let asserter = Asserter::new();
+        no_answer(&asserter, halt, step);
+        assert!(matches!(
+            oracles(&asserter).oracle_price("NVDA").await.unwrap(),
+            OraclePrice::NoPrice {
+                reason: NoPrice::Halted,
+                ..
+            }
+        ));
+    }
+}
+
+#[tokio::test]
+async fn sequencer_not_settled_is_no_price_and_any_other_revert_an_error() {
+    let asserter = Asserter::new();
+    asserter.push_success(&U64::from(7));
+    revert(
+        &asserter,
+        MorphoBandOracle::SequencerNotSettled {}.abi_encode(),
+    );
+    assert!(matches!(
+        oracles(&asserter).oracle_price("NVDA").await.unwrap(),
+        OraclePrice::NoPrice {
+            reason: NoPrice::SequencerNotSettled,
+            ..
+        }
+    ));
+    asserter.push_success(&U64::from(7));
+    revert(&asserter, Vec::new());
+    assert!(oracles(&asserter).oracle_price("NVDA").await.is_err());
+}
+
+#[tokio::test]
+async fn an_oracles_band_symbol_tokens_scale_owner_and_halt_are_read() {
+    let asserter = Asserter::new();
+    let oracle = oracles(&asserter).morpho_oracle("NVDA").unwrap();
+    assert_eq!(*oracle.address(), BOB);
+    asserter.push_success(&Bytes::from(
+        (true, 1_790_200_000u64, 1_790_196_400u64, false).abi_encode_params(),
+    ));
+    let halt = oracle.halt().call().await.unwrap();
+    assert_eq!(
+        (
+            halt.signedHalt,
+            halt.until,
+            halt.issuedAt,
+            halt.oraclePaused
+        ),
+        (true, 1_790_200_000, 1_790_196_400, false)
+    );
+    asserter.push_success(&Bytes::from(U256::from(10u64.pow(16)).abi_encode()));
+    assert_eq!(
+        oracle.scaleFactor().call().await.unwrap(),
+        U256::from(10u64.pow(16))
+    );
+    asserter.push_success(&Bytes::from(b32("NVDA").abi_encode()));
+    assert_eq!(oracle.symbol().call().await.unwrap(), b32("NVDA"));
+    asserter.push_success(&Bytes::from(BAND.abi_encode()));
+    assert_eq!(oracle.band().call().await.unwrap(), BAND);
+    asserter.push_success(&Bytes::from(ALICE.abi_encode()));
+    assert_eq!(oracle.collateralToken().call().await.unwrap(), ALICE);
+    asserter.push_success(&Bytes::from(BOB.abi_encode()));
+    assert_eq!(oracle.loanToken().call().await.unwrap(), BOB);
+    asserter.push_success(&Bytes::from(ALICE.abi_encode()));
+    assert_eq!(oracle.owner().call().await.unwrap(), ALICE);
+    assert!(asserter.read_q().is_empty());
+}
+
+#[test]
+fn a_repoints_asset_mismatch_and_band_set_are_decoded() {
+    let data = MorphoBandOracle::AssetMismatch {
+        band: BAND,
+        token: BOB,
+    }
+    .abi_encode();
+    assert_eq!(
+        decode_revert_data(&data).unwrap().to_string(),
+        format!("AssetMismatch({BAND}, {BOB})")
+    );
+    let set = MorphoBandOracle::BandSet::decode_raw_log(
+        [
+            MorphoBandOracle::BandSet::SIGNATURE_HASH,
+            ALICE.into_word(),
+            BAND.into_word(),
+        ],
+        &[],
+    )
+    .unwrap();
+    assert_eq!((set.previousBand, set.newBand), (ALICE, BAND));
 }

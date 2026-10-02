@@ -35,6 +35,13 @@ sol!(
 sol!(
     #[sol(rpc)]
     #[derive(Debug)]
+    MorphoBandOracle,
+    "abi/MorphoBandOracle.json"
+);
+
+sol!(
+    #[sol(rpc)]
+    #[derive(Debug)]
     QuoterV2,
     "abi/QuoterV2.json"
 );

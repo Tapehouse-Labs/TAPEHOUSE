@@ -1,8 +1,24 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import { BaseError, ContractFunctionRevertedError, decodeErrorResult, type Hex } from 'viem'
-import { bandAbi, bandFeedAbi, marginAccountsAbi, shortPositionsAbi, stockTokenAbi, usdgAbi } from './generated.js'
+import {
+  bandAbi,
+  bandFeedAbi,
+  marginAccountsAbi,
+  morphoBandOracleAbi,
+  shortPositionsAbi,
+  stockTokenAbi,
+  usdgAbi,
+} from './generated.js'
 
-const items = [...shortPositionsAbi, ...marginAccountsAbi, ...bandFeedAbi, ...bandAbi, ...stockTokenAbi, ...usdgAbi]
+const items = [
+  ...shortPositionsAbi,
+  ...marginAccountsAbi,
+  ...bandFeedAbi,
+  ...morphoBandOracleAbi,
+  ...bandAbi,
+  ...stockTokenAbi,
+  ...usdgAbi,
+]
 
 /** Every error Tapehouse's contracts, the band, the Stock Tokens and USDG revert with. */
 export const errorsAbi = items.filter(

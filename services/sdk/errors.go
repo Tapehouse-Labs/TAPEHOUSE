@@ -15,6 +15,7 @@ import (
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/band"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/bandfeed"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/marginaccounts"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/morphobandoracle"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/shortpositions"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocktoken"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/usdg"
@@ -51,6 +52,7 @@ var revertErrors = func() map[[4]byte]abi.Error {
 		&shortpositions.ShortPositionsMetaData,
 		&marginaccounts.MarginAccountsMetaData,
 		&bandfeed.BandFeedMetaData,
+		&morphobandoracle.MorphoBandOracleMetaData,
 		&band.BandMetaData,
 		&stocktoken.StockTokenMetaData,
 		&usdg.UsdgMetaData,

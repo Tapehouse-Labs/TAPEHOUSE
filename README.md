@@ -11,6 +11,7 @@ Portfolio margin for Stock Tokens on Robinhood Chain.
 - `stylus` — Stylus programs (Rust): `band`, the price band, and `margin`, the portfolio margin engine, with the code they share in `stylus/crates`
 - `deployments` — contract addresses per chain, one JSON file per chain ID
 - `packages/sdk` — the TypeScript SDK (viem)
+- `packages/mcp` — the MCP server for AI agents, on the TypeScript SDK
 - `services` — the Go module: the Go SDK in `services/sdk` (go-ethereum)
 - `crates` — Rust crates: the Rust SDK in `crates/sdk` (alloy)
 
@@ -30,6 +31,7 @@ Portfolio margin for Stock Tokens on Robinhood Chain.
 | Binaryen | 133, from `stylus/Stylus.toml` | `make` downloads it on first use into `$XDG_CACHE_HOME/binaryen` (default `~/.cache/binaryen`), checked against a pinned SHA-256 |
 | Docker | any recent | [docker.com](https://www.docker.com) — for `make devnode`, `deploy-stylus` and `verify-stylus` |
 | Python 3 and jq | any recent | preinstalled on macOS — only for the dev-node suite |
+| uv | 0.12.21 | `curl -LsSf https://astral.sh/uv/0.12.21/install.sh \| sh` — only for `make test-mcp-devnode`, which runs the Python MCP client |
 | ShellCheck | any recent | `brew install shellcheck`; preinstalled on GitHub's Ubuntu runners — for `make lint` |
 | GNU Make | 3.81 or newer | preinstalled on macOS and most Linux distributions |
 
@@ -55,7 +57,7 @@ make test
 | `make build-contracts` · `test-contracts` · `lint-contracts` · `coverage-contracts` · `gas-contracts` · `snapshot-contracts` | Contracts only |
 | `make build-stylus` · `test-stylus` · `lint-stylus` · `gas-stylus` · `snapshot-stylus` | Stylus programs only |
 | `make check-activation` | `cargo stylus check` of every program against Robinhood Chain, its testnet and Arbitrum One |
-| `make build-apps` · `test-apps` · `lint-apps` | Apps and the TypeScript SDK only |
+| `make build-apps` · `test-apps` · `lint-apps` | Apps, the TypeScript SDK and the MCP server only |
 | `make build-services` · `test-services` · `lint-services` | The Go module only; `test-services` reports coverage |
 | `make build-crates` · `test-crates` · `lint-crates` | The Rust crates only |
 | `make bindings` | Builds the contracts and regenerates the SDKs' bindings from their ABIs; commit the result |
@@ -86,6 +88,7 @@ make test
 | `make verify-morpho-oracles CHAIN=<id>` | Verifies the registry's Morpho oracles on Sourcify |
 | `make deploy-contracts-devnode test-contracts-devnode` | Deploys the supply vault, the margin accounts, the liquidator, the gap backstop, the reopening auction, a stock lending vault for each Stock Token, the short positions, a Morpho oracle for each Stock Token and the band's feeds to the dev node and checks loans, a liquidation, a cover, the auction's wiring, a loan and recall of SPY, a short of SPY and each oracle's price through them against the band and margin programs |
 | `make test-sdks-devnode` | Runs each SDK's example against that deployment: SPY's band and feed, stale RedStone packages refused, and a short of SPY sold and bought back by an address the account authorized |
+| `make test-mcp-devnode` | Drives the MCP server against that deployment with the official TypeScript client over Streamable HTTP and the official Python client over stdio: bands and Morpho oracles read, and a short of SPY sold and bought back through calls the server prepares and the example signs |
 
 ## Networks
 
@@ -554,8 +557,9 @@ Three SDKs read the band, its feeds, the margin accounts and the short positions
 | Go | `services/sdk` | `github.com/tapehouse/tapehouse/services/sdk`, in the services module | abigen v2, one package per contract in `sdk/bindings` |
 | Rust | `crates/sdk` | `tapehouse-sdk` on crates.io, over alloy 2 | alloy's `sol!` over `abi/*.json` |
 
-- **Generated from the ABIs.** `make bindings` builds the contracts and writes each SDK's bindings from the ABIs of `BandFeed`, `MarginAccounts`, `ShortPositions`, the band as a RedStone relayer calls it (`IBandPrices`: `IBand`'s reads, `writePrices` and `price`), Uniswap's QuoterV2, USDG, the Stock Tokens (`IStockToken`, as the conformance tests pin it) and Chainlink's aggregator. The bindings are committed, and `make check-bindings` fails in CI when they differ from the build. Each SDK adds by hand only what the ABIs cannot say.
+- **Generated from the ABIs.** `make bindings` builds the contracts and writes each SDK's bindings from the ABIs of `BandFeed`, `MarginAccounts`, `ShortPositions`, `MorphoBandOracle`, the band as a RedStone relayer calls it (`IBandPrices`: `IBand`'s reads, `writePrices` and `price`), Uniswap's QuoterV2, USDG, the Stock Tokens (`IStockToken`, as the conformance tests pin it) and Chainlink's aggregator. The bindings are committed, and `make check-bindings` fails in CI when they differ from the build. Each SDK adds by hand only what the ABIs cannot say.
 - **Addresses** come from `deployments/<chainId>.json`, read at runtime: no SDK compiles in an address. A mixed-case address must carry its checksum. A `.chainlink` feed is typed by what it prices: the Stock Token on Robinhood Chain, the share on Arbitrum One.
+- **Morpho oracles.** Each SDK reads an asset's `MorphoBandOracle` from `.morphoOracles` (beside `.morpho.Blue` and `.morpho.AdaptiveCurveIrm`, and Morpho Blue's markets, `.morpho.Markets`, read by their 32-byte ids as `morphoMarkets`): its `price()`, `halt()`, `band()`, `symbol()`, `collateralToken()`, `loanToken()`, `scaleFactor()` and `owner()`. A `price()` that reverts with `NoAnswer` or `SequencerNotSettled` is no price, never zero, and the SDK says why: `halted` where the band holds a signed halt, the issuer's pause or an unconfirmed multiplier step for the asset, `stale` otherwise, a band with no live leg, which a fresh `writePrices` ends, and `sequencerNotSettled`. `morpho.price` in TypeScript, `MorphoOracles().Price` in Go and `oracle_price` in Rust read all of it at one block.
 - **Authorization.** `setAuthorization(authorized, allowed)` lets another address, such as a router, borrow, withdraw and deposit for an account in the margin accounts, and act for its shorts; until then both revert with `Unauthorized(caller, account)`.
 - **Errors.** Every revert of the margin accounts, the shorts, the feeds, the band, the Stock Tokens and USDG decodes by name and arguments, and so do Solidity's `Error(string)`, which carries the router's `Too little received` and `Too much requested`, and `Panic(uint256)`.
 - **Sales and buy-backs.** A sale's `minProceeds` and a buy-back's `maxCost` come from a quote of the asset's pool through Uniswap's QuoterV2, `.uniswapV3.QuoterV2`, less or plus the slippage the caller names, from 0 to 10,000 basis points; never from the contract.
@@ -563,6 +567,21 @@ Three SDKs read the band, its feeds, the margin accounts and the short positions
 - **RedStone.** The band's `writePrices` takes its signed packages from a source the integrator supplies (`PackageSource`): its own gateway client, cache or relay. No SDK holds an API key or calls a gateway.
 - **Examples.** Each SDK's `devnode` example reads SPY's band and its feed, has the band refuse stale signed packages, and has a fresh address the account authorizes sell 1 SPY short for it at a quote and buy it back. Each reads the account owner's key from `PRIVATE_KEY` in its environment, never from its command line. `make test-sdks-devnode` runs all three against the dev node, whose registry `make deploy-contracts-devnode` gives band feeds and the dev node a stub QuoterV2.
 - **Publishing.** Each package is at version 0.1.0, declares `MIT OR Apache-2.0` and carries both license texts. None is published yet: the npm scope, the crate name and the Go module path, which needs this repository at `github.com/tapehouse/tapehouse`, are published when Tapehouse launches.
+
+## MCP server
+
+`packages/mcp`, `@tapehouse/mcp`, is a [Model Context Protocol](https://modelcontextprotocol.io) server through which an AI agent reads the band, its feeds, Chainlink's feeds, the Morpho oracles, the margin accounts and the short positions, and prepares their transactions. It is built on the official TypeScript SDK for the 2026-07-28 specification, serves clients of the 2025 revisions too, and reads and builds everything through `@tapehouse/sdk`; its package README lists the tools.
+
+```bash
+make build-apps
+TAPEHOUSE_RPC_URL=https://robinhood.drpc.org TAPEHOUSE_DEPLOYMENTS=deployments/4663.json node packages/mcp/dist/main.js
+```
+
+- **No key.** The server never holds or reads a key. A transaction tool returns unsigned calls, an approval first where an allowance is short, for the account, or an address it authorized with `accounts_set_authorization`, to check and sign in its own wallet.
+- **Configuration from the environment.** `TAPEHOUSE_RPC_URL`, which the server never shows a client, `TAPEHOUSE_DEPLOYMENTS`, the registry, which must be for the chain the endpoint serves, `TAPEHOUSE_MAX_SLIPPAGE_BPS`, the most slippage a sale or buy-back may state, 100 basis points unless set, and `TAPEHOUSE_MAX_CALLS_PER_MINUTE`, the most tool calls it answers in a minute, 120 unless set.
+- **Transports.** stdio by default, for a host that launches it; `--http <port>` serves Streamable HTTP on `127.0.0.1` only, refusing any other `Host` or `Origin`. Any process on the machine can reach it; a hosted endpoint needs TLS, authentication and a front of its own.
+- **Validated input, data out.** Every argument is checked against its schema before any call; every result is structured content with an output schema, its block named, amounts as decimal strings of base units, reverts by name and arguments. What a tool returns is data from the chain or the registry, not instructions, and the server's instructions tell the agent so.
+- **Tested with two clients.** `make test-mcp-devnode` drives it with the official TypeScript client over Streamable HTTP and the official Python client over stdio, against the dev node.
 
 ## Verification
 

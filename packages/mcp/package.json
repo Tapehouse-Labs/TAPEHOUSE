@@ -1,0 +1,49 @@
+{
+  "name": "@tapehouse/mcp",
+  "version": "0.1.0",
+  "description": "A Model Context Protocol server through which AI agents read Tapehouse's band, accounts, shorts and Morpho oracles, and prepare transactions for a wallet to sign.",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tapehouse-Labs/TAPEHOUSE.git",
+    "directory": "packages/mcp"
+  },
+  "type": "module",
+  "bin": {
+    "tapehouse-mcp": "dist/main.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE-APACHE",
+    "LICENSE-MIT"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "lint": "tsc --noEmit && eslint --max-warnings 0",
+    "devnode": "node examples/devnode.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/node": "^2.1.0",
+    "@modelcontextprotocol/server": "^2.2.0",
+    "@tapehouse/sdk": "workspace:*",
+    "hono": "^4.13.12",
+    "viem": "^2.57.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@modelcontextprotocol/client": "2.2.0",
+    "@types/node": "24.19.0",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.0",
+    "vitest": "5.0.3"
+  }
+}

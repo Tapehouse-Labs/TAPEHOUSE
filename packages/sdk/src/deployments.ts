@@ -22,6 +22,9 @@ export type Deployments = {
   tapehouse: Record<string, Address>
   stockLending: Record<string, Address>
   uniswapV3: Record<string, Address>
+  morpho: Record<string, Address>
+  morphoMarkets: Record<string, Hex>
+  morphoOracles: Record<string, Address>
 }
 
 /** The chains whose Chainlink feeds price the share rather than the Stock Token. */
@@ -46,6 +49,7 @@ export function parseDeployments(json: unknown): Deployments {
     throw new Error('The registry has no chainId.')
   const kind: PriceKind = SHARE_PRICE_CHAINS.includes(chainId) ? 'share' : 'token'
   const { StockLending, ...tapehouse } = record(registry.tapehouse ?? {}, '.tapehouse')
+  const { Markets, ...morpho } = record(registry.morpho ?? {}, '.morpho')
   return {
     chainId,
     tokens: addresses(registry.tokens, '.tokens'),
@@ -56,6 +60,9 @@ export function parseDeployments(json: unknown): Deployments {
     tapehouse: addresses(tapehouse, '.tapehouse'),
     stockLending: addresses(StockLending, '.tapehouse.StockLending'),
     uniswapV3: addresses(registry.uniswapV3, '.uniswapV3'),
+    morpho: addresses(morpho, '.morpho'),
+    morphoMarkets: ids(Markets, '.morpho.Markets'),
+    morphoOracles: addresses(registry.morphoOracles, '.morphoOracles'),
   }
 }
 
@@ -76,7 +83,7 @@ export function sharePriceFeed(deployments: Deployments, name: string): SharePri
 
 /** The address of `name` in the registry group `group`. */
 export function entry<value>(group: Record<string, value>, name: string, path: string): value {
-  const value = group[name]
+  const value = Object.hasOwn(group, name) ? group[name] : undefined
   if (value === undefined) throw new Error(`The registry has no ${path}.${name}.`)
   return value
 }
@@ -91,6 +98,16 @@ function addresses(value: unknown, path: string): Record<string, Address> {
     Object.entries(record(value ?? {}, path)).map(([name, address]) => {
       if (typeof address !== 'string' || !isAddress(address)) throw new Error(`${path}.${name} is not an address.`)
       return [name, getAddress(address)]
+    }),
+  )
+}
+
+function ids(value: unknown, path: string): Record<string, Hex> {
+  return Object.fromEntries(
+    Object.entries(record(value ?? {}, path)).map(([name, id]) => {
+      if (typeof id !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(id))
+        throw new Error(`${path}.${name} is not a 32-byte id.`)
+      return [name, id.toLowerCase() as Hex]
     }),
   )
 }

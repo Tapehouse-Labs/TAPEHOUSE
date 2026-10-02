@@ -30,6 +30,12 @@ pub struct Deployments {
     pub stock_lending: BTreeMap<String, Address>,
     /// `.uniswapV3`: the factory, the router, the quoter and the pools.
     pub uniswap_v3: BTreeMap<String, Address>,
+    /// `.morpho`: Morpho Blue and its interest rate model, but for its markets.
+    pub morpho: BTreeMap<String, Address>,
+    /// `.morpho.Markets`: Morpho Blue's markets, by their 32-byte ids.
+    pub morpho_markets: BTreeMap<String, B256>,
+    /// `.morphoOracles`: each asset's Morpho oracle over the band.
+    pub morpho_oracles: BTreeMap<String, Address>,
 }
 
 /// A Chainlink feed that prices the Stock Token, as Robinhood Chain's do.
@@ -70,6 +76,11 @@ impl Deployments {
             .as_object_mut()
             .and_then(|group| group.remove("StockLending"))
             .unwrap_or(Value::Null);
+        let mut morpho = registry["morpho"].clone();
+        let markets = morpho
+            .as_object_mut()
+            .and_then(|group| group.remove("Markets"))
+            .unwrap_or(Value::Null);
         Ok(Self {
             chain_id,
             tokens: addresses(&registry["tokens"], ".tokens")?,
@@ -78,6 +89,9 @@ impl Deployments {
             tapehouse: addresses(&tapehouse, ".tapehouse")?,
             stock_lending: addresses(&stock_lending, ".tapehouse.StockLending")?,
             uniswap_v3: addresses(&registry["uniswapV3"], ".uniswapV3")?,
+            morpho: addresses(&morpho, ".morpho")?,
+            morpho_markets: ids(&markets, ".morpho.Markets")?,
+            morpho_oracles: addresses(&registry["morphoOracles"], ".morphoOracles")?,
         })
     }
 
@@ -119,6 +133,29 @@ pub(crate) fn entry(group: &BTreeMap<String, Address>, name: &str, path: &str) -
 }
 
 fn addresses(group: &Value, path: &str) -> Result<BTreeMap<String, Address>> {
+    entries(group, path, "an address", |text| {
+        if text == text.to_lowercase() {
+            Address::from_str(text).ok()
+        } else {
+            Address::parse_checksummed(text, None).ok()
+        }
+    })
+}
+
+fn ids(group: &Value, path: &str) -> Result<BTreeMap<String, B256>> {
+    entries(group, path, "a 32-byte id", |text| {
+        text.strip_prefix("0x")
+            .filter(|digits| digits.len() == 64)
+            .and_then(|_| B256::from_str(text).ok())
+    })
+}
+
+fn entries<T>(
+    group: &Value,
+    path: &str,
+    kind: &str,
+    parse: impl Fn(&str) -> Option<T>,
+) -> Result<BTreeMap<String, T>> {
     let Some(group) = group.as_object() else {
         return match group {
             Value::Null => Ok(BTreeMap::new()),
@@ -128,14 +165,11 @@ fn addresses(group: &Value, path: &str) -> Result<BTreeMap<String, Address>> {
     group
         .iter()
         .map(|(name, value)| {
-            let invalid = || Error::Registry(format!("{path}.{name} is not an address"));
-            let text = value.as_str().ok_or_else(invalid)?;
-            let address = if text == text.to_lowercase() {
-                Address::from_str(text).map_err(|_| invalid())?
-            } else {
-                Address::parse_checksummed(text, None).map_err(|_| invalid())?
-            };
-            Ok((name.clone(), address))
+            let invalid = || Error::Registry(format!("{path}.{name} is not {kind}"));
+            Ok((
+                name.clone(),
+                value.as_str().and_then(&parse).ok_or_else(invalid)?,
+            ))
         })
         .collect()
 }

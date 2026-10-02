@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 // SharePriceChains are the chains whose Chainlink feeds price the share rather than the Stock Token.
@@ -20,13 +21,16 @@ var Cross [32]byte
 
 // Deployments is a chain's address registry, deployments/<chainId>.json.
 type Deployments struct {
-	ChainID      uint64
-	Tokens       map[string]common.Address
-	Chainlink    map[string]common.Address
-	BandFeeds    map[string]common.Address
-	Tapehouse    map[string]common.Address
-	StockLending map[string]common.Address
-	UniswapV3    map[string]common.Address
+	ChainID       uint64
+	Tokens        map[string]common.Address
+	Chainlink     map[string]common.Address
+	BandFeeds     map[string]common.Address
+	Tapehouse     map[string]common.Address
+	StockLending  map[string]common.Address
+	UniswapV3     map[string]common.Address
+	Morpho        map[string]common.Address
+	MorphoMarkets map[string]common.Hash
+	MorphoOracles map[string]common.Address
 }
 
 // TokenPriceFeed is a Chainlink feed that prices the Stock Token, as Robinhood Chain's do.
@@ -47,12 +51,14 @@ func LoadDeployments(path string) (*Deployments, error) {
 // ParseDeployments parses a chain's registry. An address in mixed case must carry its checksum.
 func ParseDeployments(data []byte) (*Deployments, error) {
 	var registry struct {
-		ChainID   uint64                     `json:"chainId"`
-		Tokens    map[string]string          `json:"tokens"`
-		Chainlink map[string]string          `json:"chainlink"`
-		BandFeeds map[string]string          `json:"bandFeeds"`
-		Tapehouse map[string]json.RawMessage `json:"tapehouse"`
-		UniswapV3 map[string]string          `json:"uniswapV3"`
+		ChainID       uint64                     `json:"chainId"`
+		Tokens        map[string]string          `json:"tokens"`
+		Chainlink     map[string]string          `json:"chainlink"`
+		BandFeeds     map[string]string          `json:"bandFeeds"`
+		Tapehouse     map[string]json.RawMessage `json:"tapehouse"`
+		UniswapV3     map[string]string          `json:"uniswapV3"`
+		Morpho        map[string]json.RawMessage `json:"morpho"`
+		MorphoOracles map[string]string          `json:"morphoOracles"`
 	}
 	if err := json.Unmarshal(data, &registry); err != nil {
 		return nil, err
@@ -60,7 +66,7 @@ func ParseDeployments(data []byte) (*Deployments, error) {
 	if registry.ChainID == 0 {
 		return nil, fmt.Errorf("the registry has no chainId")
 	}
-	d := &Deployments{ChainID: registry.ChainID, Tapehouse: map[string]common.Address{}}
+	d := &Deployments{ChainID: registry.ChainID}
 	var err error
 	for _, group := range []struct {
 		into *map[string]common.Address
@@ -71,28 +77,23 @@ func ParseDeployments(data []byte) (*Deployments, error) {
 		{&d.Chainlink, registry.Chainlink, ".chainlink"},
 		{&d.BandFeeds, registry.BandFeeds, ".bandFeeds"},
 		{&d.UniswapV3, registry.UniswapV3, ".uniswapV3"},
+		{&d.MorphoOracles, registry.MorphoOracles, ".morphoOracles"},
 	} {
 		if *group.into, err = addresses(group.from, group.path); err != nil {
 			return nil, err
 		}
 	}
-	lending := map[string]string{}
-	for name, raw := range registry.Tapehouse {
-		target := new(string)
-		if name == "StockLending" {
-			if err := json.Unmarshal(raw, &lending); err != nil {
-				return nil, fmt.Errorf(".tapehouse.StockLending: %w", err)
-			}
-			continue
-		}
-		if err := json.Unmarshal(raw, target); err != nil {
-			return nil, fmt.Errorf(".tapehouse.%s is not an address", name)
-		}
-		if d.Tapehouse[name], err = address(*target, ".tapehouse."+name); err != nil {
-			return nil, err
-		}
+	var lending, markets map[string]string
+	if d.Tapehouse, lending, err = nested(registry.Tapehouse, "StockLending", ".tapehouse"); err != nil {
+		return nil, err
 	}
 	if d.StockLending, err = addresses(lending, ".tapehouse.StockLending"); err != nil {
+		return nil, err
+	}
+	if d.Morpho, markets, err = nested(registry.Morpho, "Markets", ".morpho"); err != nil {
+		return nil, err
+	}
+	if d.MorphoMarkets, err = ids(markets, ".morpho.Markets"); err != nil {
 		return nil, err
 	}
 	return d, nil
@@ -148,6 +149,40 @@ func addresses(group map[string]string, path string) (map[string]common.Address,
 			return nil, err
 		}
 		out[name] = parsed
+	}
+	return out, nil
+}
+
+func nested(group map[string]json.RawMessage, inner, path string) (map[string]common.Address, map[string]string, error) {
+	out, within := map[string]common.Address{}, map[string]string{}
+	for name, raw := range group {
+		if name == inner {
+			if err := json.Unmarshal(raw, &within); err != nil {
+				return nil, nil, fmt.Errorf("%s.%s: %w", path, name, err)
+			}
+			continue
+		}
+		var value string
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return nil, nil, fmt.Errorf("%s.%s is not an address", path, name)
+		}
+		parsed, err := address(value, path+"."+name)
+		if err != nil {
+			return nil, nil, err
+		}
+		out[name] = parsed
+	}
+	return out, within, nil
+}
+
+func ids(group map[string]string, path string) (map[string]common.Hash, error) {
+	out := make(map[string]common.Hash, len(group))
+	for name, value := range group {
+		raw, err := hexutil.Decode(value)
+		if err != nil || len(raw) != common.HashLength {
+			return nil, fmt.Errorf("%s.%s is not a 32-byte id", path, name)
+		}
+		out[name] = common.BytesToHash(raw)
 	}
 	return out, nil
 }

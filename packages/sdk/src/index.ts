@@ -17,4 +17,6 @@ export {
 } from './deployments.js'
 export { decodeRevert, decodeRevertData, errorsAbi, type Revert } from './errors.js'
 export * from './generated.js'
+export * as morpho from './morpho.js'
+export type { NoPrice, OraclePrice } from './morpho.js'
 export * as shorts from './shorts.js'

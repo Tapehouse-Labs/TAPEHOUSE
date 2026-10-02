@@ -33,6 +33,7 @@ static ERRORS: LazyLock<HashMap<Selector, AbiError>> = LazyLock::new(|| {
         include_str!("../abi/ShortPositions.json"),
         include_str!("../abi/MarginAccounts.json"),
         include_str!("../abi/BandFeed.json"),
+        include_str!("../abi/MorphoBandOracle.json"),
         include_str!("../abi/Band.json"),
         include_str!("../abi/StockToken.json"),
         include_str!("../abi/Usdg.json"),

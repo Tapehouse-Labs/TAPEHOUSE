@@ -10,9 +10,12 @@ CARGO_STYLUS_VERSION := 0.10.9
 CARGO_STYLUS_VERSION_RE := $(subst .,\.,$(CARGO_STYLUS_VERSION))
 GOLANGCI_LINT_VERSION := 2.14.0
 GOLANGCI_LINT_VERSION_RE := $(subst .,\.,$(GOLANGCI_LINT_VERSION))
+UV_VERSION := 0.12.21
+UV_VERSION_RE := $(subst .,\.,$(UV_VERSION))
 GO_TOOLCHAIN := $(shell awk '$$1 == "toolchain" { print $$2 }' services/go.mod)
 SDK_BINDINGS := Aggregator:AggregatorV3Interface.sol/AggregatorV3Interface Band:IBandPrices.sol/IBandPrices \
-	BandFeed:BandFeed.sol/BandFeed MarginAccounts:MarginAccounts.sol/MarginAccounts QuoterV2:IQuoterV2.sol/IQuoterV2 \
+	BandFeed:BandFeed.sol/BandFeed MarginAccounts:MarginAccounts.sol/MarginAccounts \
+	MorphoBandOracle:MorphoBandOracle.sol/MorphoBandOracle QuoterV2:IQuoterV2.sol/IQuoterV2 \
 	ShortPositions:ShortPositions.sol/ShortPositions StockToken:Interfaces.sol/IStockToken Usdg:IUSDG.sol/IUSDG
 SDK_GENERATED := crates/sdk/abi services/sdk/bindings packages/sdk/src/generated.ts
 SDK_PAYLOAD := stylus/contracts/band/testdata/nvda-24_7.hex
@@ -52,9 +55,9 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 
 .PHONY: all build test lint coverage gas snapshot \
 	check-toolchains check-node check-foundry check-slither check-reuse check-stylus check-docker submodules \
-	check-go check-golangci-lint check-rust \
+	check-go check-golangci-lint check-rust check-uv \
 	build-apps test-apps lint-apps build-services test-services lint-services build-crates test-crates lint-crates \
-	bindings check-bindings test-sdks-devnode \
+	bindings check-bindings test-sdks-devnode test-mcp-devnode \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
@@ -121,6 +124,11 @@ check-golangci-lint:
 check-rust:
 	@command -v rustup >/dev/null || \
 		{ echo "rustup is required. Install it from https://rustup.rs"; exit 1; }
+
+check-uv:
+	@uv --version 2>/dev/null | grep -Eq '^uv $(UV_VERSION_RE)( |$$)' || \
+		{ echo "uv $(UV_VERSION) is required, found: $$(uv --version 2>/dev/null || echo none)."; \
+		  echo "Run: curl -LsSf https://astral.sh/uv/$(UV_VERSION)/install.sh | sh"; exit 1; }
 
 check-docker:
 	@docker info >/dev/null 2>&1 || \
@@ -386,6 +394,14 @@ test-sdks-devnode: check-node check-go check-rust node_modules/.modules.yaml
 		../stylus/target/devnode-registry.json ../$(SDK_PAYLOAD)
 	cd crates && cargo run --locked --example devnode -- $(DEVNODE_RPC_URL) \
 		../stylus/target/devnode-registry.json ../$(SDK_PAYLOAD)
+
+test-mcp-devnode: export PRIVATE_KEY := $(DEVNODE_KEY)
+test-mcp-devnode: check-node check-uv node_modules/.modules.yaml
+	contracts/script/devnode-sdk-setup.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
+	pnpm --filter @tapehouse/mcp... run build
+	pnpm --filter @tapehouse/mcp run devnode $(DEVNODE_RPC_URL) $(abspath stylus/target/devnode-registry.json)
+	uv run --locked --script packages/mcp/examples/devnode.py $(DEVNODE_RPC_URL) \
+		$(abspath stylus/target/devnode-registry.json) $(abspath packages/mcp/dist/main.js)
 
 verify-supply-vault: check-foundry submodules
 	@case "$(CHAIN)" in 4663|46630) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \

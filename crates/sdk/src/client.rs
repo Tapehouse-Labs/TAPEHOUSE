@@ -7,11 +7,11 @@ use alloy::primitives::{Address, B256, Bytes, U256, aliases::U24};
 use alloy::providers::Provider;
 
 use crate::bindings::{
-    Aggregator, Band, BandFeed, IQuoterV2, MarginAccounts, QuoterV2, ShortPositions, StockToken,
-    Usdg,
+    Aggregator, Band, BandFeed, IQuoterV2, MarginAccounts, MorphoBandOracle, QuoterV2,
+    ShortPositions, StockToken, Usdg,
 };
 use crate::deployments::{Deployments, SharePriceFeed, TokenPriceFeed, entry, to_bytes32};
-use crate::{Error, Result};
+use crate::{Error, Result, Revert};
 
 /// Where signed RedStone data packages come from: the integrator's own gateway client, cache or relay. It returns the
 /// payload the band's `writePrices` verifies, the packages for `feed_ids` serialised as RedStone's EVM connector
@@ -51,6 +51,32 @@ pub struct Repayment {
     pub premium: U256,
     /// Both: the `assets` of a repayment that clears it now.
     pub assets: U256,
+}
+
+/// Why a Morpho oracle has no price.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoPrice {
+    /// The band has no live leg, which a fresh `writePrices` ends.
+    Stale,
+    /// The band holds a signed halt, the issuer's pause or an unconfirmed multiplier step for the asset.
+    Halted,
+    /// The L2 sequencer is down or came back an hour ago or less.
+    SequencerNotSettled,
+}
+
+/// A Morpho oracle's answer. Never a price of zero.
+#[derive(Clone, Debug, PartialEq)]
+pub enum OraclePrice {
+    /// The price of one whole collateral token in the loan token, with Morpho's 36 + loan decimals − collateral
+    /// decimals.
+    Price(U256),
+    /// No price, why, and the revert that said so.
+    NoPrice {
+        /// Why the oracle has no price.
+        reason: NoPrice,
+        /// The oracle's revert.
+        revert: Revert,
+    },
 }
 
 const BPS: u64 = 10_000;
@@ -120,6 +146,63 @@ impl<P: Provider + Clone> Tapehouse<P> {
     pub fn stock_token(&self, asset: &str) -> Result<StockToken::StockTokenInstance<P>> {
         let address = entry(&self.deployments.tokens, asset, ".tokens")?;
         Ok(StockToken::new(address, self.provider.clone()))
+    }
+
+    /// `asset`'s Morpho oracle, from `.morphoOracles`: its `price()`, `halt()`, `band()`, `symbol()`,
+    /// `collateralToken()`, `loanToken()`, `scaleFactor()` and `owner()`.
+    pub fn morpho_oracle(
+        &self,
+        asset: &str,
+    ) -> Result<MorphoBandOracle::MorphoBandOracleInstance<P>> {
+        let address = entry(&self.deployments.morpho_oracles, asset, ".morphoOracles")?;
+        Ok(MorphoBandOracle::new(address, self.provider.clone()))
+    }
+
+    /// The price `asset`'s Morpho oracle answers Morpho Blue, read at the latest block. A revert with `NoAnswer` or
+    /// `SequencerNotSettled` is no price, never zero; the oracle's halt and the band's corporate action, read at the
+    /// same block, tell a stale band from a halt.
+    pub async fn oracle_price(&self, asset: &str) -> Result<OraclePrice> {
+        let oracle = self.morpho_oracle(asset)?;
+        let block = BlockId::number(
+            self.provider
+                .get_block_number()
+                .await
+                .map_err(alloy::contract::Error::from)?,
+        );
+        let revert = match oracle
+            .price()
+            .block(block)
+            .call()
+            .await
+            .map_err(Error::from)
+        {
+            Ok(price) => return Ok(OraclePrice::Price(price)),
+            Err(Error::Revert(revert)) if revert.name == "SequencerNotSettled" => {
+                return Ok(OraclePrice::NoPrice {
+                    reason: NoPrice::SequencerNotSettled,
+                    revert,
+                });
+            }
+            Err(Error::Revert(revert)) if revert.name == "NoAnswer" => revert,
+            Err(error) => return Err(error),
+        };
+        let halt = oracle.halt().block(block).call().await?;
+        let band = oracle.band().block(block).call().await?;
+        let symbol = oracle.symbol().block(block).call().await?;
+        let step = Band::new(band, self.provider.clone())
+            .corporateAction(symbol)
+            .block(block)
+            .call()
+            .await?;
+        let halted = halt.signedHalt || halt.oraclePaused || step.status == 2;
+        Ok(OraclePrice::NoPrice {
+            reason: if halted {
+                NoPrice::Halted
+            } else {
+                NoPrice::Stale
+            },
+            revert,
+        })
     }
 
     /// A Chainlink feed that prices the Stock Token.
