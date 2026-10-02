@@ -7,7 +7,8 @@ use alloy::rpc::json_rpc::ErrorPayload;
 use alloy::sol_types::{Revert as SolidityRevert, SolCall, SolError, SolEvent, SolValue};
 use alloy::transports::mock::Asserter;
 use tapehouse_sdk::bindings::{
-    Band, BandFeed, Basket, GapCover, MarginAccounts, MorphoBandOracle, ShortPositions, StockToken,
+    Band, BandFeed, Basket, GapCover, Liquidator, MarginAccounts, MorphoBandOracle, ShortPositions,
+    StockLendingVault, StockToken,
 };
 use tapehouse_sdk::{
     CROSS, Deployments, Error, Layer, NoPrice, OraclePrice, PackageSource, PricingGap, Sales,
@@ -313,6 +314,22 @@ fn the_reverts_of_tapehouse_the_band_the_issuer_and_the_router_are_decoded() {
         (
             Basket::PastTarget { symbol: b32("SPY") }.abi_encode(),
             format!("PastTarget({})", b32("SPY")),
+        ),
+        (
+            Liquidator::NotLiquidatable {
+                account: BOB,
+                position: CROSS,
+            }
+            .abi_encode(),
+            format!("NotLiquidatable({BOB}, {CROSS})"),
+        ),
+        (
+            StockLendingVault::InsufficientLiquidity {
+                requested: U256::from(2),
+                available: U256::from(1),
+            }
+            .abi_encode(),
+            "InsufficientLiquidity(2, 1)".into(),
         ),
         (
             SolidityRevert::from("Too little received").abi_encode(),

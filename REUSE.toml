@@ -110,7 +110,11 @@ SPDX-License-Identifier = "MIT"
 SPDX-FileComment = "CREATE2 salt and initcode of StylusDeployer (nitro-contracts, src/stylus/StylusDeployer.sol, which declares MIT and compiles in only the ArbWasm precompile's interface), as nitro-devnode deploys it."
 
 [[annotations]]
-path = "stylus/contracts/band/testdata/*.hex"
+path = [
+    "stylus/contracts/band/testdata/*.hex",
+    "services/internal/redstone/testdata/*.hex",
+    "services/internal/redstone/testdata/*.json",
+]
 precedence = "override"
 SPDX-FileCopyrightText = "RedStone Oracles"
 SPDX-License-Identifier = "LicenseRef-RedStone-Data"

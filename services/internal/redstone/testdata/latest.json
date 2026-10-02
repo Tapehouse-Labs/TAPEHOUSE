@@ -1,0 +1,273 @@
+{
+  "NY_MARKET_CURRENT_STATUS": [
+    {
+      "timestampMilliseconds": 1790949660000,
+      "signature": "y/zqyMejVUTsKqVP2lrB+VrD9r41xm8/jIFmfXpd3H8DLntJDr0j+Kb4a9BaH+DupVn8+QQC7Hcb2FrmTFqOiBw=",
+      "isSignatureValid": true,
+      "dataPoints": [
+        {
+          "dataFeedId": "NY_MARKET_CURRENT_STATUS",
+          "value": 1
+        }
+      ],
+      "dataServiceId": "redstone-primary-prod",
+      "dataPackageId": "NY_MARKET_CURRENT_STATUS",
+      "signerAddress": "0x8BB8F32Df04c8b654987DAaeD53D6B6091e3B774",
+      "dataFeedId": "NY_MARKET_CURRENT_STATUS"
+    },
+    {
+      "timestampMilliseconds": 1790949660000,
+      "signature": "y8n/0n30IpT/ZrjnjeQDgSDAGQjxNKfZv2w6EOGFrpx0bzt/sxuLxSoXV8QAaTmB/sqQ4DzmcLsZG8lvlivfXBs=",
+      "isSignatureValid": true,
+      "dataPoints": [
+        {
+          "dataFeedId": "NY_MARKET_CURRENT_STATUS",
+          "value": 1
+        }
+      ],
+      "dataServiceId": "redstone-primary-prod",
+      "dataPackageId": "NY_MARKET_CURRENT_STATUS",
+      "signerAddress": "0xDD682daEC5A90dD295d14DA4b0bec9281017b5bE",
+      "dataFeedId": "NY_MARKET_CURRENT_STATUS"
+    },
+    {
+      "timestampMilliseconds": 1790949660000,
+      "signature": "TRYdhXhk4BYqsYJAOfsySoYmCTEYT+oHbrt43ASrCYVv8YIMVemEZuU2nLIpiPDddT7i8H2wuIhQ4Uo1ivXWWhs=",
+      "isSignatureValid": true,
+      "dataPoints": [
+        {
+          "dataFeedId": "NY_MARKET_CURRENT_STATUS",
+          "value": 1
+        }
+      ],
+      "dataServiceId": "redstone-primary-prod",
+      "dataPackageId": "NY_MARKET_CURRENT_STATUS",
+      "signerAddress": "0x9c5AE89C4Af6aA32cE58588DBaF90d18a855B6de",
+      "dataFeedId": "NY_MARKET_CURRENT_STATUS"
+    },
+    {
+      "timestampMilliseconds": 1790949660000,
+      "signature": "VKtreblFhjcnOBZNshDLRDZb1ez2p9gBcO2zJq7df3kKELvCFpubm6vsujh6u8I5oiWqtoS1rsg6KLjd7U00kBs=",
+      "isSignatureValid": true,
+      "dataPoints": [
+        {
+          "dataFeedId": "NY_MARKET_CURRENT_STATUS",
+          "value": 1
+        }
+      ],
+      "dataServiceId": "redstone-primary-prod",
+      "dataPackageId": "NY_MARKET_CURRENT_STATUS",
+      "signerAddress": "0xdEB22f54738d54976C4c0fe5ce6d408E40d88499",
+      "dataFeedId": "NY_MARKET_CURRENT_STATUS"
+    },
+    {
+      "timestampMilliseconds": 1790949660000,
+      "signature": "/9ZD56ivg1lsqrpnHDfUz2XSZZ/cm92ycFY2/KwA4hYgz9BrmCbjrcxTQFB5YMOErQcbbJgET4KWw9pX6TTk2Rw=",
+      "isSignatureValid": true,
+      "dataPoints": [
+        {
+          "dataFeedId": "NY_MARKET_CURRENT_STATUS",
+          "value": 1
+        }
+      ],
+      "dataServiceId": "redstone-primary-prod",
+      "dataPackageId": "NY_MARKET_CURRENT_STATUS",
+      "signerAddress": "0x51Ce04Be4b3E32572C4Ec9135221d0691Ba7d202",
+      "dataFeedId": "NY_MARKET_CURRENT_STATUS"
+    }
+  ],
+  "NVDA---24_7": [
+    {
+      "timestampMilliseconds": 1790949660000,
+      "signature": "lIaodvurQV05haAa4Vqe3thpAOmLjCGrsgnSenGJEYwlsUfeXV65S7wZPqMLCn+gCGTd0b6JTRS0UYMIp5uC2Rw=",
+      "isSignatureValid": true,
+      "dataPoints": [
+        {
+          "dataFeedId": "NVDA---24_7",
+          "value": 237.29678801
+        }
+      ],
+      "dataServiceId": "redstone-primary-prod",
+      "dataPackageId": "NVDA---24_7",
+      "signerAddress": "0x8BB8F32Df04c8b654987DAaeD53D6B6091e3B774",
+      "dataFeedId": "NVDA---24_7"
+    },
+    {
+      "timestampMilliseconds": 1790949660000,
+      "signature": "SHn6VYQUfQx3l3CLw7iSGvkUhiegLlPUGwO3EF1MKKJBUckiHkozFIXvhYRz7KL5nF5jFbm2LTmjH1nrqnGhaBw=",
+      "isSignatureValid": true,
+      "dataPoints": [
+        {
+          "dataFeedId": "NVDA---24_7",
+          "value": 237.29970949
+        }
+      ],
+      "dataServiceId": "redstone-primary-prod",
+      "dataPackageId": "NVDA---24_7",
+      "signerAddress": "0xDD682daEC5A90dD295d14DA4b0bec9281017b5bE",
+      "dataFeedId": "NVDA---24_7"
+    },
+    {
+      "timestampMilliseconds": 1790949660000,
+      "signature": "+ND86WDvx/KArMHiUhxKtFbgp4xE8gfUXmgPnRZ1zZEZYQVrPmWZU7nelfLamH9ssByRTENS5nN3Lf2F1FlfARw=",
+      "isSignatureValid": true,
+      "dataPoints": [
+        {
+          "dataFeedId": "NVDA---24_7",
+          "value": 237.29481961
+        }
+      ],
+      "dataServiceId": "redstone-primary-prod",
+      "dataPackageId": "NVDA---24_7",
+      "signerAddress": "0x9c5AE89C4Af6aA32cE58588DBaF90d18a855B6de",
+      "dataFeedId": "NVDA---24_7"
+    },
+    {
+      "timestampMilliseconds": 1790949660000,
+      "signature": "FnpNCcLi13uEa/1cBMN7xXznb8TMLs2oE9hN3E2Df5ludTp4W4TneSElJDEmG7wE6NUIQfVRKOVFJOqWJMvXTxs=",
+      "isSignatureValid": true,
+      "dataPoints": [
+        {
+          "dataFeedId": "NVDA---24_7",
+          "value": 237.2908482
+        }
+      ],
+      "dataServiceId": "redstone-primary-prod",
+      "dataPackageId": "NVDA---24_7",
+      "signerAddress": "0xdEB22f54738d54976C4c0fe5ce6d408E40d88499",
+      "dataFeedId": "NVDA---24_7"
+    },
+    {
+      "timestampMilliseconds": 1790949660000,
+      "signature": "YBRDqzXcb4jDrpQkf3kGuceXL3W+wgeAiQYCDBv1CwpzSWIFz8Na/fvo/jHDvVOwnCh0GfbBkWvEEFPDCZFJ2xw=",
+      "isSignatureValid": true,
+      "dataPoints": [
+        {
+          "dataFeedId": "NVDA---24_7",
+          "value": 237.29496455
+        }
+      ],
+      "dataServiceId": "redstone-primary-prod",
+      "dataPackageId": "NVDA---24_7",
+      "signerAddress": "0x51Ce04Be4b3E32572C4Ec9135221d0691Ba7d202",
+      "dataFeedId": "NVDA---24_7"
+    }
+  ],
+  "NY_MARKET_STATUS": [
+    {
+      "timestampMilliseconds": 1790949660000,
+      "signature": "5pbW/YcT4Jq2gRiMxl0DI0xkc1sqzVCcmTx+goMP+wI3u5htqCa+Wm7jwIoEURNdPA+J7A8z1/eREeVWEy08Axw=",
+      "isSignatureValid": true,
+      "dataPoints": [
+        {
+          "dataFeedId": "NY_MARKET_CURRENT_STATUS",
+          "value": 1
+        },
+        {
+          "dataFeedId": "NY_MARKET_NEXT_CHANGE_TIME",
+          "value": 1790971200000
+        },
+        {
+          "dataFeedId": "NY_MARKET_NEXT_STATUS",
+          "value": 1.02
+        }
+      ],
+      "dataServiceId": "redstone-primary-prod",
+      "dataPackageId": "NY_MARKET_STATUS",
+      "signerAddress": "0x8BB8F32Df04c8b654987DAaeD53D6B6091e3B774",
+      "dataFeedId": "NY_MARKET_STATUS"
+    },
+    {
+      "timestampMilliseconds": 1790949660000,
+      "signature": "vXS4s+e3d8bYib+CAcda9nYQ9n8G0POrYXxu6h/L9TNq1WD21zwu/aY7zD1p4tDAloNKSd8xnd1tGKNqy3bEUxw=",
+      "isSignatureValid": true,
+      "dataPoints": [
+        {
+          "dataFeedId": "NY_MARKET_CURRENT_STATUS",
+          "value": 1
+        },
+        {
+          "dataFeedId": "NY_MARKET_NEXT_CHANGE_TIME",
+          "value": 1790971200000
+        },
+        {
+          "dataFeedId": "NY_MARKET_NEXT_STATUS",
+          "value": 1.02
+        }
+      ],
+      "dataServiceId": "redstone-primary-prod",
+      "dataPackageId": "NY_MARKET_STATUS",
+      "signerAddress": "0xDD682daEC5A90dD295d14DA4b0bec9281017b5bE",
+      "dataFeedId": "NY_MARKET_STATUS"
+    },
+    {
+      "timestampMilliseconds": 1790949660000,
+      "signature": "PCOy6vPXVDWU4UXBa9mCNgILXuhpC+XxnWXAP4qLSlBquVlZWKDrRapduhij2mmaM9MHmUVlkcWMrT7wFVQbaRs=",
+      "isSignatureValid": true,
+      "dataPoints": [
+        {
+          "dataFeedId": "NY_MARKET_CURRENT_STATUS",
+          "value": 1
+        },
+        {
+          "dataFeedId": "NY_MARKET_NEXT_CHANGE_TIME",
+          "value": 1790971200000
+        },
+        {
+          "dataFeedId": "NY_MARKET_NEXT_STATUS",
+          "value": 1.02
+        }
+      ],
+      "dataServiceId": "redstone-primary-prod",
+      "dataPackageId": "NY_MARKET_STATUS",
+      "signerAddress": "0x9c5AE89C4Af6aA32cE58588DBaF90d18a855B6de",
+      "dataFeedId": "NY_MARKET_STATUS"
+    },
+    {
+      "timestampMilliseconds": 1790949660000,
+      "signature": "wuUWAFInXJdXRomPwD71CXbAALWRYVuRP6Dhq/Xlk3NCkJZP1ICv4WTwjog5RVjGXaBSGpjnpwto7IscvCWEyxs=",
+      "isSignatureValid": true,
+      "dataPoints": [
+        {
+          "dataFeedId": "NY_MARKET_CURRENT_STATUS",
+          "value": 1
+        },
+        {
+          "dataFeedId": "NY_MARKET_NEXT_CHANGE_TIME",
+          "value": 1790971200000
+        },
+        {
+          "dataFeedId": "NY_MARKET_NEXT_STATUS",
+          "value": 1.02
+        }
+      ],
+      "dataServiceId": "redstone-primary-prod",
+      "dataPackageId": "NY_MARKET_STATUS",
+      "signerAddress": "0xdEB22f54738d54976C4c0fe5ce6d408E40d88499",
+      "dataFeedId": "NY_MARKET_STATUS"
+    },
+    {
+      "timestampMilliseconds": 1790949660000,
+      "signature": "euHN5F558w1DiIpHtyggkc7LlNwxusGFy7HmMPd0HUBPC3EAIYnrMcurzcy8LplmJhg73QHGEUFvHcOPa2gwIxw=",
+      "isSignatureValid": true,
+      "dataPoints": [
+        {
+          "dataFeedId": "NY_MARKET_CURRENT_STATUS",
+          "value": 1
+        },
+        {
+          "dataFeedId": "NY_MARKET_NEXT_CHANGE_TIME",
+          "value": 1790971200000
+        },
+        {
+          "dataFeedId": "NY_MARKET_NEXT_STATUS",
+          "value": 1.02
+        }
+      ],
+      "dataServiceId": "redstone-primary-prod",
+      "dataPackageId": "NY_MARKET_STATUS",
+      "signerAddress": "0x51Ce04Be4b3E32572C4Ec9135221d0691Ba7d202",
+      "dataFeedId": "NY_MARKET_STATUS"
+    }
+  ]
+}

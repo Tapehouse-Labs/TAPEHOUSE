@@ -26,7 +26,7 @@ var (
 
 // BandMetaData contains all meta data concerning the Band contract.
 var BandMetaData = bind.MetaData{
-	ABI: "[{\"type\":\"function\",\"name\":\"asset\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"chainlinkFeed\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"redstoneFeedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"indexFeedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"token\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"chainConfig\",\"inputs\":[],\"outputs\":[{\"name\":\"sequencerUptimeFeed\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"chainlinkRegularHours\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"corporateAction\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"status\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"effectiveAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"multiplierBefore\",\"type\":\"uint128\",\"internalType\":\"uint128\"},{\"name\":\"multiplierAfter\",\"type\":\"uint128\",\"internalType\":\"uint128\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"halt\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"signedHalt\",\"type\":\"bool\",\"internalType\":\"bool\"},{\"name\":\"until\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"issuedAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"oraclePaused\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"price\",\"inputs\":[{\"name\":\"feedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"value\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"packageTimestampMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"writtenAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"quote\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"state\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"live\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"mid\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"halfBps\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"low\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"high\",\"type\":\"uint128\",\"internalType\":\"uint128\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"sequencerSettled\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"session\",\"inputs\":[],\"outputs\":[{\"name\":\"state\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"nyse\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"nyseNext\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"changeMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"boundaryMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"variance\",\"inputs\":[{\"name\":\"feedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint128\",\"internalType\":\"uint128\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"writePrices\",\"inputs\":[{\"name\":\"feedIds\",\"type\":\"bytes32[]\",\"internalType\":\"bytes32[]\"},{\"name\":\"payload\",\"type\":\"bytes\",\"internalType\":\"bytes\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256[]\",\"internalType\":\"uint256[]\"}],\"stateMutability\":\"nonpayable\"},{\"type\":\"error\",\"name\":\"CalldataMustHaveValidPayload\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"CalldataOverOrUnderFlow\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"DataTimestampCannotBeZero\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"IncompleteStatus\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"IncorrectUnsignedMetadataSize\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"InsufficientNumberOfUniqueSigners\",\"inputs\":[{\"name\":\"receivedSignersCount\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"requiredSignersCount\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"type\":\"error\",\"name\":\"InvalidSignature\",\"inputs\":[{\"name\":\"signedHash\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}]},{\"type\":\"error\",\"name\":\"PackageNotNewer\",\"inputs\":[{\"name\":\"feedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"storedTimestampMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"packageTimestampMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"}]},{\"type\":\"error\",\"name\":\"SignerNotAuthorised\",\"inputs\":[{\"name\":\"receivedSigner\",\"type\":\"address\",\"internalType\":\"address\"}]},{\"type\":\"error\",\"name\":\"TimestampFromTooLongFuture\",\"inputs\":[{\"name\":\"receivedTimestampSeconds\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"blockTimestamp\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"type\":\"error\",\"name\":\"TimestampIsTooOld\",\"inputs\":[{\"name\":\"receivedTimestampSeconds\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"blockTimestamp\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"type\":\"error\",\"name\":\"TimestampsMustBeEqual\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"TooLargeValueByteSize\",\"inputs\":[{\"name\":\"valueByteSize\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]}]",
+	ABI: "[{\"type\":\"function\",\"name\":\"asset\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"chainlinkFeed\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"redstoneFeedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"indexFeedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"token\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"chainConfig\",\"inputs\":[],\"outputs\":[{\"name\":\"sequencerUptimeFeed\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"chainlinkRegularHours\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"corporateAction\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"status\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"effectiveAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"multiplierBefore\",\"type\":\"uint128\",\"internalType\":\"uint128\"},{\"name\":\"multiplierAfter\",\"type\":\"uint128\",\"internalType\":\"uint128\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"halt\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"signedHalt\",\"type\":\"bool\",\"internalType\":\"bool\"},{\"name\":\"until\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"issuedAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"oraclePaused\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"haltSigner\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"price\",\"inputs\":[{\"name\":\"feedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"value\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"packageTimestampMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"writtenAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"quote\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"state\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"live\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"mid\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"halfBps\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"low\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"high\",\"type\":\"uint128\",\"internalType\":\"uint128\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"sequencerSettled\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"session\",\"inputs\":[],\"outputs\":[{\"name\":\"state\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"nyse\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"nyseNext\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"changeMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"boundaryMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"variance\",\"inputs\":[{\"name\":\"feedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint128\",\"internalType\":\"uint128\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"writePrices\",\"inputs\":[{\"name\":\"feedIds\",\"type\":\"bytes32[]\",\"internalType\":\"bytes32[]\"},{\"name\":\"payload\",\"type\":\"bytes\",\"internalType\":\"bytes\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256[]\",\"internalType\":\"uint256[]\"}],\"stateMutability\":\"nonpayable\"},{\"type\":\"event\",\"name\":\"Anchored\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"chainlinkPrice\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"},{\"name\":\"indexPrice\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"},{\"name\":\"updatedAt\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"HaltSignerUpdated\",\"inputs\":[{\"name\":\"previousSigner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"newSigner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"HaltWritten\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"halted\",\"type\":\"bool\",\"indexed\":false,\"internalType\":\"bool\"},{\"name\":\"issuedAt\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"},{\"name\":\"expiresAt\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"MultiplierConfirmed\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"effectiveAt\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"MultiplierRecorded\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"multiplierBefore\",\"type\":\"uint128\",\"indexed\":false,\"internalType\":\"uint128\"},{\"name\":\"multiplierAfter\",\"type\":\"uint128\",\"indexed\":false,\"internalType\":\"uint128\"},{\"name\":\"effectiveAt\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"OwnershipTransferStarted\",\"inputs\":[{\"name\":\"previousOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"newOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"OwnershipTransferred\",\"inputs\":[{\"name\":\"previousOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"newOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"PriceWritten\",\"inputs\":[{\"name\":\"feedId\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"value\",\"type\":\"uint256\",\"indexed\":false,\"internalType\":\"uint256\"},{\"name\":\"packageTimestampMs\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"}],\"anonymous\":false},{\"type\":\"error\",\"name\":\"CalldataMustHaveValidPayload\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"CalldataOverOrUnderFlow\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"DataTimestampCannotBeZero\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"IncompleteStatus\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"IncorrectUnsignedMetadataSize\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"InsufficientNumberOfUniqueSigners\",\"inputs\":[{\"name\":\"receivedSignersCount\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"requiredSignersCount\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"type\":\"error\",\"name\":\"InvalidSignature\",\"inputs\":[{\"name\":\"signedHash\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}]},{\"type\":\"error\",\"name\":\"PackageNotNewer\",\"inputs\":[{\"name\":\"feedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"storedTimestampMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"packageTimestampMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"}]},{\"type\":\"error\",\"name\":\"SignerNotAuthorised\",\"inputs\":[{\"name\":\"receivedSigner\",\"type\":\"address\",\"internalType\":\"address\"}]},{\"type\":\"error\",\"name\":\"TimestampFromTooLongFuture\",\"inputs\":[{\"name\":\"receivedTimestampSeconds\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"blockTimestamp\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"type\":\"error\",\"name\":\"TimestampIsTooOld\",\"inputs\":[{\"name\":\"receivedTimestampSeconds\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"blockTimestamp\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"type\":\"error\",\"name\":\"TimestampsMustBeEqual\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"TooLargeValueByteSize\",\"inputs\":[{\"name\":\"valueByteSize\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]}]",
 	ID:  "Band",
 }
 
@@ -241,6 +241,41 @@ func (band *Band) UnpackHalt(data []byte) (HaltOutput, error) {
 	outstruct.IssuedAt = *abi.ConvertType(out[2], new(uint64)).(*uint64)
 	outstruct.OraclePaused = *abi.ConvertType(out[3], new(bool)).(*bool)
 	return *outstruct, nil
+}
+
+// PackHaltSigner is the Go binding used to pack the parameters required for calling
+// the contract method with ID 0x829793d4.  This method will panic if any
+// invalid/nil inputs are passed.
+//
+// Solidity: function haltSigner() view returns(address)
+func (band *Band) PackHaltSigner() []byte {
+	enc, err := band.abi.Pack("haltSigner")
+	if err != nil {
+		panic(err)
+	}
+	return enc
+}
+
+// TryPackHaltSigner is the Go binding used to pack the parameters required for calling
+// the contract method with ID 0x829793d4.  This method will return an error
+// if any inputs are invalid/nil.
+//
+// Solidity: function haltSigner() view returns(address)
+func (band *Band) TryPackHaltSigner() ([]byte, error) {
+	return band.abi.Pack("haltSigner")
+}
+
+// UnpackHaltSigner is the Go binding that unpacks the parameters returned
+// from invoking the contract method with ID 0x829793d4.
+//
+// Solidity: function haltSigner() view returns(address)
+func (band *Band) UnpackHaltSigner(data []byte) (common.Address, error) {
+	out, err := band.abi.Unpack("haltSigner", data)
+	if err != nil {
+		return *new(common.Address), err
+	}
+	out0 := *abi.ConvertType(out[0], new(common.Address)).(*common.Address)
+	return out0, nil
 }
 
 // PackPrice is the Go binding used to pack the parameters required for calling
@@ -494,6 +529,373 @@ func (band *Band) UnpackWritePrices(data []byte) ([]*big.Int, error) {
 	}
 	out0 := *abi.ConvertType(out[0], new([]*big.Int)).(*[]*big.Int)
 	return out0, nil
+}
+
+// BandAnchored represents a Anchored event raised by the Band contract.
+type BandAnchored struct {
+	Symbol         [32]byte
+	ChainlinkPrice uint64
+	IndexPrice     uint64
+	UpdatedAt      uint64
+	Raw            *types.Log // Blockchain specific contextual infos
+}
+
+const BandAnchoredEventName = "Anchored"
+
+// ContractEventName returns the user-defined event name.
+func (BandAnchored) ContractEventName() string {
+	return BandAnchoredEventName
+}
+
+// UnpackAnchoredEvent is the Go binding that unpacks the event data emitted
+// by contract.
+//
+// Solidity: event Anchored(bytes32 indexed symbol, uint64 chainlinkPrice, uint64 indexPrice, uint64 updatedAt)
+func (band *Band) UnpackAnchoredEvent(log *types.Log) (*BandAnchored, error) {
+	event := "Anchored"
+	if len(log.Topics) == 0 {
+		return nil, bind.ErrNoEventSignature
+	}
+	if log.Topics[0] != band.abi.Events[event].ID {
+		return nil, bind.ErrEventSignatureMismatch
+	}
+	out := new(BandAnchored)
+	if len(log.Data) > 0 {
+		if err := band.abi.UnpackIntoInterface(out, event, log.Data); err != nil {
+			return nil, err
+		}
+	}
+	var indexed abi.Arguments
+	for _, arg := range band.abi.Events[event].Inputs {
+		if arg.Indexed {
+			indexed = append(indexed, arg)
+		}
+	}
+	if err := abi.ParseTopics(out, indexed, log.Topics[1:]); err != nil {
+		return nil, err
+	}
+	out.Raw = log
+	return out, nil
+}
+
+// BandHaltSignerUpdated represents a HaltSignerUpdated event raised by the Band contract.
+type BandHaltSignerUpdated struct {
+	PreviousSigner common.Address
+	NewSigner      common.Address
+	Raw            *types.Log // Blockchain specific contextual infos
+}
+
+const BandHaltSignerUpdatedEventName = "HaltSignerUpdated"
+
+// ContractEventName returns the user-defined event name.
+func (BandHaltSignerUpdated) ContractEventName() string {
+	return BandHaltSignerUpdatedEventName
+}
+
+// UnpackHaltSignerUpdatedEvent is the Go binding that unpacks the event data emitted
+// by contract.
+//
+// Solidity: event HaltSignerUpdated(address indexed previousSigner, address indexed newSigner)
+func (band *Band) UnpackHaltSignerUpdatedEvent(log *types.Log) (*BandHaltSignerUpdated, error) {
+	event := "HaltSignerUpdated"
+	if len(log.Topics) == 0 {
+		return nil, bind.ErrNoEventSignature
+	}
+	if log.Topics[0] != band.abi.Events[event].ID {
+		return nil, bind.ErrEventSignatureMismatch
+	}
+	out := new(BandHaltSignerUpdated)
+	if len(log.Data) > 0 {
+		if err := band.abi.UnpackIntoInterface(out, event, log.Data); err != nil {
+			return nil, err
+		}
+	}
+	var indexed abi.Arguments
+	for _, arg := range band.abi.Events[event].Inputs {
+		if arg.Indexed {
+			indexed = append(indexed, arg)
+		}
+	}
+	if err := abi.ParseTopics(out, indexed, log.Topics[1:]); err != nil {
+		return nil, err
+	}
+	out.Raw = log
+	return out, nil
+}
+
+// BandHaltWritten represents a HaltWritten event raised by the Band contract.
+type BandHaltWritten struct {
+	Symbol    [32]byte
+	Halted    bool
+	IssuedAt  uint64
+	ExpiresAt uint64
+	Raw       *types.Log // Blockchain specific contextual infos
+}
+
+const BandHaltWrittenEventName = "HaltWritten"
+
+// ContractEventName returns the user-defined event name.
+func (BandHaltWritten) ContractEventName() string {
+	return BandHaltWrittenEventName
+}
+
+// UnpackHaltWrittenEvent is the Go binding that unpacks the event data emitted
+// by contract.
+//
+// Solidity: event HaltWritten(bytes32 indexed symbol, bool halted, uint64 issuedAt, uint64 expiresAt)
+func (band *Band) UnpackHaltWrittenEvent(log *types.Log) (*BandHaltWritten, error) {
+	event := "HaltWritten"
+	if len(log.Topics) == 0 {
+		return nil, bind.ErrNoEventSignature
+	}
+	if log.Topics[0] != band.abi.Events[event].ID {
+		return nil, bind.ErrEventSignatureMismatch
+	}
+	out := new(BandHaltWritten)
+	if len(log.Data) > 0 {
+		if err := band.abi.UnpackIntoInterface(out, event, log.Data); err != nil {
+			return nil, err
+		}
+	}
+	var indexed abi.Arguments
+	for _, arg := range band.abi.Events[event].Inputs {
+		if arg.Indexed {
+			indexed = append(indexed, arg)
+		}
+	}
+	if err := abi.ParseTopics(out, indexed, log.Topics[1:]); err != nil {
+		return nil, err
+	}
+	out.Raw = log
+	return out, nil
+}
+
+// BandMultiplierConfirmed represents a MultiplierConfirmed event raised by the Band contract.
+type BandMultiplierConfirmed struct {
+	Symbol      [32]byte
+	EffectiveAt uint64
+	Raw         *types.Log // Blockchain specific contextual infos
+}
+
+const BandMultiplierConfirmedEventName = "MultiplierConfirmed"
+
+// ContractEventName returns the user-defined event name.
+func (BandMultiplierConfirmed) ContractEventName() string {
+	return BandMultiplierConfirmedEventName
+}
+
+// UnpackMultiplierConfirmedEvent is the Go binding that unpacks the event data emitted
+// by contract.
+//
+// Solidity: event MultiplierConfirmed(bytes32 indexed symbol, uint64 effectiveAt)
+func (band *Band) UnpackMultiplierConfirmedEvent(log *types.Log) (*BandMultiplierConfirmed, error) {
+	event := "MultiplierConfirmed"
+	if len(log.Topics) == 0 {
+		return nil, bind.ErrNoEventSignature
+	}
+	if log.Topics[0] != band.abi.Events[event].ID {
+		return nil, bind.ErrEventSignatureMismatch
+	}
+	out := new(BandMultiplierConfirmed)
+	if len(log.Data) > 0 {
+		if err := band.abi.UnpackIntoInterface(out, event, log.Data); err != nil {
+			return nil, err
+		}
+	}
+	var indexed abi.Arguments
+	for _, arg := range band.abi.Events[event].Inputs {
+		if arg.Indexed {
+			indexed = append(indexed, arg)
+		}
+	}
+	if err := abi.ParseTopics(out, indexed, log.Topics[1:]); err != nil {
+		return nil, err
+	}
+	out.Raw = log
+	return out, nil
+}
+
+// BandMultiplierRecorded represents a MultiplierRecorded event raised by the Band contract.
+type BandMultiplierRecorded struct {
+	Symbol           [32]byte
+	MultiplierBefore *big.Int
+	MultiplierAfter  *big.Int
+	EffectiveAt      uint64
+	Raw              *types.Log // Blockchain specific contextual infos
+}
+
+const BandMultiplierRecordedEventName = "MultiplierRecorded"
+
+// ContractEventName returns the user-defined event name.
+func (BandMultiplierRecorded) ContractEventName() string {
+	return BandMultiplierRecordedEventName
+}
+
+// UnpackMultiplierRecordedEvent is the Go binding that unpacks the event data emitted
+// by contract.
+//
+// Solidity: event MultiplierRecorded(bytes32 indexed symbol, uint128 multiplierBefore, uint128 multiplierAfter, uint64 effectiveAt)
+func (band *Band) UnpackMultiplierRecordedEvent(log *types.Log) (*BandMultiplierRecorded, error) {
+	event := "MultiplierRecorded"
+	if len(log.Topics) == 0 {
+		return nil, bind.ErrNoEventSignature
+	}
+	if log.Topics[0] != band.abi.Events[event].ID {
+		return nil, bind.ErrEventSignatureMismatch
+	}
+	out := new(BandMultiplierRecorded)
+	if len(log.Data) > 0 {
+		if err := band.abi.UnpackIntoInterface(out, event, log.Data); err != nil {
+			return nil, err
+		}
+	}
+	var indexed abi.Arguments
+	for _, arg := range band.abi.Events[event].Inputs {
+		if arg.Indexed {
+			indexed = append(indexed, arg)
+		}
+	}
+	if err := abi.ParseTopics(out, indexed, log.Topics[1:]); err != nil {
+		return nil, err
+	}
+	out.Raw = log
+	return out, nil
+}
+
+// BandOwnershipTransferStarted represents a OwnershipTransferStarted event raised by the Band contract.
+type BandOwnershipTransferStarted struct {
+	PreviousOwner common.Address
+	NewOwner      common.Address
+	Raw           *types.Log // Blockchain specific contextual infos
+}
+
+const BandOwnershipTransferStartedEventName = "OwnershipTransferStarted"
+
+// ContractEventName returns the user-defined event name.
+func (BandOwnershipTransferStarted) ContractEventName() string {
+	return BandOwnershipTransferStartedEventName
+}
+
+// UnpackOwnershipTransferStartedEvent is the Go binding that unpacks the event data emitted
+// by contract.
+//
+// Solidity: event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner)
+func (band *Band) UnpackOwnershipTransferStartedEvent(log *types.Log) (*BandOwnershipTransferStarted, error) {
+	event := "OwnershipTransferStarted"
+	if len(log.Topics) == 0 {
+		return nil, bind.ErrNoEventSignature
+	}
+	if log.Topics[0] != band.abi.Events[event].ID {
+		return nil, bind.ErrEventSignatureMismatch
+	}
+	out := new(BandOwnershipTransferStarted)
+	if len(log.Data) > 0 {
+		if err := band.abi.UnpackIntoInterface(out, event, log.Data); err != nil {
+			return nil, err
+		}
+	}
+	var indexed abi.Arguments
+	for _, arg := range band.abi.Events[event].Inputs {
+		if arg.Indexed {
+			indexed = append(indexed, arg)
+		}
+	}
+	if err := abi.ParseTopics(out, indexed, log.Topics[1:]); err != nil {
+		return nil, err
+	}
+	out.Raw = log
+	return out, nil
+}
+
+// BandOwnershipTransferred represents a OwnershipTransferred event raised by the Band contract.
+type BandOwnershipTransferred struct {
+	PreviousOwner common.Address
+	NewOwner      common.Address
+	Raw           *types.Log // Blockchain specific contextual infos
+}
+
+const BandOwnershipTransferredEventName = "OwnershipTransferred"
+
+// ContractEventName returns the user-defined event name.
+func (BandOwnershipTransferred) ContractEventName() string {
+	return BandOwnershipTransferredEventName
+}
+
+// UnpackOwnershipTransferredEvent is the Go binding that unpacks the event data emitted
+// by contract.
+//
+// Solidity: event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)
+func (band *Band) UnpackOwnershipTransferredEvent(log *types.Log) (*BandOwnershipTransferred, error) {
+	event := "OwnershipTransferred"
+	if len(log.Topics) == 0 {
+		return nil, bind.ErrNoEventSignature
+	}
+	if log.Topics[0] != band.abi.Events[event].ID {
+		return nil, bind.ErrEventSignatureMismatch
+	}
+	out := new(BandOwnershipTransferred)
+	if len(log.Data) > 0 {
+		if err := band.abi.UnpackIntoInterface(out, event, log.Data); err != nil {
+			return nil, err
+		}
+	}
+	var indexed abi.Arguments
+	for _, arg := range band.abi.Events[event].Inputs {
+		if arg.Indexed {
+			indexed = append(indexed, arg)
+		}
+	}
+	if err := abi.ParseTopics(out, indexed, log.Topics[1:]); err != nil {
+		return nil, err
+	}
+	out.Raw = log
+	return out, nil
+}
+
+// BandPriceWritten represents a PriceWritten event raised by the Band contract.
+type BandPriceWritten struct {
+	FeedId             [32]byte
+	Value              *big.Int
+	PackageTimestampMs uint64
+	Raw                *types.Log // Blockchain specific contextual infos
+}
+
+const BandPriceWrittenEventName = "PriceWritten"
+
+// ContractEventName returns the user-defined event name.
+func (BandPriceWritten) ContractEventName() string {
+	return BandPriceWrittenEventName
+}
+
+// UnpackPriceWrittenEvent is the Go binding that unpacks the event data emitted
+// by contract.
+//
+// Solidity: event PriceWritten(bytes32 indexed feedId, uint256 value, uint64 packageTimestampMs)
+func (band *Band) UnpackPriceWrittenEvent(log *types.Log) (*BandPriceWritten, error) {
+	event := "PriceWritten"
+	if len(log.Topics) == 0 {
+		return nil, bind.ErrNoEventSignature
+	}
+	if log.Topics[0] != band.abi.Events[event].ID {
+		return nil, bind.ErrEventSignatureMismatch
+	}
+	out := new(BandPriceWritten)
+	if len(log.Data) > 0 {
+		if err := band.abi.UnpackIntoInterface(out, event, log.Data); err != nil {
+			return nil, err
+		}
+	}
+	var indexed abi.Arguments
+	for _, arg := range band.abi.Events[event].Inputs {
+		if arg.Indexed {
+			indexed = append(indexed, arg)
+		}
+	}
+	if err := abi.ParseTopics(out, indexed, log.Topics[1:]); err != nil {
+		return nil, err
+	}
+	out.Raw = log
+	return out, nil
 }
 
 // UnpackError attempts to decode the provided error data using user-defined

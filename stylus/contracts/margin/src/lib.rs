@@ -812,11 +812,14 @@ mod tests {
         InvalidPool, InvalidVolatility, LengthMismatch, NotPositiveDefinite, ScenarioOutOfRange,
         UnknownAsset, UnsupportedScenarioSize, UpdateTooSoon, VolatilityStepTooLarge, ZeroSymbol,
     };
-    use ownable::{OwnableInvalidOwner, OwnableUnauthorizedAccount, OwnershipTransferred};
+    use ownable::{
+        OwnableInvalidOwner, OwnableUnauthorizedAccount, OwnershipTransferStarted,
+        OwnershipTransferred,
+    };
     use proptest::prelude::*;
     use stylus_sdk::alloy_primitives::keccak256;
     use stylus_sdk::alloy_primitives::{U256, address, b256, hex};
-    use stylus_sdk::alloy_sol_types::{SolEvent, SolValue};
+    use stylus_sdk::alloy_sol_types::{SolEvent, SolValue, TopicList};
     use stylus_sdk::testing::*;
 
     const OWNER: Address = address!("0x8A2631c8226D7EA5612798e6E8C34F4DC703d0ac");
@@ -1837,6 +1840,64 @@ mod tests {
         assert_eq!(
             without.current_requirement(holding, prices).unwrap(),
             (across, 0b111, 0)
+        );
+    }
+
+    /// Each event's signature and how many of its leading arguments are indexed, as the Solidity interface the SDKs
+    /// are generated from declares it.
+    fn declared_events(abi: &str) -> Vec<(String, usize)> {
+        let abi: serde_json::Value = serde_json::from_str(abi).unwrap();
+        let mut events: Vec<(String, usize)> = abi
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|item| item["type"] == "event")
+            .map(|event| {
+                let inputs = event["inputs"].as_array().unwrap();
+                let indexed = inputs
+                    .iter()
+                    .take_while(|input| input["indexed"] == true)
+                    .count();
+                assert!(
+                    inputs[indexed..]
+                        .iter()
+                        .all(|input| input["indexed"] == false)
+                );
+                let types: Vec<&str> = inputs
+                    .iter()
+                    .map(|input| input["type"].as_str().unwrap())
+                    .collect();
+                (
+                    format!("{}({})", event["name"].as_str().unwrap(), types.join(",")),
+                    indexed,
+                )
+            })
+            .collect();
+        events.sort();
+        events
+    }
+
+    fn emitted<E: SolEvent>() -> (String, usize) {
+        (
+            E::SIGNATURE.to_string(),
+            <E::TopicList as TopicList>::COUNT - 1,
+        )
+    }
+
+    #[test]
+    fn the_sdks_interface_declares_every_event_the_engine_emits() {
+        let mut events = vec![
+            emitted::<VolatilitySet>(),
+            emitted::<CorrelationSet>(),
+            emitted::<GapSet>(),
+            emitted::<DepthSet>(),
+            emitted::<OwnershipTransferStarted>(),
+            emitted::<OwnershipTransferred>(),
+        ];
+        events.sort();
+        assert_eq!(
+            declared_events(include_str!("../../../../crates/sdk/abi/Margin.json")),
+            events
         );
     }
 }

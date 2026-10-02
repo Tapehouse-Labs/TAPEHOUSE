@@ -4,9 +4,31 @@ pragma solidity 0.8.37;
 import {IBand} from "./IBand.sol";
 
 /// @title Tapehouse band, as a RedStone relayer calls it
-/// @notice The band's reads, its price writes from signed RedStone data packages, and the errors of a payload it
-/// refuses.
+/// @notice The band's reads, its events, its halt signer, its price writes from signed RedStone data packages, and the
+/// errors of a payload it refuses.
 interface IBandPrices is IBand {
+    /// @notice `writePrices` stored `value`, the median of `feedId`'s signed package of `packageTimestampMs`.
+    event PriceWritten(bytes32 indexed feedId, uint256 value, uint64 packageTimestampMs);
+    /// @notice The 24/7 leg of `symbol`, priced from an index, was anchored to the Chainlink print of `updatedAt` and
+    /// the index price written with it.
+    event Anchored(bytes32 indexed symbol, uint64 chainlinkPrice, uint64 indexPrice, uint64 updatedAt);
+    /// @notice The multiplier change of `symbol`'s Stock Token was recorded: the multipliers before and after it, and
+    /// when it takes effect. The multiplier before is zero when the change's size is not known.
+    event MultiplierRecorded(
+        bytes32 indexed symbol, uint128 multiplierBefore, uint128 multiplierAfter, uint64 effectiveAt
+    );
+    /// @notice A Chainlink round confirmed the multiplier change of `symbol`'s Stock Token that took effect at
+    /// `effectiveAt`.
+    event MultiplierConfirmed(bytes32 indexed symbol, uint64 effectiveAt);
+    /// @notice `writeHalt` stored a trading halt of `symbol` signed by Tapehouse's halt signer.
+    event HaltWritten(bytes32 indexed symbol, bool halted, uint64 issuedAt, uint64 expiresAt);
+    /// @notice The owner replaced the halt signer.
+    event HaltSignerUpdated(address indexed previousSigner, address indexed newSigner);
+    /// @notice The owner started a two-step transfer of ownership to `newOwner`.
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    /// @notice `newOwner` accepted the band's ownership.
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
     /// @notice The payload does not end with RedStone's marker.
     error CalldataMustHaveValidPayload();
     /// @notice The payload is shorter than the sizes it declares.
@@ -41,4 +63,8 @@ interface IBandPrices is IBand {
     /// @notice The stored value of `feedId`, its package's timestamp in milliseconds, and the block timestamp it was
     /// written at. All zero for a feed never written.
     function price(bytes32 feedId) external view returns (uint256 value, uint64 packageTimestampMs, uint64 writtenAt);
+
+    /// @notice The address whose signed trading halts the band accepts: the one input it takes on Tapehouse's own
+    /// signature.
+    function haltSigner() external view returns (address);
 }

@@ -1,0 +1,526 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+openapi: 3.1.0
+info:
+  title: Tapehouse API
+  version: 0.1.0
+  summary: Tapehouse's contracts on one chain, indexed from their events and read at named blocks.
+  description: |
+    Everything served is an event a contract emitted, a view the chain answers at a named block, or a RedStone data
+    package whose signature recovers to one of the signers the band accepts: anyone can reproduce it from the chain
+    or the signed package. The index rebuilds from the chain's events alone.
+
+    Contracts are named by their path in the chain's registry, `deployments/<chainId>.json`, without the leading dot:
+    `tapehouse.MarginAccounts`, `tapehouse.StockLending.NVDA`, `tapehouse.Baskets.PAIR`, `bandFeeds.SPY`,
+    `morphoOracles.NVDA`, `tokens.NVDA`, `morpho.Blue`. Every integer is a decimal string; addresses are checksummed;
+    bytes, a `bytes32` symbol among them, are 0x-prefixed hex. A symbol or feed ID taken as an argument may also be
+    given as text, such as `NVDA`.
+
+    Reads are made at the index's head unless a `block` is named, so events and views agree. An event carries
+    `finalized`, true once the chain reports its block finalized; until then a reorganisation may remove it, which the
+    stream announces with a `rewind`.
+
+    The public tier is limited per client address. The keyed tier, for integrators, takes an `X-API-Key` the operator
+    issued and is limited per key. Over its limit a request gets 429 with `Retry-After`.
+  license:
+    name: MIT OR Apache-2.0
+    identifier: MIT OR Apache-2.0
+servers:
+  - url: http://127.0.0.1:8080
+security:
+  - {}
+  - apiKey: []
+paths:
+  /v1/status:
+    get:
+      operationId: getStatus
+      summary: The chain, the block indexing started at, the index's head and the chain's finalized block.
+      responses:
+        "200":
+          description: The index's status.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [chainId, start, head, finalized]
+                properties:
+                  chainId: { type: integer }
+                  start: { type: integer, description: The earliest deployment of Tapehouse's contracts. }
+                  head: { $ref: "#/components/schemas/Head" }
+                  finalized: { type: integer, description: Zero where the chain reports no finalized block. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/contracts:
+    get:
+      operationId: listContracts
+      summary: Every contract of the registry, its binding and the events the index keeps of it.
+      responses:
+        "200":
+          description: The contracts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contracts]
+                properties:
+                  contracts:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, address, binding, events]
+                      properties:
+                        name: { type: string }
+                        address: { $ref: "#/components/schemas/Address" }
+                        binding: { type: string, description: The SDKs' binding whose ABI decodes it. }
+                        events: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/events:
+    get:
+      operationId: listEvents
+      summary: Indexed events, in the order they were emitted, a page at a time.
+      parameters:
+        - { name: contract, in: query, schema: { type: string } }
+        - { name: event, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: integer, minimum: 0 }, description: First block. }
+        - { name: to, in: query, schema: { type: integer, minimum: 0 }, description: Last block. }
+        - name: after
+          in: query
+          description: The `next` of the previous page.
+          schema: { type: string, pattern: "^[0-9]+:[0-9]+$" }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 100 } }
+        - name: arg
+          in: query
+          style: deepObject
+          explode: true
+          description: >-
+            Arguments the event must carry, as `arg[<name>]=<value>`, read as the event's ABI types; they need the
+            contract and the event named.
+          schema:
+            type: object
+            additionalProperties: { type: string }
+      responses:
+        "200":
+          description: A page of events, and the cursor of the next where the page is full.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, next]
+                properties:
+                  events: { type: array, items: { $ref: "#/components/schemas/Event" } }
+                  next: { type: [string, "null"] }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/contracts/{contract}/views/{function}:
+    get:
+      operationId: callView
+      summary: A view of a contract, at the index's head or at a named block.
+      description: >-
+        The view's inputs are query parameters named as in the contract's ABI (`arg<i>` for an unnamed one), arrays
+        separated by commas. A view that reverts answers with its revert, named where the SDKs' bindings know it.
+        Answers at a block are cached, since they never change.
+      parameters:
+        - { name: contract, in: path, required: true, schema: { type: string } }
+        - { name: function, in: path, required: true, schema: { type: string } }
+        - { name: block, in: query, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: The view's outputs by name, or its revert.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [block, outputs, revert]
+                properties:
+                  block: { type: integer }
+                  outputs: { type: [object, "null"], additionalProperties: true }
+                  revert:
+                    oneOf:
+                      - type: "null"
+                      - $ref: "#/components/schemas/Revert"
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/accounts/debts:
+    get:
+      operationId: listDebts
+      summary: Each position of the margin accounts with debt, its debt and its health, at the index's head.
+      description: The positions are every account and position that ever emitted `Borrow`.
+      responses:
+        "200":
+          description: The positions with debt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [block, positions]
+                properties:
+                  block: { type: integer }
+                  positions:
+                    type: array
+                    items:
+                      type: object
+                      required: [account, position, debt, health]
+                      properties:
+                        account: { $ref: "#/components/schemas/Address" }
+                        position: { $ref: "#/components/schemas/Bytes32" }
+                        debt: { $ref: "#/components/schemas/Integer" }
+                        health: { $ref: "#/components/schemas/Health" }
+        "404": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/shorts:
+    get:
+      operationId: listShorts
+      summary: Each open short, its position and its health, at the index's head.
+      description: The shorts are every account and Stock Token that ever emitted `Sell` and still hold borrow shares.
+      responses:
+        "200":
+          description: The open shorts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [block, shorts]
+                properties:
+                  block: { type: integer }
+                  shorts:
+                    type: array
+                    items:
+                      type: object
+                      required: [account, symbol, position, health]
+                      properties:
+                        account: { $ref: "#/components/schemas/Address" }
+                        symbol: { type: string }
+                        position:
+                          type: object
+                          required: [usdgHeld, debt, shares, epoch_]
+                          properties:
+                            usdgHeld: { $ref: "#/components/schemas/Integer" }
+                            debt: { $ref: "#/components/schemas/Integer" }
+                            shares: { $ref: "#/components/schemas/Integer" }
+                            epoch_: { $ref: "#/components/schemas/Integer" }
+                        health: { $ref: "#/components/schemas/Health" }
+        "404": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/halts:
+    get:
+      operationId: listHalts
+      summary: The band's halt of each asset, and the halt signer it accepts.
+      description: >-
+        A halt signed by Tapehouse's halt signer is the only value Tapehouse signs; every price the band uses is
+        signed by RedStone or Chainlink. `oraclePaused` is the issuer's pause of the Stock Token's oracle.
+      responses:
+        "200":
+          description: The halts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [block, signedInput, haltSigner, halts]
+                properties:
+                  block: { type: integer }
+                  signedInput: { type: string }
+                  haltSigner: { $ref: "#/components/schemas/Address" }
+                  halts:
+                    type: array
+                    items:
+                      type: object
+                      required: [symbol, signedHalt, until, issuedAt, oraclePaused]
+                      properties:
+                        symbol: { type: string }
+                        signedHalt: { type: boolean }
+                        until: { $ref: "#/components/schemas/Integer" }
+                        issuedAt: { $ref: "#/components/schemas/Integer" }
+                        oraclePaused: { type: boolean }
+        "404": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/morpho/oracles:
+    get:
+      operationId: listMorphoOracles
+      summary: Each Morpho oracle on the band, and whether it prices.
+      description: >-
+        A price in Morpho's scale, or, where `price()` reverts, no price and why: `stale` (no live leg), `halted` (a
+        signed halt, the issuer's pause or an unconfirmed multiplier step) or `sequencerNotSettled`. Never zero.
+      responses:
+        "200":
+          description: The oracles.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [block, oracles]
+                properties:
+                  block: { type: integer }
+                  oracles:
+                    type: array
+                    items:
+                      type: object
+                      required: [asset, address, band, symbol, collateralToken, loanToken, scaleFactor, owner, price, noPrice]
+                      properties:
+                        asset: { type: string }
+                        address: { $ref: "#/components/schemas/Address" }
+                        band: { $ref: "#/components/schemas/Address" }
+                        symbol: { type: string }
+                        collateralToken: { $ref: "#/components/schemas/Address" }
+                        loanToken: { $ref: "#/components/schemas/Address" }
+                        scaleFactor: { $ref: "#/components/schemas/Integer" }
+                        owner: { $ref: "#/components/schemas/Address" }
+                        price: { type: [string, "null"], pattern: "^[1-9][0-9]*$" }
+                        noPrice: { enum: [stale, halted, sequencerNotSettled, null] }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/morpho/markets:
+    get:
+      operationId: listMorphoMarkets
+      summary: Each Morpho Blue market the registry records, by id, with its parameters and its state.
+      responses:
+        "200":
+          description: The markets.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [block, markets]
+                properties:
+                  block: { type: integer }
+                  markets:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, id, params, market]
+                      properties:
+                        name: { type: string }
+                        id: { $ref: "#/components/schemas/Bytes32" }
+                        params: { type: object, additionalProperties: true }
+                        market: { type: object, additionalProperties: true }
+        "404": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/gap-cover/series/{symbol}/{closesMs}:
+    get:
+      operationId: getGapCoverSeries
+      summary: A series of the weekend gap cover, with what rebuilds its pricing and its settlement.
+      description: >-
+        The series at the index's head, the week's move measured for it, the covers bought on it, the band of every slot its window recorded (zeros
+        for a slot that moved the window), and its settlement, with both rounds, the reference and the price, or its
+        voiding.
+      parameters:
+        - { name: symbol, in: path, required: true, schema: { type: string } }
+        - { name: closesMs, in: path, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: The series.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [block, symbol, closesMs, series, measured, bought, observed, settled, voided]
+                properties:
+                  block: { type: integer }
+                  symbol: { type: string }
+                  closesMs: { type: integer }
+                  series:
+                    type: object
+                    required: [notional, status, referencePrice, price, flagged, reopenMs]
+                    properties:
+                      notional: { $ref: "#/components/schemas/Integer" }
+                      status: { enum: [open, settled, void] }
+                      referencePrice: { $ref: "#/components/schemas/Integer" }
+                      price: { $ref: "#/components/schemas/Integer" }
+                      flagged: { type: boolean }
+                      reopenMs: { $ref: "#/components/schemas/Integer" }
+                  measured: { type: array, items: { $ref: "#/components/schemas/Event" } }
+                  bought: { type: array, items: { $ref: "#/components/schemas/Event" } }
+                  observed: { type: array, items: { $ref: "#/components/schemas/Event" } }
+                  settled: { type: array, items: { $ref: "#/components/schemas/Event" } }
+                  voided: { type: array, items: { $ref: "#/components/schemas/Event" } }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/redstone/payload:
+    get:
+      operationId: getRedStonePayload
+      summary: RedStone's latest signed packages, as the payload the band's writePrices verifies.
+      description: >-
+        Read from RedStone's keyed gateways, then its public ones, so no client needs a key. Each data package is
+        served only with the band's three signatures that recover to redstone-primary-prod's signers, all at one
+        timestamp. `payload` is what an SDK's `PackageSource` returns for the same IDs.
+      parameters:
+        - name: feeds
+          in: query
+          required: true
+          description: Data package IDs separated by commas, a single feed such as `NVDA---24_7` or a group such as `NY_MARKET_STATUS`.
+          schema: { type: string }
+      responses:
+        "200":
+          description: The signed packages and their payload.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [timestampMs, payload, packages]
+                properties:
+                  timestampMs: { type: integer }
+                  payload: { $ref: "#/components/schemas/Hex" }
+                  packages:
+                    type: array
+                    items:
+                      type: object
+                      required: [dataPackageId, signer, timestampMs, dataPoints]
+                      properties:
+                        dataPackageId: { type: string }
+                        signer: { $ref: "#/components/schemas/Address" }
+                        timestampMs: { type: integer }
+                        dataPoints:
+                          type: array
+                          items:
+                            type: object
+                            required: [dataFeedId, value]
+                            properties:
+                              dataFeedId: { type: string }
+                              value: { $ref: "#/components/schemas/Integer" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/stream:
+    get:
+      operationId: stream
+      summary: A WebSocket of the index's updates as they happen.
+      description: >-
+        Text messages, each a JSON object: `{"type":"event","event":Event,"finalized":n}` for each event selected,
+        `{"type":"head","head":Head,"finalized":n}` after each indexing step, and `{"type":"rewind","block":n,...}`
+        when a reorganisation removed every event above block `n`. A client that falls 256 messages behind is
+        disconnected with code 1008 and resumes from /v1/events.
+      parameters:
+        - { name: contract, in: query, schema: { type: string } }
+        - { name: event, in: query, schema: { type: string } }
+      responses:
+        "101": { description: Switching to the WebSocket protocol. }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "426": { description: Not a WebSocket upgrade. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/openapi.yaml:
+    get:
+      operationId: getOpenAPI
+      summary: This document.
+      responses:
+        "200":
+          description: The OpenAPI document.
+          content:
+            application/yaml:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: A key of the keyed tier. An unknown key gets 401.
+  responses:
+    Error:
+      description: Why the request was not served.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string }
+    Unauthorized:
+      description: An X-API-Key the operator did not issue.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string }
+    RateLimited:
+      description: Over the tier's rate.
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string }
+  schemas:
+    Integer:
+      type: string
+      pattern: "^-?[0-9]+$"
+    Address:
+      type: string
+      pattern: "^0x[0-9a-fA-F]{40}$"
+    Bytes32:
+      type: string
+      pattern: "^0x[0-9a-f]{64}$"
+    Hex:
+      type: string
+      pattern: "^0x[0-9a-f]*$"
+    Head:
+      type: object
+      required: [number, hash]
+      properties:
+        number: { type: integer }
+        hash: { $ref: "#/components/schemas/Bytes32" }
+    Event:
+      type: object
+      required: [block, logIndex, blockHash, time, tx, contract, address, event, args, finalized]
+      properties:
+        block: { type: integer }
+        logIndex: { type: integer }
+        blockHash: { $ref: "#/components/schemas/Bytes32" }
+        time: { type: integer, description: The block's timestamp, in seconds. }
+        tx: { $ref: "#/components/schemas/Bytes32" }
+        contract: { type: string }
+        address: { $ref: "#/components/schemas/Address" }
+        event:
+          type: string
+          description: The event's name; empty for a log the contract's ABI does not know, whose args are its topics and data.
+        args: { type: object, additionalProperties: true }
+        finalized: { type: boolean }
+    Health:
+      type: object
+      required: [equity, requirement, missing, regime]
+      properties:
+        equity: { $ref: "#/components/schemas/Integer" }
+        requirement: { $ref: "#/components/schemas/Integer" }
+        missing: { $ref: "#/components/schemas/Integer" }
+        regime: { $ref: "#/components/schemas/Integer" }
+    Revert:
+      type: object
+      required: [data]
+      properties:
+        name: { type: string }
+        args: { type: array }
+        data: { $ref: "#/components/schemas/Hex" }

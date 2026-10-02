@@ -14,10 +14,12 @@ UV_VERSION := 0.12.21
 UV_VERSION_RE := $(subst .,\.,$(UV_VERSION))
 GO_TOOLCHAIN := $(shell awk '$$1 == "toolchain" { print $$2 }' services/go.mod)
 SDK_BINDINGS := Aggregator:AggregatorV3Interface.sol/AggregatorV3Interface Band:IBandPrices.sol/IBandPrices \
-	BandFeed:BandFeed.sol/BandFeed Basket:Basket.sol/Basket GapCover:GapCover.sol/GapCover \
+	BandFeed:BandFeed.sol/BandFeed Basket:Basket.sol/Basket GapBackstop:GapBackstop.sol/GapBackstop \
+	GapCover:GapCover.sol/GapCover Liquidator:Liquidator.sol/Liquidator Margin:IMarginParameters.sol/IMarginParameters \
 	MarginAccounts:MarginAccounts.sol/MarginAccounts MorphoBandOracle:MorphoBandOracle.sol/MorphoBandOracle \
-	QuoterV2:IQuoterV2.sol/IQuoterV2 ShortPositions:ShortPositions.sol/ShortPositions StockToken:Interfaces.sol/IStockToken \
-	Usdg:IUSDG.sol/IUSDG
+	MorphoBlue:Interfaces.sol/IMorpho QuoterV2:IQuoterV2.sol/IQuoterV2 ReopeningAuction:ReopeningAuction.sol/ReopeningAuction \
+	ShortPositions:ShortPositions.sol/ShortPositions StockLendingVault:StockLendingVault.sol/StockLendingVault \
+	StockToken:Interfaces.sol/IStockToken SupplyVault:SupplyVault.sol/SupplyVault Usdg:IUSDG.sol/IUSDG
 SDK_GENERATED := crates/sdk/abi services/sdk/bindings packages/sdk/src/generated.ts
 SDK_PAYLOAD := stylus/contracts/band/testdata/nvda-24_7.hex
 BINARYEN_VERSION := $(shell awk '/^\[/ { table = $$0 } table == "[wasm-opt]" && $$1 == "version" { gsub(/"/, "", $$3); print $$3 }' stylus/Stylus.toml)
@@ -58,7 +60,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	check-toolchains check-node check-foundry check-slither check-reuse check-stylus check-docker submodules \
 	check-go check-golangci-lint check-rust check-uv \
 	build-apps test-apps lint-apps build-services test-services lint-services build-crates test-crates lint-crates \
-	bindings check-bindings test-sdks-devnode test-mcp-devnode \
+	bindings check-bindings test-sdks-devnode test-mcp-devnode test-indexer-devnode run-indexer \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
@@ -418,6 +420,21 @@ test-mcp-devnode: check-node check-uv node_modules/.modules.yaml
 	pnpm --filter @tapehouse/mcp run devnode $(DEVNODE_RPC_URL) $(abspath stylus/target/devnode-registry.json)
 	uv run --locked --script packages/mcp/examples/devnode.py $(DEVNODE_RPC_URL) \
 		$(abspath stylus/target/devnode-registry.json) $(abspath packages/mcp/dist/main.js)
+
+test-indexer-devnode: export PRIVATE_KEY := $(DEVNODE_KEY)
+test-indexer-devnode: export TAPEHOUSE_RPC_URL := $(DEVNODE_RPC_URL)
+test-indexer-devnode: export TAPEHOUSE_DEPLOYMENTS := $(abspath stylus/target/devnode-registry.json)
+test-indexer-devnode: check-go
+	cd services && go test -tags devnode -count=1 -v -run TestTheIndexerServesTheDevNodesEventsAndViews ./internal/app/
+
+run-indexer: export TAPEHOUSE_RPC_URL = $(RPC_URL_$(CHAIN))
+run-indexer: export TAPEHOUSE_DEPLOYMENTS = $(abspath $(or $(REGISTRY),deployments/$(CHAIN).json))
+run-indexer: export TAPEHOUSE_DB ?= $(abspath services/tapehouse-$(CHAIN).db)
+run-indexer: check-go
+	@case "$(CHAIN)" in 4663|46630|42161|412346) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
+		{ echo "Usage: make run-indexer CHAIN=<4663|46630|42161|412346> [REGISTRY=<file>], with the chain's RPC URL set"; \
+		  exit 1; }
+	cd services && go run ./cmd/indexer
 
 verify-supply-vault: check-foundry submodules
 	@case "$(CHAIN)" in 4663|46630) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \

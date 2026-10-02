@@ -32,6 +32,7 @@ import {
   type Deployments,
   gapCover,
   gapCoverAbi,
+  liquidatorAbi,
   marginAccountsAbi,
   morpho,
   morphoBandOracleAbi,
@@ -41,6 +42,7 @@ import {
   sharePriceFeed,
   shortPositionsAbi,
   shorts,
+  stockLendingVaultAbi,
   stockTokenAbi,
   toBytes32,
   tokenPriceFeed,
@@ -261,6 +263,10 @@ describe('errors', () => {
     expect(decodeRevertData(frozen)).toEqual({ errorName: 'BasketFrozen', args: [bob] })
     const capped = encodeErrorResult({ abi: marginAccountsAbi, errorName: 'DebtCapExceeded', args: [2n, 1n] })
     expect(decodeRevertData(capped)).toEqual({ errorName: 'DebtCapExceeded', args: [2n, 1n] })
+    const sound = encodeErrorResult({ abi: liquidatorAbi, errorName: 'NotLiquidatable', args: [bob, CROSS] })
+    expect(decodeRevertData(sound)).toEqual({ errorName: 'NotLiquidatable', args: [bob, CROSS] })
+    const dry = encodeErrorResult({ abi: stockLendingVaultAbi, errorName: 'InsufficientLiquidity', args: [2n, 1n] })
+    expect(decodeRevertData(dry)).toEqual({ errorName: 'InsufficientLiquidity', args: [2n, 1n] })
     const router = encodeErrorResult({
       abi: [{ type: 'error', name: 'Error', inputs: [{ type: 'string' }] }],
       errorName: 'Error',

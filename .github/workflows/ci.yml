@@ -173,6 +173,7 @@ jobs:
       - run: make test-contracts-devnode
       - run: make test-sdks-devnode
       - run: make test-mcp-devnode
+      - run: make test-indexer-devnode
       - run: make gas-stylus-devnode
       - run: make gas-table
 
@@ -211,7 +212,7 @@ jobs:
           ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL }}
           ROBINHOOD_TESTNET_RPC_URL: ${{ secrets.ROBINHOOD_TESTNET_RPC_URL }}
           ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL }}
-      - run: /usr/bin/make -n test gas lint snapshot devnode devnode-stop deploy-stylus-devnode deploy-contracts-devnode test-stylus-devnode test-contracts-devnode test-sdks-devnode test-mcp-devnode gas-stylus-devnode gas-table check-activation bindings check-bindings
+      - run: /usr/bin/make -n test gas lint snapshot devnode devnode-stop deploy-stylus-devnode deploy-contracts-devnode test-stylus-devnode test-contracts-devnode test-sdks-devnode test-mcp-devnode test-indexer-devnode run-indexer gas-stylus-devnode gas-table check-activation bindings check-bindings
 
   workflows:
     name: Workflows

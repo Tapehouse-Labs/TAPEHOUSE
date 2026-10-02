@@ -15,11 +15,16 @@ import (
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/band"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/bandfeed"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/basket"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/gapbackstop"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/gapcover"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/liquidator"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/marginaccounts"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/morphobandoracle"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/reopeningauction"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/shortpositions"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocklendingvault"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocktoken"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/supplyvault"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/usdg"
 )
 
@@ -54,6 +59,11 @@ var revertErrors = func() map[[4]byte]abi.Error {
 		&shortpositions.ShortPositionsMetaData,
 		&gapcover.GapCoverMetaData,
 		&marginaccounts.MarginAccountsMetaData,
+		&liquidator.LiquidatorMetaData,
+		&gapbackstop.GapBackstopMetaData,
+		&reopeningauction.ReopeningAuctionMetaData,
+		&stocklendingvault.StockLendingVaultMetaData,
+		&supplyvault.SupplyVaultMetaData,
 		&basket.BasketMetaData,
 		&bandfeed.BandFeedMetaData,
 		&morphobandoracle.MorphoBandOracleMetaData,

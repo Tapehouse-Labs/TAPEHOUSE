@@ -850,7 +850,7 @@ mod tests {
         OwnershipTransferred,
     };
     use stylus_sdk::alloy_primitives::{I256, b256};
-    use stylus_sdk::alloy_sol_types::{SolEvent, SolValue};
+    use stylus_sdk::alloy_sol_types::{SolEvent, SolValue, TopicList};
     use stylus_sdk::testing::*;
 
     const HASH: B256 = b256!("0x1111111111111111111111111111111111111111111111111111111111111111");
@@ -2409,6 +2409,66 @@ mod tests {
         assert_eq!(
             band.variance(feed_id),
             quote::ewma_update(variance, 5_575_000_000, 5_575_000_000, 60)
+        );
+    }
+
+    /// Each event's signature and how many of its leading arguments are indexed, as the Solidity interface the SDKs
+    /// are generated from declares it.
+    fn declared_events(abi: &str) -> Vec<(String, usize)> {
+        let abi: serde_json::Value = serde_json::from_str(abi).unwrap();
+        let mut events: Vec<(String, usize)> = abi
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|item| item["type"] == "event")
+            .map(|event| {
+                let inputs = event["inputs"].as_array().unwrap();
+                let indexed = inputs
+                    .iter()
+                    .take_while(|input| input["indexed"] == true)
+                    .count();
+                assert!(
+                    inputs[indexed..]
+                        .iter()
+                        .all(|input| input["indexed"] == false)
+                );
+                let types: Vec<&str> = inputs
+                    .iter()
+                    .map(|input| input["type"].as_str().unwrap())
+                    .collect();
+                (
+                    format!("{}({})", event["name"].as_str().unwrap(), types.join(",")),
+                    indexed,
+                )
+            })
+            .collect();
+        events.sort();
+        events
+    }
+
+    fn emitted<E: SolEvent>() -> (String, usize) {
+        (
+            E::SIGNATURE.to_string(),
+            <E::TopicList as TopicList>::COUNT - 1,
+        )
+    }
+
+    #[test]
+    fn the_sdks_interface_declares_every_event_the_band_emits() {
+        let mut events = vec![
+            emitted::<PriceWritten>(),
+            emitted::<Anchored>(),
+            emitted::<MultiplierRecorded>(),
+            emitted::<MultiplierConfirmed>(),
+            emitted::<HaltWritten>(),
+            emitted::<HaltSignerUpdated>(),
+            emitted::<OwnershipTransferStarted>(),
+            emitted::<OwnershipTransferred>(),
+        ];
+        events.sort();
+        assert_eq!(
+            declared_events(include_str!("../../../../crates/sdk/abi/Band.json")),
+            events
         );
     }
 }

@@ -22,10 +22,12 @@ import (
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/bandfeed"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/basket"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/gapcover"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/liquidator"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/marginaccounts"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/morphobandoracle"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/quoterv2"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/shortpositions"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocklendingvault"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocktoken"
 )
 
@@ -262,6 +264,8 @@ func TestTheRevertsOfTapehouseTheBandTheIssuerAndTheRouterAreDecoded(t *testing.
 		{&marginaccounts.MarginAccountsMetaData, "DebtCapExceeded", []any{big.NewInt(2), big.NewInt(1)}, "DebtCapExceeded(2, 1)"},
 		{&marginaccounts.MarginAccountsMetaData, "BasketFrozen", []any{bob}, "BasketFrozen(" + bob.Hex() + ")"},
 		{&basket.BasketMetaData, "PastTarget", []any{bytes32(t, "SPY")}, "PastTarget(0x5350590000000000000000000000000000000000000000000000000000000000)"},
+		{&liquidator.LiquidatorMetaData, "NotLiquidatable", []any{bob, sdk.Cross}, "NotLiquidatable(" + bob.Hex() + ", 0x0000000000000000000000000000000000000000000000000000000000000000)"},
+		{&stocklendingvault.StockLendingVaultMetaData, "InsufficientLiquidity", []any{big.NewInt(2), big.NewInt(1)}, "InsufficientLiquidity(2, 1)"},
 	} {
 		revert, ok := sdk.DecodeRevertData(encodeError(t, c.metadata, c.name, c.args...))
 		if !ok || revert.Error() != c.want {
