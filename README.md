@@ -12,7 +12,7 @@ Portfolio margin for Stock Tokens on Robinhood Chain.
 - `deployments` — contract addresses per chain, one JSON file per chain ID
 - `packages/sdk` — the TypeScript SDK (viem)
 - `packages/mcp` — the MCP server for AI agents, on the TypeScript SDK
-- `services` — the Go module: the Go SDK in `services/sdk` (go-ethereum), the indexer and public API in `services/cmd/indexer`, and the backtester in `services/cmd/backtest`
+- `services` — the Go module: the Go SDK in `services/sdk` (go-ethereum), the indexer and public API in `services/cmd/indexer`, the backtester in `services/cmd/backtest` and a reference bidder in `services/cmd/bidder`
 - `crates` — Rust crates: the Rust SDK in `crates/sdk` (alloy)
 
 ## Requirements
@@ -99,6 +99,8 @@ make test
 | `make run-indexer CHAIN=<id> [REGISTRY=<file>]` | Runs the indexer and its API on the chain's registry, with the chain's RPC URL from the table below |
 | `make test-keeper-devnode` | Runs the keepers against that deployment over an RPC failover whose first endpoint is dead: RedStone's packages written once a minute, the status as one package, a front-run write taking the next package, every multiplier synced at start, a halt signed and lifted, a WETH position's auction started, bought at its ask and stopped once it recovers, and a restarted keeper repeating nothing; prints each action's L2 gas |
 | `make run-keeper CHAIN=<id> [REGISTRY=<file>]` | Runs the keepers on the chain's registry, with the chain's RPC URL from the table below and the keeper's key from its keystore and the file holding its password |
+| `make test-bidder-devnode` | Runs the reference bidder against that deployment: it buys a Stock Token from a liquidation auction it staged at no more than its own price, with the ask's cost as its limit, and acts on the reopening auction in whatever phase the dev node's session is in; prints each action's L2 gas |
+| `make run-bidder CHAIN=<id> [REGISTRY=<file>]` | Runs the reference bidder on the chain's registry, with the chain's RPC URL from the table below and its key in `PRIVATE_KEY` |
 
 ## Networks
 
@@ -664,6 +666,24 @@ make run-keeper CHAIN=42161
 - **Simulate, then send.** Each action is simulated from the keeper's address and sent only if it would succeed; a revert that means nothing is due, or someone did it first, sends nothing. One transaction is sent at a time, at the node's pending nonce, and awaited: a keeper that crashes and restarts, or one running beside another, repeats nothing.
 - **Keys.** The keeper's key from a keystore, `TAPEHOUSE_KEEPER_KEYSTORE`, and the file holding its password, `TAPEHOUSE_KEEPER_PASSWORD_FILE`; the halt signer's likewise with `TAPEHOUSE_HALT_KEYSTORE` and `TAPEHOUSE_HALT_PASSWORD_FILE`. A password is read only from its file, minus one trailing newline, and never from the environment itself, an argument, a log or an error; an unreadable or empty file is an error that names the variable. `TAPEHOUSE_KEEPER_KEY` and `TAPEHOUSE_HALT_KEY` take a hex key, for a dev node only. Without a halt key the halt keeper does nothing; with one that is not the band's halt signer it fails.
 - **Configuration from the environment.** `TAPEHOUSE_DEPLOYMENTS`; `TAPEHOUSE_RPC_URL`, then `TAPEHOUSE_RPC_FALLBACK_URLS`, separated by commas, which take over when an endpoint fails, answers an HTTP error or is over its rate, never on a revert; `TAPEHOUSE_RPC_RATE`, 20 a second unless set; `TAPEHOUSE_INDEXER_URL`, the indexer that names the positions, shorts, recalls, commitments and covers to look at; `TAPEHOUSE_KEEPERS`, the keepers to run, unless set those whose contracts the registry names; `TAPEHOUSE_HALTS_URL`; `TAPEHOUSE_KEEPER_BUY=true` to buy at an auction once its ask is at the band's low edge or ETH's price, and `TAPEHOUSE_KEEPER_REBALANCE=subsidise` to rebalance baskets the pools do not pay for; `REDSTONE_API_KEY` and `REDSTONE_BACKUP_API_KEY`. RPC URLs never appear in a log.
+
+## Reference bidder
+
+`services/cmd/bidder` bids in the reopening auction and buys in the liquidation auctions. It is built only on the Go SDK, go-ethereum and the indexer's public API, imports nothing else from this repository, and is meant to be copied out and run against the published SDK.
+
+```bash
+export PRIVATE_KEY=0x… TAPEHOUSE_INDEXER_URL=https://…
+make run-bidder CHAIN=42161
+```
+
+- **Its price.** A Stock Token is worth to the bot the lower of the low edge of the band sealed before the reopen and of the band now, the weekend's last 24/7 leg, less a discount: never above what the band's low edge says the token is worth. A seal counts in state 1 or 3 and the band now in state 1, 2 or 3 with a live leg; with neither the bot has no price and makes no bid.
+- **One bid a round, committed late.** The bot commits once for each asset and round, within `TAPEHOUSE_BIDDER_COMMIT_LEAD` of the commit phase's end so that the price carries the latest 24/7 leg, for as much as `TAPEHOUSE_BIDDER_BUDGET` buys at its price, at most the round's supply. The deposit is the budget, at least the bond, the same for every bid the budget allows, so it does not reveal the bid's size.
+- **No bid that forfeits.** An unrevealed commitment forfeits at least the bond, and a reveal the auction refuses leaves its commitment unrevealed. The bot checks all three refusals against the round's floor before it commits: the price is at or above the floor, the bid is worth at least the minimum bid at the floor, and its escrow is within the deposit. The bond, the minimum bid and the windows are read from the auction, not copied.
+- **The state file.** The bid's quantity, price and salt are written to `TAPEHOUSE_BIDDER_STATE`, synced, and renamed over the old file before the commit is sent, so a restart still reveals the bid and a crash between the two loses nothing. A bid whose commit never landed has nothing to reveal and is dropped with its round. Keep the file across restarts; without it a committed bid cannot be revealed.
+- **Reveal, then claim.** Each committed bid is revealed at the first tick inside the half hour before the open; a bid outbid in a full book gets its deposit back and is no error. Once the round is cleared, or its hour has lapsed, the bot claims each of its bids and drops the round.
+- **Liquidation auctions.** Every 15 seconds the bot reads the auctions started in the last four hours from the indexer's public tier, keeps those the liquidator still shows live, and buys each Stock Token the position holds once the ask has fallen to its own price from the band now, for as much as the budget buys, with the ask's cost, rounded up, as its limit. It never buys WETH, whose price is Chainlink's and not the band's.
+- **Approvals.** Before each commit or purchase the bot approves exactly the deposit or the limit, never an unlimited allowance.
+- **Configuration from the environment.** `PRIVATE_KEY`, never an argument and never logged; `TAPEHOUSE_RPC_URL` and `TAPEHOUSE_DEPLOYMENTS`; `TAPEHOUSE_INDEXER_URL`, without which the liquidation auctions are not watched, and `TAPEHOUSE_INDEXER_KEY`; `TAPEHOUSE_BIDDER_STATE`, `bidder-<chainId>.json` unless set; `TAPEHOUSE_BIDDER_BUDGET`, in USDG raw units for each round and each purchase, 1,000 USDG unless set; `TAPEHOUSE_BIDDER_DISCOUNT_BPS`, 300; `TAPEHOUSE_BIDDER_COMMIT_LEAD`, 15 minutes; `TAPEHOUSE_BIDDER_ASSETS`, every asset of the accounts; `TAPEHOUSE_BIDDER_DRY_RUN=true` to simulate every transaction and send none. RPC URLs and the indexer key never appear in a log.
 
 ## Backtest
 

@@ -27,6 +27,17 @@ func (c *Client) Liquidator() *Liquidator {
 	}
 }
 
+// Address returns the liquidator's address.
+func (l *Liquidator) Address() (common.Address, error) {
+	return l.address, l.err
+}
+
+// Auction reads when the auction of account's position started, zero where none did, and whether the market was
+// closed then.
+func (l *Liquidator) Auction(opts *bind.CallOpts, account common.Address, position [32]byte) (liquidator.AuctionsOutput, error) {
+	return read(l.c, opts, l.target, l.liquidator.UnpackAuctions)(l.liquidator.TryPackAuctions(account, position))
+}
+
 // Shortfall reads account's position as the liquidator judges it now: equity and requirement in USD with 18
 // decimals, whether it falls short, and whether the market is closed. A position that cannot be judged reads as not
 // short.
