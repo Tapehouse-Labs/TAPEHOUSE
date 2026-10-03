@@ -12,7 +12,7 @@ Portfolio margin for Stock Tokens on Robinhood Chain.
 - `deployments` — contract addresses per chain, one JSON file per chain ID
 - `packages/sdk` — the TypeScript SDK (viem)
 - `packages/mcp` — the MCP server for AI agents, on the TypeScript SDK
-- `services` — the Go module: the Go SDK in `services/sdk` (go-ethereum), and the indexer and public API in `services/cmd/indexer`
+- `services` — the Go module: the Go SDK in `services/sdk` (go-ethereum), the indexer and public API in `services/cmd/indexer`, and the backtester in `services/cmd/backtest`
 - `crates` — Rust crates: the Rust SDK in `crates/sdk` (alloy)
 
 ## Requirements
@@ -59,6 +59,7 @@ make test
 | `make check-activation` | `cargo stylus check` of every program against Robinhood Chain, its testnet and Arbitrum One |
 | `make build-apps` · `test-apps` · `lint-apps` | Apps, the TypeScript SDK and the MCP server only |
 | `make build-services` · `test-services` · `lint-services` | The Go module only; `test-services` reports coverage |
+| `make backtest` | Runs the backtest from public data and writes `services/backtest.json` |
 | `make build-crates` · `test-crates` · `lint-crates` | The Rust crates only |
 | `make bindings` | Builds the contracts and regenerates the SDKs' bindings from their ABIs; commit the result |
 | `make check-bindings` | Regenerates the bindings and fails if they differ from what is committed |
@@ -94,6 +95,7 @@ make test
 | `make test-sdks-devnode` | Runs each SDK's example against that deployment: SPY's band and feed, stale RedStone packages refused, a short of SPY sold and bought back by an address the account authorized, a share of the basket `PAIR` minted, deposited, read as its Stock Tokens and unwrapped, and SPY gap cover quoted and bought, or refused outside the sales |
 | `make test-mcp-devnode` | Drives the MCP server against that deployment with the official TypeScript client over Streamable HTTP and the official Python client over stdio: bands, Morpho oracles and the basket `PAIR` read, a short of SPY sold and bought back, a share of `PAIR` minted, deposited and unwrapped, and gap cover written and SPY cover bought, or refused with `SalesClosed` outside the sales, through calls the server prepares and the example signs |
 | `make test-indexer-devnode` | Indexes that deployment from its first block, checks every log `eth_getLogs` returns against the index, decoded as the bindings decode it, reads views, halts, Morpho oracles, debts and shorts against the SDK at the same blocks, writes the RedStone relay's packages through the band and receives them on the stream, rebuilds the index from the chain alone, and loads the API |
+| `make test-backtest-devnode` | Rebuilds the dev node's band from its `PriceWritten` and `Anchored` events and checks every variance, the session and every quote against the band's own views, before its first multiplier step |
 | `make run-indexer CHAIN=<id> [REGISTRY=<file>]` | Runs the indexer and its API on the chain's registry, with the chain's RPC URL from the table below |
 
 ## Networks
@@ -600,7 +602,7 @@ Three SDKs read the band, its feeds, the margin accounts, the short positions, t
 | Rust | `crates/sdk` | `tapehouse-sdk` on crates.io, over alloy 2 | alloy's `sol!` over `abi/*.json` |
 
 - **Generated from the ABIs.** `make bindings` builds the contracts and writes each SDK's bindings from the ABIs of `BandFeed`, `SupplyVault`, `MarginAccounts`, `Liquidator`, `GapBackstop`, `ReopeningAuction`, `StockLendingVault`, `ShortPositions`, `MorphoBandOracle`, `Basket`, `GapCover`, the band as a RedStone relayer calls it (`IBandPrices`: `IBand`'s reads, the band's events, `writePrices`, `price` and `haltSigner`), the margin engine's risk parameters (`IMarginParameters`), Uniswap's QuoterV2, USDG, the Stock Tokens (`IStockToken`), Morpho Blue (`IMorpho`), both as the conformance tests pin them, and Chainlink's aggregator. The bindings are committed, and `make check-bindings` fails in CI when they differ from the build. Each SDK adds by hand only what the ABIs cannot say.
-- **Addresses** come from `deployments/<chainId>.json`, read at runtime: no SDK compiles in an address. A mixed-case address must carry its checksum. A `.chainlink` feed is typed by what it prices: the Stock Token on Robinhood Chain, the share on Arbitrum One.
+- **Addresses** come from `deployments/<chainId>.json`, read at runtime: no SDK compiles in an address. A mixed-case address must carry its checksum. A `.chainlink` feed is typed by what it prices: the Stock Token on Robinhood Chain, the share on Arbitrum One. The Go SDK also reads the L2 sequencer-uptime feed, `.chainlinkSequencer`.
 - **Morpho oracles.** Each SDK reads an asset's `MorphoBandOracle` from `.morphoOracles` (beside `.morpho.Blue` and `.morpho.AdaptiveCurveIrm`, and Morpho Blue's markets, `.morpho.Markets`, read by their 32-byte ids as `morphoMarkets`): its `price()`, `halt()`, `band()`, `symbol()`, `collateralToken()`, `loanToken()`, `scaleFactor()` and `owner()`. A `price()` that reverts with `NoAnswer` or `SequencerNotSettled` is no price, never zero, and the SDK says why: `halted` where the band holds a signed halt, the issuer's pause or an unconfirmed multiplier step for the asset, `stale` otherwise, a band with no live leg, which a fresh `writePrices` ends, and `sequencerNotSettled`. `morpho.price` in TypeScript, `MorphoOracles().Price` in Go and `oracle_price` in Rust read all of it at one block.
 - **Authorization.** `setAuthorization(authorized, allowed)` lets another address, such as a router, borrow, withdraw and deposit for an account in the margin accounts, and act for its shorts; until then both revert with `Unauthorized(caller, account)`.
 - **Errors.** Every revert of the supply vault, the margin accounts, the liquidator, the gap backstop, the reopening auction, the stock lending vaults, the shorts, the gap cover, the feeds, the band, the Stock Tokens and USDG decodes by name and arguments, and so do Solidity's `Error(string)`, which carries the router's `Too little received` and `Too much requested`, and `Panic(uint256)`.
@@ -645,6 +647,21 @@ curl http://127.0.0.1:8080/v1/status
 - **The RedStone relay.** `/v1/redstone/payload?feeds=NVDA---24_7,NY_MARKET_STATUS` returns the latest signed packages of those data package IDs and their payload, read from RedStone's keyed gateways with `REDSTONE_API_KEY` and `REDSTONE_BACKUP_API_KEY` where set, then its public ones, at most once every two seconds a gateway. Every package is served only when its signature recovers to one of the five signers the band accepts, with the three signatures the band requires, all at one timestamp. `payload` is what an SDK's `PackageSource` returns for the same IDs, so no browser or integrator needs RedStone's key.
 - **Configuration from the environment.** `TAPEHOUSE_DEPLOYMENTS`, the registry; `TAPEHOUSE_RPC_URL`, which must serve the registry's chain and which the indexer never logs or serves; `TAPEHOUSE_DB`, `tapehouse-<chainId>.db` unless set; `TAPEHOUSE_LISTEN`, `127.0.0.1:8080` unless set; `TAPEHOUSE_RPC_RATE`, the most requests a second it sends the RPC, 20 unless set; and the keys and proxies above. `make run-indexer` takes the RPC URL from the chain's variable in *Networks*.
 - **Latency.** With 64 clients on 8 keys, each key at 95% of the keyed tier's rate, about 7,600 reads a second of every kind, the 99th percentile is within 25 ms; `make test-indexer-devnode` measures it.
+
+## Backtest
+
+`services/cmd/backtest` runs the band and the margin engine over every weekend and holiday closure since 2010 and over every closure since Robinhood Chain launched, from public data alone:
+
+```bash
+ROBINHOOD_RPC_URL=… ARBITRUM_RPC_URL=… make backtest
+```
+
+- **Data.** Daily bars of the launch assets from Yahoo Finance's chart API, adjusted for splits and dividends, on the sessions all six traded, from TSLA's listing on 29 June 2010; Chainlink's rounds on both chains, through the Go SDK's typed feeds; the RedStone 24/7 values and the signed New York market status from RedStone's data explorer, which keeps 1 day at 60 s, 7 days at 600 s and 30 days at 3,600 s. The engine's parameters come from `stylus/contracts/margin/parameters.json`, and every address from `deployments/<chainId>.json`.
+- **Bit for bit.** `services/internal/band` and `services/internal/margin` evaluate the band's and the engine's arithmetic as the programs do, and their tests read the programs' own vectors in `stylus/contracts/*/testdata`. `backtest record` rebuilds a deployed band from its `PriceWritten` and `Anchored` events, each 24/7 variance with the 50 s rule, SPY's anchor, the last regular close and each quote, and checks them against the band's views at the block before its first multiplier step, which the rebuild leaves to the band; `make test-backtest-devnode` runs it on the dev node.
+- **The band.** For each closure since the launch, the band as each chain's band would have quoted it when the closure's last public 24/7 value was written, and whether the first Chainlink round after the reopening fell inside it: on Robinhood Chain, a token price with both legs in Stock Token terms; on Arbitrum One, a share price counted only in NYSE regular hours, degraded while the sequencer is down and for an hour after. A closure older than the explorer's 30 days has no public 24/7 value and is counted, not quoted; from deployment on, the band's own `PriceWritten` events keep each one.
+- **The engine.** 200 long-only and 200 long-short portfolios, at 100,000 USD a unit, margined by the engine at its first parameters, before the liquidity add-on, against every closure's move from the last close to the next open: the 25% buffer's and the ramp's coverage, the two-day horizon against the closures' tail, the weekend leverage cap's rule (the largest whole L with 1/L at least 1.25 times the worst move of any launch asset), the cut before the close, 16 March 2020 as a scenario row, the capacity and bad-debt rate against Regulation T's flat 50%, and the liquidity add-on's linear impact against what each pool's QuoterV2 quote costs at the latest block, the only later state a public endpoint keeps.
+- **The constants.** The gap backstop's exposure limits and the weekend premium at the accounts' debt cap, the liquidator's decay at the chain's measured block interval (loss versus fair, Moallemi and Robinson), and what the lending, recall, short, basket and gap-cover constants meet in the same closures.
+- **Dune.** `services/dune/closures.sql` rebuilds Robinhood Chain's Chainlink closures from the chain's logs.
 
 ## Verification
 

@@ -61,6 +61,9 @@ func TestChainlinkFeedsPriceTheTokenOnRobinhoodChainAndTheShareOnArbitrumOne(t *
 	if _, err := arbitrum.TokenPriceFeed("NVDA_USD"); err == nil || err.Error() != ".chainlink.NVDA_USD prices the share on chain 42161" {
 		t.Fatalf("a share feed read as a token feed: %v", err)
 	}
+	if arbitrum.ChainlinkSequencer["Uptime"] != common.HexToAddress("0xFdB631F5EE196F0ed6FAa767959853A9F217697D") || len(robinhood.ChainlinkSequencer) != 0 {
+		t.Fatalf("sequencer-uptime feeds: %v, %v", arbitrum.ChainlinkSequencer, robinhood.ChainlinkSequencer)
+	}
 }
 
 func TestEveryGroupIsReadAndAMissingOneIsEmpty(t *testing.T) {

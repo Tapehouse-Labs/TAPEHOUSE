@@ -21,17 +21,18 @@ var Cross [32]byte
 
 // Deployments is a chain's address registry, deployments/<chainId>.json.
 type Deployments struct {
-	ChainID       uint64
-	Tokens        map[string]common.Address
-	Chainlink     map[string]common.Address
-	BandFeeds     map[string]common.Address
-	Tapehouse     map[string]common.Address
-	StockLending  map[string]common.Address
-	Baskets       map[string]common.Address
-	UniswapV3     map[string]common.Address
-	Morpho        map[string]common.Address
-	MorphoMarkets map[string]common.Hash
-	MorphoOracles map[string]common.Address
+	ChainID            uint64
+	Tokens             map[string]common.Address
+	Chainlink          map[string]common.Address
+	ChainlinkSequencer map[string]common.Address
+	BandFeeds          map[string]common.Address
+	Tapehouse          map[string]common.Address
+	StockLending       map[string]common.Address
+	Baskets            map[string]common.Address
+	UniswapV3          map[string]common.Address
+	Morpho             map[string]common.Address
+	MorphoMarkets      map[string]common.Hash
+	MorphoOracles      map[string]common.Address
 }
 
 // TokenPriceFeed is a Chainlink feed that prices the Stock Token, as Robinhood Chain's do.
@@ -55,6 +56,7 @@ func ParseDeployments(data []byte) (*Deployments, error) {
 		ChainID       uint64                     `json:"chainId"`
 		Tokens        map[string]string          `json:"tokens"`
 		Chainlink     map[string]string          `json:"chainlink"`
+		Sequencer     map[string]string          `json:"chainlinkSequencer"`
 		BandFeeds     map[string]string          `json:"bandFeeds"`
 		Tapehouse     map[string]json.RawMessage `json:"tapehouse"`
 		UniswapV3     map[string]string          `json:"uniswapV3"`
@@ -76,6 +78,7 @@ func ParseDeployments(data []byte) (*Deployments, error) {
 	}{
 		{&d.Tokens, registry.Tokens, ".tokens"},
 		{&d.Chainlink, registry.Chainlink, ".chainlink"},
+		{&d.ChainlinkSequencer, registry.Sequencer, ".chainlinkSequencer"},
 		{&d.BandFeeds, registry.BandFeeds, ".bandFeeds"},
 		{&d.UniswapV3, registry.UniswapV3, ".uniswapV3"},
 		{&d.MorphoOracles, registry.MorphoOracles, ".morphoOracles"},

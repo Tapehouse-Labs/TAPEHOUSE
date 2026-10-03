@@ -60,7 +60,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	check-toolchains check-node check-foundry check-slither check-reuse check-stylus check-docker submodules \
 	check-go check-golangci-lint check-rust check-uv \
 	build-apps test-apps lint-apps build-services test-services lint-services build-crates test-crates lint-crates \
-	bindings check-bindings test-sdks-devnode test-mcp-devnode test-indexer-devnode run-indexer \
+	bindings check-bindings test-sdks-devnode test-mcp-devnode test-indexer-devnode run-indexer backtest test-backtest-devnode \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
@@ -160,6 +160,9 @@ lint-services: check-go check-golangci-lint
 	cd services && go mod tidy -diff
 	cd services && golangci-lint fmt --diff ./...
 	cd services && golangci-lint run ./...
+
+backtest: check-go
+	cd services && go run ./cmd/backtest history -out backtest.json
 
 build-crates: check-rust
 	cd crates && cargo build --locked --all-targets
@@ -412,6 +415,9 @@ test-sdks-devnode: check-node check-go check-rust node_modules/.modules.yaml
 		../stylus/target/devnode-registry.json ../$(SDK_PAYLOAD)
 	cd crates && cargo run --locked --example devnode -- $(DEVNODE_RPC_URL) \
 		../stylus/target/devnode-registry.json ../$(SDK_PAYLOAD)
+
+test-backtest-devnode: check-go
+	cd services && go run ./cmd/backtest record $(DEVNODE_RPC_URL) ../stylus/target/devnode-registry.json
 
 test-mcp-devnode: export PRIVATE_KEY := $(DEVNODE_KEY)
 test-mcp-devnode: check-node check-uv node_modules/.modules.yaml
