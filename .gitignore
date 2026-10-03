@@ -7,3 +7,4 @@ node_modules/
 __pycache__/
 services/tapehouse-*.db*
 services/backtest.json
+services/bidder-*.json

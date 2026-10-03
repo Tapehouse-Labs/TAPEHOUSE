@@ -3,6 +3,7 @@
 package sdk_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1111,4 +1112,103 @@ func mustType(name string) abi.Type {
 		panic(err)
 	}
 	return typ
+}
+
+func TestACommitmentIsTheContractsHash(t *testing.T) {
+	bidder := common.HexToAddress("0x3f1Eae7D46d88F08fc2F8ed27FCb2AB183EB2d0E")
+	salt := [32]byte(common.Hex2Bytes(strings.Repeat("01", 32)))
+	// cast keccak $(cast abi-encode "f(address,bytes32,uint64,uint256,uint256,bytes32)" 0x3f1E…2d0E $(cast format-bytes32-string SPY) 1790000000000 2000000000000000000 75000000000 0x01…01)
+	want := "0xdb11f1114f228a346ca09be74ffe6d51eed023ef402067094a9a1981524a0a6b"
+	got, err := sdk.Commitment(bidder, "SPY", 1_790_000_000_000, big.NewInt(2e18), big.NewInt(75_000_000_000), salt)
+	if err != nil || hexutil.Encode(got[:]) != want {
+		t.Fatalf("%x, %v; want %s", got, err, want)
+	}
+}
+
+func TestACommitAndARevealGoToTheAuction(t *testing.T) {
+	d := registry(t, "46630")
+	auction := sdk.NewClient(nil, d).ReopeningAuction()
+	binding := reopeningauction.NewReopeningAuction()
+	spy := bytes32(t, "SPY")
+	salt, commitment := [32]byte{7}, [32]byte{9}
+	deposit, quantity, price := big.NewInt(100e6), big.NewInt(2e18), big.NewInt(75_000_000_000)
+	commit, err := auction.Commit("SPY", commitment, deposit)
+	wantCommit, _ := binding.TryPackCommit(spy, commitment, deposit)
+	if err != nil || commit.To != d.Tapehouse["ReopeningAuction"] || !bytes.Equal(commit.Data, wantCommit) {
+		t.Fatalf("commit: %v, %v", commit, err)
+	}
+	reveal, err := auction.Reveal("SPY", 1_790_000_000_000, quantity, price, salt)
+	wantReveal, _ := binding.TryPackReveal(spy, 1_790_000_000_000, quantity, price, salt)
+	if err != nil || reveal.To != d.Tapehouse["ReopeningAuction"] || !bytes.Equal(reveal.Data, wantReveal) {
+		t.Fatalf("reveal: %v, %v", reveal, err)
+	}
+	if to, err := auction.Address(); err != nil || to != d.Tapehouse["ReopeningAuction"] {
+		t.Fatalf("address: %v, %v", to, err)
+	}
+	if to, err := sdk.NewClient(nil, d).Liquidator().Address(); err != nil || to != d.Tapehouse["Liquidator"] {
+		t.Fatalf("liquidator address: %v, %v", to, err)
+	}
+}
+
+type constantsChain struct {
+	bind.ContractBackend
+	t *testing.T
+}
+
+func (c constantsChain) HeaderByNumber(context.Context, *big.Int) (*types.Header, error) {
+	return &types.Header{Number: big.NewInt(5)}, nil
+}
+
+func (c constantsChain) CallContract(_ context.Context, call ethereum.CallMsg, _ *big.Int) ([]byte, error) {
+	parsed, _ := reopeningauction.ReopeningAuctionMetaData.ParseABI()
+	method, err := parsed.MethodById(call.Data)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	answers := map[string]any{"BOND": big.NewInt(100e6), "MIN_BID": big.NewInt(100e6),
+		"REVEAL_MS": uint64(1_800_000), "CLEAR_MS": uint64(3_600_000)}
+	answer, ok := answers[method.Name]
+	if !ok {
+		c.t.Fatalf("unexpected %s", method.Name)
+	}
+	return method.Outputs.Pack(answer)
+}
+
+func TestTheAuctionsConstantsAreRead(t *testing.T) {
+	auction := sdk.NewClient(constantsChain{t: t}, registry(t, "46630")).ReopeningAuction()
+	got, err := auction.Constants(&bind.CallOpts{})
+	if err != nil || got.Bond.Int64() != 100e6 || got.MinBid.Int64() != 100e6 || got.RevealMs != 1_800_000 || got.ClearMs != 3_600_000 {
+		t.Fatalf("%+v, %v", got, err)
+	}
+}
+
+func TestANilAmountIsAnErrorNeverAPanic(t *testing.T) {
+	auction := sdk.NewClient(nil, registry(t, "46630")).ReopeningAuction()
+	one := big.NewInt(1)
+	if _, err := auction.Commit("SPY", [32]byte{}, nil); err == nil {
+		t.Error("a nil deposit packed")
+	}
+	if _, err := auction.Reveal("SPY", 1, nil, one, [32]byte{}); err == nil {
+		t.Error("a nil quantity packed")
+	}
+	if _, err := auction.Reveal("SPY", 1, one, nil, [32]byte{}); err == nil {
+		t.Error("a nil price packed")
+	}
+	if _, err := sdk.Commitment(alice, "SPY", 1, nil, one, [32]byte{}); err == nil {
+		t.Error("a nil quantity hashed")
+	}
+	if _, err := sdk.Commitment(alice, "SPY", 1, one, nil, [32]byte{}); err == nil {
+		t.Error("a nil price hashed")
+	}
+	if _, err := sdk.Commitment(alice, strings.Repeat("A", 33), 1, one, one, [32]byte{}); err == nil {
+		t.Error("a 33-byte asset hashed")
+	}
+}
+
+func TestAnAuctionIsReadWithItsStartAndWhetherTheMarketWasClosed(t *testing.T) {
+	chain := &auctionChain{t: t, started: 1790775000, closed: true, now: 1790775001, blocks: map[string]*big.Int{}}
+	got, err := sdk.NewClient(chain, registry(t, "46630")).Liquidator().Auction(&bind.CallOpts{}, alice, sdk.Cross)
+	if err != nil || got.StartedAt != 1790775000 || !got.Closed {
+		t.Fatalf("%+v, %v", got, err)
+	}
 }
