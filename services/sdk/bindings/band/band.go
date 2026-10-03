@@ -26,7 +26,7 @@ var (
 
 // BandMetaData contains all meta data concerning the Band contract.
 var BandMetaData = bind.MetaData{
-	ABI: "[{\"type\":\"function\",\"name\":\"asset\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"chainlinkFeed\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"redstoneFeedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"indexFeedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"token\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"chainConfig\",\"inputs\":[],\"outputs\":[{\"name\":\"sequencerUptimeFeed\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"chainlinkRegularHours\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"corporateAction\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"status\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"effectiveAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"multiplierBefore\",\"type\":\"uint128\",\"internalType\":\"uint128\"},{\"name\":\"multiplierAfter\",\"type\":\"uint128\",\"internalType\":\"uint128\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"halt\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"signedHalt\",\"type\":\"bool\",\"internalType\":\"bool\"},{\"name\":\"until\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"issuedAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"oraclePaused\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"haltSigner\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"price\",\"inputs\":[{\"name\":\"feedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"value\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"packageTimestampMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"writtenAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"quote\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"state\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"live\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"mid\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"halfBps\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"low\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"high\",\"type\":\"uint128\",\"internalType\":\"uint128\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"sequencerSettled\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"session\",\"inputs\":[],\"outputs\":[{\"name\":\"state\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"nyse\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"nyseNext\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"changeMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"boundaryMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"variance\",\"inputs\":[{\"name\":\"feedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint128\",\"internalType\":\"uint128\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"writePrices\",\"inputs\":[{\"name\":\"feedIds\",\"type\":\"bytes32[]\",\"internalType\":\"bytes32[]\"},{\"name\":\"payload\",\"type\":\"bytes\",\"internalType\":\"bytes\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256[]\",\"internalType\":\"uint256[]\"}],\"stateMutability\":\"nonpayable\"},{\"type\":\"event\",\"name\":\"Anchored\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"chainlinkPrice\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"},{\"name\":\"indexPrice\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"},{\"name\":\"updatedAt\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"HaltSignerUpdated\",\"inputs\":[{\"name\":\"previousSigner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"newSigner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"HaltWritten\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"halted\",\"type\":\"bool\",\"indexed\":false,\"internalType\":\"bool\"},{\"name\":\"issuedAt\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"},{\"name\":\"expiresAt\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"MultiplierConfirmed\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"effectiveAt\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"MultiplierRecorded\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"multiplierBefore\",\"type\":\"uint128\",\"indexed\":false,\"internalType\":\"uint128\"},{\"name\":\"multiplierAfter\",\"type\":\"uint128\",\"indexed\":false,\"internalType\":\"uint128\"},{\"name\":\"effectiveAt\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"OwnershipTransferStarted\",\"inputs\":[{\"name\":\"previousOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"newOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"OwnershipTransferred\",\"inputs\":[{\"name\":\"previousOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"newOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"PriceWritten\",\"inputs\":[{\"name\":\"feedId\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"value\",\"type\":\"uint256\",\"indexed\":false,\"internalType\":\"uint256\"},{\"name\":\"packageTimestampMs\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"}],\"anonymous\":false},{\"type\":\"error\",\"name\":\"CalldataMustHaveValidPayload\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"CalldataOverOrUnderFlow\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"DataTimestampCannotBeZero\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"IncompleteStatus\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"IncorrectUnsignedMetadataSize\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"InsufficientNumberOfUniqueSigners\",\"inputs\":[{\"name\":\"receivedSignersCount\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"requiredSignersCount\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"type\":\"error\",\"name\":\"InvalidSignature\",\"inputs\":[{\"name\":\"signedHash\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}]},{\"type\":\"error\",\"name\":\"PackageNotNewer\",\"inputs\":[{\"name\":\"feedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"storedTimestampMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"packageTimestampMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"}]},{\"type\":\"error\",\"name\":\"SignerNotAuthorised\",\"inputs\":[{\"name\":\"receivedSigner\",\"type\":\"address\",\"internalType\":\"address\"}]},{\"type\":\"error\",\"name\":\"TimestampFromTooLongFuture\",\"inputs\":[{\"name\":\"receivedTimestampSeconds\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"blockTimestamp\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"type\":\"error\",\"name\":\"TimestampIsTooOld\",\"inputs\":[{\"name\":\"receivedTimestampSeconds\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"blockTimestamp\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"type\":\"error\",\"name\":\"TimestampsMustBeEqual\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"TooLargeValueByteSize\",\"inputs\":[{\"name\":\"valueByteSize\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]}]",
+	ABI: "[{\"type\":\"function\",\"name\":\"asset\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"chainlinkFeed\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"redstoneFeedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"indexFeedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"token\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"chainConfig\",\"inputs\":[],\"outputs\":[{\"name\":\"sequencerUptimeFeed\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"chainlinkRegularHours\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"corporateAction\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"status\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"effectiveAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"multiplierBefore\",\"type\":\"uint128\",\"internalType\":\"uint128\"},{\"name\":\"multiplierAfter\",\"type\":\"uint128\",\"internalType\":\"uint128\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"halt\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"signedHalt\",\"type\":\"bool\",\"internalType\":\"bool\"},{\"name\":\"until\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"issuedAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"oraclePaused\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"haltSigner\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"price\",\"inputs\":[{\"name\":\"feedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"value\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"packageTimestampMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"writtenAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"quote\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"state\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"live\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"mid\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"halfBps\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"low\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"high\",\"type\":\"uint128\",\"internalType\":\"uint128\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"sequencerSettled\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"session\",\"inputs\":[],\"outputs\":[{\"name\":\"state\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"nyse\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"nyseNext\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"changeMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"boundaryMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"syncMultiplier\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint8\",\"internalType\":\"uint8\"}],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"variance\",\"inputs\":[{\"name\":\"feedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint128\",\"internalType\":\"uint128\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"writeHalt\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"halted\",\"type\":\"bool\",\"internalType\":\"bool\"},{\"name\":\"issuedAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"expiresAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"signature\",\"type\":\"bytes\",\"internalType\":\"bytes\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"writePrices\",\"inputs\":[{\"name\":\"feedIds\",\"type\":\"bytes32[]\",\"internalType\":\"bytes32[]\"},{\"name\":\"payload\",\"type\":\"bytes\",\"internalType\":\"bytes\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256[]\",\"internalType\":\"uint256[]\"}],\"stateMutability\":\"nonpayable\"},{\"type\":\"event\",\"name\":\"Anchored\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"chainlinkPrice\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"},{\"name\":\"indexPrice\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"},{\"name\":\"updatedAt\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"HaltSignerUpdated\",\"inputs\":[{\"name\":\"previousSigner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"newSigner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"HaltWritten\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"halted\",\"type\":\"bool\",\"indexed\":false,\"internalType\":\"bool\"},{\"name\":\"issuedAt\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"},{\"name\":\"expiresAt\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"MultiplierConfirmed\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"effectiveAt\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"MultiplierRecorded\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"multiplierBefore\",\"type\":\"uint128\",\"indexed\":false,\"internalType\":\"uint128\"},{\"name\":\"multiplierAfter\",\"type\":\"uint128\",\"indexed\":false,\"internalType\":\"uint128\"},{\"name\":\"effectiveAt\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"OwnershipTransferStarted\",\"inputs\":[{\"name\":\"previousOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"newOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"OwnershipTransferred\",\"inputs\":[{\"name\":\"previousOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"newOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"PriceWritten\",\"inputs\":[{\"name\":\"feedId\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"value\",\"type\":\"uint256\",\"indexed\":false,\"internalType\":\"uint256\"},{\"name\":\"packageTimestampMs\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"}],\"anonymous\":false},{\"type\":\"error\",\"name\":\"CalldataMustHaveValidPayload\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"CalldataOverOrUnderFlow\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"DataTimestampCannotBeZero\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"HaltNotNewer\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"storedIssuedAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"issuedAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"}]},{\"type\":\"error\",\"name\":\"HaltOutsideWindow\",\"inputs\":[{\"name\":\"issuedAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"expiresAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"blockTimestamp\",\"type\":\"uint64\",\"internalType\":\"uint64\"}]},{\"type\":\"error\",\"name\":\"IncompleteStatus\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"IncorrectUnsignedMetadataSize\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"InsufficientNumberOfUniqueSigners\",\"inputs\":[{\"name\":\"receivedSignersCount\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"requiredSignersCount\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"type\":\"error\",\"name\":\"InvalidSignature\",\"inputs\":[{\"name\":\"signedHash\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}]},{\"type\":\"error\",\"name\":\"InvalidToken\",\"inputs\":[{\"name\":\"token\",\"type\":\"address\",\"internalType\":\"address\"}]},{\"type\":\"error\",\"name\":\"NoToken\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}]},{\"type\":\"error\",\"name\":\"PackageNotNewer\",\"inputs\":[{\"name\":\"feedId\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"storedTimestampMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"packageTimestampMs\",\"type\":\"uint64\",\"internalType\":\"uint64\"}]},{\"type\":\"error\",\"name\":\"SignerNotAuthorised\",\"inputs\":[{\"name\":\"receivedSigner\",\"type\":\"address\",\"internalType\":\"address\"}]},{\"type\":\"error\",\"name\":\"TimestampFromTooLongFuture\",\"inputs\":[{\"name\":\"receivedTimestampSeconds\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"blockTimestamp\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"type\":\"error\",\"name\":\"TimestampIsTooOld\",\"inputs\":[{\"name\":\"receivedTimestampSeconds\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"blockTimestamp\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"type\":\"error\",\"name\":\"TimestampsMustBeEqual\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"TooLargeValueByteSize\",\"inputs\":[{\"name\":\"valueByteSize\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"type\":\"error\",\"name\":\"UnknownAsset\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}]}]",
 	ID:  "Band",
 }
 
@@ -461,6 +461,41 @@ func (band *Band) UnpackSession(data []byte) (SessionOutput, error) {
 	return *outstruct, nil
 }
 
+// PackSyncMultiplier is the Go binding used to pack the parameters required for calling
+// the contract method with ID 0x60f6dc9c.  This method will panic if any
+// invalid/nil inputs are passed.
+//
+// Solidity: function syncMultiplier(bytes32 symbol) returns(uint8)
+func (band *Band) PackSyncMultiplier(symbol [32]byte) []byte {
+	enc, err := band.abi.Pack("syncMultiplier", symbol)
+	if err != nil {
+		panic(err)
+	}
+	return enc
+}
+
+// TryPackSyncMultiplier is the Go binding used to pack the parameters required for calling
+// the contract method with ID 0x60f6dc9c.  This method will return an error
+// if any inputs are invalid/nil.
+//
+// Solidity: function syncMultiplier(bytes32 symbol) returns(uint8)
+func (band *Band) TryPackSyncMultiplier(symbol [32]byte) ([]byte, error) {
+	return band.abi.Pack("syncMultiplier", symbol)
+}
+
+// UnpackSyncMultiplier is the Go binding that unpacks the parameters returned
+// from invoking the contract method with ID 0x60f6dc9c.
+//
+// Solidity: function syncMultiplier(bytes32 symbol) returns(uint8)
+func (band *Band) UnpackSyncMultiplier(data []byte) (uint8, error) {
+	out, err := band.abi.Unpack("syncMultiplier", data)
+	if err != nil {
+		return *new(uint8), err
+	}
+	out0 := *abi.ConvertType(out[0], new(uint8)).(*uint8)
+	return out0, nil
+}
+
 // PackVariance is the Go binding used to pack the parameters required for calling
 // the contract method with ID 0xdecf0015.  This method will panic if any
 // invalid/nil inputs are passed.
@@ -494,6 +529,28 @@ func (band *Band) UnpackVariance(data []byte) (*big.Int, error) {
 	}
 	out0 := abi.ConvertType(out[0], new(big.Int)).(*big.Int)
 	return out0, nil
+}
+
+// PackWriteHalt is the Go binding used to pack the parameters required for calling
+// the contract method with ID 0xe1e39063.  This method will panic if any
+// invalid/nil inputs are passed.
+//
+// Solidity: function writeHalt(bytes32 symbol, bool halted, uint64 issuedAt, uint64 expiresAt, bytes signature) returns()
+func (band *Band) PackWriteHalt(symbol [32]byte, halted bool, issuedAt uint64, expiresAt uint64, signature []byte) []byte {
+	enc, err := band.abi.Pack("writeHalt", symbol, halted, issuedAt, expiresAt, signature)
+	if err != nil {
+		panic(err)
+	}
+	return enc
+}
+
+// TryPackWriteHalt is the Go binding used to pack the parameters required for calling
+// the contract method with ID 0xe1e39063.  This method will return an error
+// if any inputs are invalid/nil.
+//
+// Solidity: function writeHalt(bytes32 symbol, bool halted, uint64 issuedAt, uint64 expiresAt, bytes signature) returns()
+func (band *Band) TryPackWriteHalt(symbol [32]byte, halted bool, issuedAt uint64, expiresAt uint64, signature []byte) ([]byte, error) {
+	return band.abi.Pack("writeHalt", symbol, halted, issuedAt, expiresAt, signature)
 }
 
 // PackWritePrices is the Go binding used to pack the parameters required for calling
@@ -910,6 +967,12 @@ func (band *Band) UnpackError(raw []byte) (any, error) {
 	if bytes.Equal(raw[:4], band.abi.Errors["DataTimestampCannotBeZero"].ID.Bytes()[:4]) {
 		return band.UnpackDataTimestampCannotBeZeroError(raw[4:])
 	}
+	if bytes.Equal(raw[:4], band.abi.Errors["HaltNotNewer"].ID.Bytes()[:4]) {
+		return band.UnpackHaltNotNewerError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], band.abi.Errors["HaltOutsideWindow"].ID.Bytes()[:4]) {
+		return band.UnpackHaltOutsideWindowError(raw[4:])
+	}
 	if bytes.Equal(raw[:4], band.abi.Errors["IncompleteStatus"].ID.Bytes()[:4]) {
 		return band.UnpackIncompleteStatusError(raw[4:])
 	}
@@ -921,6 +984,12 @@ func (band *Band) UnpackError(raw []byte) (any, error) {
 	}
 	if bytes.Equal(raw[:4], band.abi.Errors["InvalidSignature"].ID.Bytes()[:4]) {
 		return band.UnpackInvalidSignatureError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], band.abi.Errors["InvalidToken"].ID.Bytes()[:4]) {
+		return band.UnpackInvalidTokenError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], band.abi.Errors["NoToken"].ID.Bytes()[:4]) {
+		return band.UnpackNoTokenError(raw[4:])
 	}
 	if bytes.Equal(raw[:4], band.abi.Errors["PackageNotNewer"].ID.Bytes()[:4]) {
 		return band.UnpackPackageNotNewerError(raw[4:])
@@ -939,6 +1008,9 @@ func (band *Band) UnpackError(raw []byte) (any, error) {
 	}
 	if bytes.Equal(raw[:4], band.abi.Errors["TooLargeValueByteSize"].ID.Bytes()[:4]) {
 		return band.UnpackTooLargeValueByteSizeError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], band.abi.Errors["UnknownAsset"].ID.Bytes()[:4]) {
+		return band.UnpackUnknownAssetError(raw[4:])
 	}
 	return nil, errors.New("Unknown error")
 }
@@ -1007,6 +1079,58 @@ func BandDataTimestampCannotBeZeroErrorID() common.Hash {
 func (band *Band) UnpackDataTimestampCannotBeZeroError(raw []byte) (*BandDataTimestampCannotBeZero, error) {
 	out := new(BandDataTimestampCannotBeZero)
 	if err := band.abi.UnpackIntoInterface(out, "DataTimestampCannotBeZero", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// BandHaltNotNewer represents a HaltNotNewer error raised by the Band contract.
+type BandHaltNotNewer struct {
+	Symbol         [32]byte
+	StoredIssuedAt uint64
+	IssuedAt       uint64
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error HaltNotNewer(bytes32 symbol, uint64 storedIssuedAt, uint64 issuedAt)
+func BandHaltNotNewerErrorID() common.Hash {
+	return common.HexToHash("0xedd6aa50fb7e45b124bc359cf136acf929734d3aeee926c47b69662d25d82ee8")
+}
+
+// UnpackHaltNotNewerError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error HaltNotNewer(bytes32 symbol, uint64 storedIssuedAt, uint64 issuedAt)
+func (band *Band) UnpackHaltNotNewerError(raw []byte) (*BandHaltNotNewer, error) {
+	out := new(BandHaltNotNewer)
+	if err := band.abi.UnpackIntoInterface(out, "HaltNotNewer", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// BandHaltOutsideWindow represents a HaltOutsideWindow error raised by the Band contract.
+type BandHaltOutsideWindow struct {
+	IssuedAt       uint64
+	ExpiresAt      uint64
+	BlockTimestamp uint64
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error HaltOutsideWindow(uint64 issuedAt, uint64 expiresAt, uint64 blockTimestamp)
+func BandHaltOutsideWindowErrorID() common.Hash {
+	return common.HexToHash("0x1d538dfe0291c71d81e77617fcf28acbe4362a5135a7b5c8197ceebac6ee6460")
+}
+
+// UnpackHaltOutsideWindowError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error HaltOutsideWindow(uint64 issuedAt, uint64 expiresAt, uint64 blockTimestamp)
+func (band *Band) UnpackHaltOutsideWindowError(raw []byte) (*BandHaltOutsideWindow, error) {
+	out := new(BandHaltOutsideWindow)
+	if err := band.abi.UnpackIntoInterface(out, "HaltOutsideWindow", raw); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -1102,6 +1226,54 @@ func BandInvalidSignatureErrorID() common.Hash {
 func (band *Band) UnpackInvalidSignatureError(raw []byte) (*BandInvalidSignature, error) {
 	out := new(BandInvalidSignature)
 	if err := band.abi.UnpackIntoInterface(out, "InvalidSignature", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// BandInvalidToken represents a InvalidToken error raised by the Band contract.
+type BandInvalidToken struct {
+	Token common.Address
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error InvalidToken(address token)
+func BandInvalidTokenErrorID() common.Hash {
+	return common.HexToHash("0x961c9a4f74d4e632663c98ff08df58a4a4cfef4336b18bb01466eddc3157fb75")
+}
+
+// UnpackInvalidTokenError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error InvalidToken(address token)
+func (band *Band) UnpackInvalidTokenError(raw []byte) (*BandInvalidToken, error) {
+	out := new(BandInvalidToken)
+	if err := band.abi.UnpackIntoInterface(out, "InvalidToken", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// BandNoToken represents a NoToken error raised by the Band contract.
+type BandNoToken struct {
+	Symbol [32]byte
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error NoToken(bytes32 symbol)
+func BandNoTokenErrorID() common.Hash {
+	return common.HexToHash("0x0f07102b7dc7fd42513e229a900bf63e04b5090f539f9dbb9102cdacb271bb11")
+}
+
+// UnpackNoTokenError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error NoToken(bytes32 symbol)
+func (band *Band) UnpackNoTokenError(raw []byte) (*BandNoToken, error) {
+	out := new(BandNoToken)
+	if err := band.abi.UnpackIntoInterface(out, "NoToken", raw); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -1249,6 +1421,30 @@ func BandTooLargeValueByteSizeErrorID() common.Hash {
 func (band *Band) UnpackTooLargeValueByteSizeError(raw []byte) (*BandTooLargeValueByteSize, error) {
 	out := new(BandTooLargeValueByteSize)
 	if err := band.abi.UnpackIntoInterface(out, "TooLargeValueByteSize", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// BandUnknownAsset represents a UnknownAsset error raised by the Band contract.
+type BandUnknownAsset struct {
+	Symbol [32]byte
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error UnknownAsset(bytes32 symbol)
+func BandUnknownAssetErrorID() common.Hash {
+	return common.HexToHash("0x1059be3ed9f1c1f061f09edf206f56e7c80b74fd01671cbec1b3788a1f49417e")
+}
+
+// UnpackUnknownAssetError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error UnknownAsset(bytes32 symbol)
+func (band *Band) UnpackUnknownAssetError(raw []byte) (*BandUnknownAsset, error) {
+	out := new(BandUnknownAsset)
+	if err := band.abi.UnpackIntoInterface(out, "UnknownAsset", raw); err != nil {
 		return nil, err
 	}
 	return out, nil

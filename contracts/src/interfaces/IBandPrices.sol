@@ -3,9 +3,9 @@ pragma solidity 0.8.37;
 
 import {IBand} from "./IBand.sol";
 
-/// @title Tapehouse band, as a RedStone relayer calls it
-/// @notice The band's reads, its events, its halt signer, its price writes from signed RedStone data packages, and the
-/// errors of a payload it refuses.
+/// @title Tapehouse band, as a RedStone relayer and a keeper call it
+/// @notice The band's reads, its events, its halt signer, its price writes from signed RedStone data packages, its
+/// signed halts and multiplier syncs, and the errors of each.
 interface IBandPrices is IBand {
     /// @notice `writePrices` stored `value`, the median of `feedId`'s signed package of `packageTimestampMs`.
     event PriceWritten(bytes32 indexed feedId, uint256 value, uint64 packageTimestampMs);
@@ -55,6 +55,16 @@ interface IBandPrices is IBand {
     error PackageNotNewer(bytes32 feedId, uint64 storedTimestampMs, uint64 packageTimestampMs);
     /// @notice The three market-status feeds are written together or not at all.
     error IncompleteStatus();
+    /// @notice The band prices no asset `symbol`.
+    error UnknownAsset(bytes32 symbol);
+    /// @notice `symbol` has no Stock Token.
+    error NoToken(bytes32 symbol);
+    /// @notice The Stock Token's multipliers cannot be read.
+    error InvalidToken(address token);
+    /// @notice A halt message must be issued no later than now, expire after now and span at most an hour.
+    error HaltOutsideWindow(uint64 issuedAt, uint64 expiresAt, uint64 blockTimestamp);
+    /// @notice The band already stores a halt message of `symbol` issued at `storedIssuedAt`, at least as new.
+    error HaltNotNewer(bytes32 symbol, uint64 storedIssuedAt, uint64 issuedAt);
 
     /// @notice Verifies the signed RedStone data packages in `payload` for `feedIds`, stores each feed's median value
     /// and returns the values. Anyone may call it.
@@ -63,6 +73,18 @@ interface IBandPrices is IBand {
     /// @notice The stored value of `feedId`, its package's timestamp in milliseconds, and the block timestamp it was
     /// written at. All zero for a feed never written.
     function price(bytes32 feedId) external view returns (uint256 value, uint64 packageTimestampMs, uint64 writtenAt);
+
+    /// @notice Writes a trading halt of `symbol` signed by the halt signer as EIP-712
+    /// `HaltState(bytes32 symbol,bool halted,uint64 issuedAt,uint64 expiresAt)` under the domain "Tapehouse Band",
+    /// version "1", of this band: `halted` holds the asset halted until `expiresAt`, otherwise the halt is lifted. Anyone
+    /// may call it.
+    function writeHalt(bytes32 symbol, bool halted, uint64 issuedAt, uint64 expiresAt, bytes calldata signature)
+        external;
+
+    /// @notice Confirms a material multiplier change of `symbol`'s Stock Token past its step once a Chainlink round
+    /// that started at or after it falls inside the band of the 24/7 leg alone, then records the token's latest change.
+    /// Anyone may call it. Returns the status of the change in force, as `corporateAction` reports it.
+    function syncMultiplier(bytes32 symbol) external returns (uint8);
 
     /// @notice The address whose signed trading halts the band accepts: the one input it takes on Tapehouse's own
     /// signature.

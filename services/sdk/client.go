@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-// Package sdk reads Tapehouse's price band, its feeds, the margin accounts, the baskets, the short positions, the
-// Morpho oracles and the gap cover, and packs their transactions, over go-ethereum bindings generated from the
-// contracts' ABIs. Addresses come from a chain's registry, deployments/<chainId>.json, read at runtime.
+// Package sdk reads Tapehouse's price band, its feeds, the margin accounts, the liquidator, the gap backstop, the
+// reopening auction, the stock lending vaults, the baskets, the short positions, the Morpho oracles and the gap cover,
+// and packs their transactions, over go-ethereum bindings generated from the contracts' ABIs. Addresses come from a
+// chain's registry, deployments/<chainId>.json, read at runtime.
 package sdk
 
 import (
@@ -16,6 +17,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/aggregator"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocktoken"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/usdg"
 )
 
 // Tx is a transaction to sign and send: its recipient and calldata.
@@ -60,6 +63,41 @@ func (c *Client) TokenPrice(opts *bind.CallOpts, feed TokenPriceFeed) (Round, er
 // SharePrice reads the latest round of a Chainlink feed that prices the share.
 func (c *Client) SharePrice(opts *bind.CallOpts, feed SharePriceFeed) (Round, error) {
 	return c.latestRound(opts, feed.Address)
+}
+
+// RoundData reads round roundID of a Chainlink feed.
+func (c *Client) RoundData(opts *bind.CallOpts, feed common.Address, roundID *big.Int) (Round, error) {
+	if err := present(roundID); err != nil {
+		return Round{}, err
+	}
+	binding := aggregator.NewAggregator()
+	out, err := read(c, opts, target{address: feed}, binding.UnpackGetRoundData)(binding.TryPackGetRoundData(roundID))
+	return Round{out.RoundId, out.Answer, out.StartedAt, out.UpdatedAt, out.AnsweredInRound}, err
+}
+
+// LatestRound reads the latest round of a Chainlink feed.
+func (c *Client) LatestRound(opts *bind.CallOpts, feed common.Address) (Round, error) {
+	return c.latestRound(opts, feed)
+}
+
+// BalanceOf reads holder's balance of an ERC-20 token: USDG, WETH, a Stock Token or a basket's shares.
+func (c *Client) BalanceOf(opts *bind.CallOpts, token, holder common.Address) (*big.Int, error) {
+	binding := usdg.NewUsdg()
+	return read(c, opts, target{address: token}, binding.UnpackBalanceOf)(binding.TryPackBalanceOf(holder))
+}
+
+// Paused reads whether a Stock Token's transfers are paused, by the issuer's own pause or its registry's: frozen.
+func (c *Client) Paused(opts *bind.CallOpts, token common.Address) (bool, error) {
+	binding := stocktoken.NewStockToken()
+	return read(c, opts, target{address: token}, binding.UnpackPaused)(binding.TryPackPaused())
+}
+
+// Approve lets spender take amount of the sender's token.
+func (c *Client) Approve(token, spender common.Address, amount *big.Int) (Tx, error) {
+	if err := present(amount); err != nil {
+		return Tx{}, err
+	}
+	return target{address: token}.tx(usdg.NewUsdg().TryPackApprove(spender, amount))
 }
 
 func (c *Client) latestRound(opts *bind.CallOpts, feed common.Address) (Round, error) {

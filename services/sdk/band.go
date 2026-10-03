@@ -4,11 +4,14 @@ package sdk
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/v2"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/band"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/bandfeed"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocktoken"
 )
 
 // PackageSource supplies signed RedStone data packages: the integrator's own gateway client, cache or relay. Payload
@@ -90,6 +93,77 @@ func (b *Band) WritePrices(ctx context.Context, source PackageSource, feedIDs []
 		return Tx{}, err
 	}
 	return b.tx(b.band.TryPackWritePrices(ids, payload))
+}
+
+// Asset reads asset's Chainlink feed, RedStone feed ID, index feed ID and Stock Token; all zero for an asset the band
+// does not price.
+func (b *Band) Asset(opts *bind.CallOpts, asset string) (band.AssetOutput, error) {
+	symbol, err := ToBytes32(asset)
+	return read(b.c, opts, b.with(err), b.band.UnpackAsset)(b.band.TryPackAsset(symbol))
+}
+
+// CorporateAction reads the multiplier change of asset's Stock Token as it affects the band now: its status (0 none,
+// 1 scheduled, 2 not yet confirmed by Chainlink), when it takes effect, and the multipliers before and after.
+func (b *Band) CorporateAction(opts *bind.CallOpts, asset string) (band.CorporateActionOutput, error) {
+	symbol, err := ToBytes32(asset)
+	return read(b.c, opts, b.with(err), b.band.UnpackCorporateAction)(b.band.TryPackCorporateAction(symbol))
+}
+
+// Terms are a Stock Token's multiplier terms as ERC-8056 reports them: its multiplier now, the new one and when it
+// takes effect, in seconds, and whether its issuer has paused its oracle.
+type Terms struct {
+	Multiplier    *big.Int
+	NewMultiplier *big.Int
+	EffectiveAt   *big.Int
+	OraclePaused  bool
+}
+
+// Terms reads the multiplier terms of the Stock Token the band names for asset, at opts' block, or at the latest block
+// where opts names none.
+func (b *Band) Terms(opts *bind.CallOpts, asset string) (Terms, error) {
+	pinned, err := b.c.pin(opts)
+	if err != nil {
+		return Terms{}, err
+	}
+	named, err := b.Asset(pinned, asset)
+	if err != nil {
+		return Terms{}, err
+	}
+	if named.Token == (common.Address{}) {
+		return Terms{}, fmt.Errorf("the band names no Stock Token for %s", asset)
+	}
+	token, binding := target{address: named.Token}, stocktoken.NewStockToken()
+	var terms Terms
+	if terms.Multiplier, err = read(b.c, pinned, token, binding.UnpackUiMultiplier)(binding.TryPackUiMultiplier()); err != nil {
+		return Terms{}, err
+	}
+	if terms.NewMultiplier, err = read(b.c, pinned, token, binding.UnpackNewUIMultiplier)(binding.TryPackNewUIMultiplier()); err != nil {
+		return Terms{}, err
+	}
+	if terms.EffectiveAt, err = read(b.c, pinned, token, binding.UnpackEffectiveAt)(binding.TryPackEffectiveAt()); err != nil {
+		return Terms{}, err
+	}
+	terms.OraclePaused, err = read(b.c, pinned, token, binding.UnpackOraclePaused)(binding.TryPackOraclePaused())
+	return terms, err
+}
+
+// HaltSigner reads the address whose signed trading halts the band accepts.
+func (b *Band) HaltSigner(opts *bind.CallOpts) (common.Address, error) {
+	return read(b.c, opts, b.target, b.band.UnpackHaltSigner)(b.band.TryPackHaltSigner())
+}
+
+// WriteHalt packs the band's writeHalt of asset: a halt the halt signer signed, issued and expiring at the times given
+// in seconds, or its lift. Anyone may send it.
+func (b *Band) WriteHalt(asset string, halted bool, issuedAt, expiresAt uint64, signature []byte) (Tx, error) {
+	symbol, err := ToBytes32(asset)
+	return b.with(err).tx(b.band.TryPackWriteHalt(symbol, halted, issuedAt, expiresAt, signature))
+}
+
+// SyncMultiplier packs the band's syncMultiplier of asset, which records its Stock Token's multiplier change and
+// confirms a material one once Chainlink prices the new terms. Anyone may send it.
+func (b *Band) SyncMultiplier(asset string) (Tx, error) {
+	symbol, err := ToBytes32(asset)
+	return b.with(err).tx(b.band.TryPackSyncMultiplier(symbol))
 }
 
 // LatestRound reads the low side of asset's band from its BandFeed, as Chainlink's latestRoundData: its round and

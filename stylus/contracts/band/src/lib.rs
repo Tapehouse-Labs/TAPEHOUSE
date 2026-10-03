@@ -2471,4 +2471,55 @@ mod tests {
             events
         );
     }
+
+    #[test]
+    fn the_sdks_interface_declares_every_error_of_a_price_write_a_halt_and_a_multiplier_sync() {
+        use crate::error::{
+            CalldataOverOrUnderFlow, DataTimestampCannotBeZero, HaltNotNewer, HaltOutsideWindow,
+            IncompleteStatus, IncorrectUnsignedMetadataSize, InsufficientNumberOfUniqueSigners,
+            InvalidSignature, TimestampFromTooLongFuture, TimestampIsTooOld, TimestampsMustBeEqual,
+            TooLargeValueByteSize,
+        };
+        use stylus_sdk::alloy_sol_types::SolError;
+        let abi: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../crates/sdk/abi/Band.json")).unwrap();
+        let mut declared: Vec<String> = abi
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|item| item["type"] == "error")
+            .map(|error| {
+                let types: Vec<&str> = error["inputs"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|input| input["type"].as_str().unwrap())
+                    .collect();
+                format!("{}({})", error["name"].as_str().unwrap(), types.join(","))
+            })
+            .collect();
+        declared.sort();
+        let mut returned = vec![
+            CalldataMustHaveValidPayload::SIGNATURE,
+            CalldataOverOrUnderFlow::SIGNATURE,
+            IncorrectUnsignedMetadataSize::SIGNATURE,
+            InvalidSignature::SIGNATURE,
+            SignerNotAuthorised::SIGNATURE,
+            TooLargeValueByteSize::SIGNATURE,
+            DataTimestampCannotBeZero::SIGNATURE,
+            TimestampsMustBeEqual::SIGNATURE,
+            InsufficientNumberOfUniqueSigners::SIGNATURE,
+            TimestampFromTooLongFuture::SIGNATURE,
+            TimestampIsTooOld::SIGNATURE,
+            PackageNotNewer::SIGNATURE,
+            IncompleteStatus::SIGNATURE,
+            UnknownAsset::SIGNATURE,
+            NoToken::SIGNATURE,
+            InvalidToken::SIGNATURE,
+            HaltOutsideWindow::SIGNATURE,
+            HaltNotNewer::SIGNATURE,
+        ];
+        returned.sort();
+        assert_eq!(declared, returned);
+    }
 }

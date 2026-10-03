@@ -60,7 +60,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	check-toolchains check-node check-foundry check-slither check-reuse check-stylus check-docker submodules \
 	check-go check-golangci-lint check-rust check-uv \
 	build-apps test-apps lint-apps build-services test-services lint-services build-crates test-crates lint-crates \
-	bindings check-bindings test-sdks-devnode test-mcp-devnode test-indexer-devnode run-indexer backtest test-backtest-devnode \
+	bindings check-bindings test-sdks-devnode test-mcp-devnode test-indexer-devnode run-indexer backtest test-backtest-devnode test-keeper-devnode run-keeper \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
@@ -432,6 +432,20 @@ test-indexer-devnode: export TAPEHOUSE_RPC_URL := $(DEVNODE_RPC_URL)
 test-indexer-devnode: export TAPEHOUSE_DEPLOYMENTS := $(abspath stylus/target/devnode-registry.json)
 test-indexer-devnode: check-go
 	cd services && go test -tags devnode -count=1 -v -run TestTheIndexerServesTheDevNodesEventsAndViews ./internal/app/
+
+test-keeper-devnode: export PRIVATE_KEY := $(DEVNODE_KEY)
+test-keeper-devnode: export TAPEHOUSE_RPC_URL := $(DEVNODE_RPC_URL)
+test-keeper-devnode: export TAPEHOUSE_DEPLOYMENTS := $(abspath stylus/target/devnode-registry.json)
+test-keeper-devnode: check-go
+	cd services && go test -tags devnode -count=1 -v -timeout 20m -run TestTheKeepersRunOnTheDevNode ./internal/keeper/
+
+run-keeper: export TAPEHOUSE_RPC_URL = $(RPC_URL_$(CHAIN))
+run-keeper: export TAPEHOUSE_DEPLOYMENTS = $(abspath $(or $(REGISTRY),deployments/$(CHAIN).json))
+run-keeper: check-go
+	@case "$(CHAIN)" in 4663|46630|42161|412346) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
+		{ echo "Usage: make run-keeper CHAIN=<4663|46630|42161|412346> [REGISTRY=<file>], with the chain's RPC URL and the"; \
+		  echo "keeper's key set: TAPEHOUSE_KEEPER_KEYSTORE and TAPEHOUSE_KEEPER_PASSWORD_FILE, or TAPEHOUSE_KEEPER_KEY"; exit 1; }
+	cd services && go run ./cmd/keeper
 
 run-indexer: export TAPEHOUSE_RPC_URL = $(RPC_URL_$(CHAIN))
 run-indexer: export TAPEHOUSE_DEPLOYMENTS = $(abspath $(or $(REGISTRY),deployments/$(CHAIN).json))

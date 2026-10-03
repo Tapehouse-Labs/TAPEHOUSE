@@ -44,8 +44,8 @@ type CoverQuote struct {
 }
 
 // Series is an asset's series over one closure: the notional covered, where it stands, its reference and reopening
-// prices in USD with 8 decimals once settled, whether it settled on the band's median centre, and its reopen in
-// milliseconds, zero while not recorded.
+// prices in USD with 8 decimals once settled, whether it settled on the band's median centre, its reopen in
+// milliseconds, zero while not recorded, and the slots its window moved because the band could not vouch for the asset.
 type Series struct {
 	Notional       *big.Int
 	Status         SeriesStatus
@@ -53,6 +53,7 @@ type Series struct {
 	Price          uint64
 	Flagged        bool
 	ReopenMs       *big.Int
+	Shift          uint16
 }
 
 // PricingGap is the weekend gap the cover prices an asset at, in millionths, and the realised move of the trading week
@@ -131,6 +132,13 @@ func (g *GapCover) Settle(asset string, closesMs uint64, referenceRound, lastRou
 		return Tx{}, err
 	}
 	return to.tx(g.cover.TryPackSettle(symbol, closesMs, referenceRound, lastRound))
+}
+
+// Void voids asset's series over the closure from closesMs once no one has settled it within a week of its close.
+// Anyone may.
+func (g *GapCover) Void(asset string, closesMs uint64) (Tx, error) {
+	to, symbol := g.of(asset)
+	return to.tx(g.cover.TryPackVoid(symbol, closesMs))
 }
 
 // Release credits cover id's payout or refund to its holder once its series has settled or is void. Anyone may.
@@ -214,7 +222,25 @@ func (g *GapCover) Series(opts *bind.CallOpts, asset string, closesMs uint64) (S
 	if err != nil {
 		return Series{}, err
 	}
-	return Series{out.Notional, SeriesStatus(out.Status), out.ReferencePrice, out.Price, out.Flagged, reopen}, nil
+	return Series{out.Notional, SeriesStatus(out.Status), out.ReferencePrice, out.Price, out.Flagged, reopen, out.Shift}, nil
+}
+
+// Feed reads the Chainlink feed that settles asset's series; zero where it may not be covered.
+func (g *GapCover) Feed(opts *bind.CallOpts, asset string) (common.Address, error) {
+	to, symbol := g.of(asset)
+	return read(g.c, opts, to, g.cover.UnpackFeed)(g.cover.TryPackFeed(symbol))
+}
+
+// RegularHours reads whether the cover's Chainlink feeds follow NYSE regular hours, so that its sales end at the
+// regular close and its series reopen at the regular open.
+func (g *GapCover) RegularHours(opts *bind.CallOpts) (bool, error) {
+	return read(g.c, opts, g.target, g.cover.UnpackRegularHours)(g.cover.TryPackRegularHours())
+}
+
+// ReopenOf reads when the closure keyed by closesMs reopens, in milliseconds: the recorded 24/5 reopen, or the regular
+// open after it where the feeds follow regular hours; zero while not recorded.
+func (g *GapCover) ReopenOf(opts *bind.CallOpts, closesMs uint64) (*big.Int, error) {
+	return read(g.c, opts, g.target, g.cover.UnpackReopenOf)(g.cover.TryPackReopenOf(closesMs))
 }
 
 // Cover reads cover id: its holder, closure, asset's symbol, layer and premium; false once released.

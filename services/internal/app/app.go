@@ -23,6 +23,7 @@ import (
 	"github.com/tapehouse/tapehouse/services/internal/api"
 	"github.com/tapehouse/tapehouse/services/internal/catalog"
 	"github.com/tapehouse/tapehouse/services/internal/indexer"
+	"github.com/tapehouse/tapehouse/services/internal/redact"
 	"github.com/tapehouse/tapehouse/services/internal/redstone"
 	"github.com/tapehouse/tapehouse/services/internal/store"
 	"github.com/tapehouse/tapehouse/services/sdk"
@@ -99,9 +100,9 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 // Run indexes the registry's chain and serves the API until ctx ends. ready, where set, is called with the API's
 // address once it listens. Neither its logs nor its error show the RPC URL, which may carry a key.
 func Run(ctx context.Context, cfg Config, log *slog.Logger, ready func(net.Addr)) error {
-	log = slog.New(redacting{log.Handler(), cfg.RPCURL})
+	log = slog.New(redact.Handler(log.Handler(), cfg.RPCURL))
 	if err := run(ctx, cfg, log, ready); err != nil {
-		return errors.New(redact(err.Error(), cfg.RPCURL))
+		return errors.New(redact.String(err.Error(), cfg.RPCURL))
 	}
 	return nil
 }
@@ -169,44 +170,6 @@ func run(ctx context.Context, cfg Config, log *slog.Logger, ready func(net.Addr)
 		return err
 	}
 	return nil
-}
-
-// redacting is a log handler that writes the RPC URL as "the RPC" wherever a message or an attribute carries it.
-type redacting struct {
-	slog.Handler
-	secret string
-}
-
-func (h redacting) Handle(ctx context.Context, record slog.Record) error {
-	out := slog.NewRecord(record.Time, record.Level, redact(record.Message, h.secret), record.PC)
-	record.Attrs(func(attr slog.Attr) bool {
-		out.AddAttrs(h.attr(attr))
-		return true
-	})
-	return h.Handler.Handle(ctx, out)
-}
-
-func (h redacting) WithAttrs(attrs []slog.Attr) slog.Handler {
-	redacted := make([]slog.Attr, len(attrs))
-	for i, attr := range attrs {
-		redacted[i] = h.attr(attr)
-	}
-	return redacting{h.Handler.WithAttrs(redacted), h.secret}
-}
-
-func (h redacting) attr(attr slog.Attr) slog.Attr {
-	return slog.String(attr.Key, redact(attr.Value.Resolve().String(), h.secret))
-}
-
-func (h redacting) WithGroup(name string) slog.Handler {
-	return redacting{h.Handler.WithGroup(name), h.secret}
-}
-
-func redact(text, secret string) string {
-	if secret == "" {
-		return text
-	}
-	return strings.ReplaceAll(text, secret, "the RPC")
 }
 
 // throttled is the RPC client, holding the indexer's and the API's requests together under the RPC's rate.

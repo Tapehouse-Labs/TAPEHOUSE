@@ -171,3 +171,71 @@ func (a *Accounts) LiquidationPrice(opts *bind.CallOpts, account common.Address,
 	return read(a.c, opts, a.with(err), a.accounts.UnpackLiquidationPrice)(
 		a.accounts.TryPackLiquidationPrice(account, position, symbol, borrowing))
 }
+
+// Stocks reads the Stock Tokens the accounts take: each asset's name and token, in the accounts' order.
+func (a *Accounts) Stocks(opts *bind.CallOpts) (Components, error) {
+	out, err := read(a.c, opts, a.target, a.accounts.UnpackStocks)(a.accounts.TryPackStocks())
+	assets := make([]string, len(out.Symbols))
+	for i, symbol := range out.Symbols {
+		assets[i] = assetName(symbol)
+	}
+	return Components{assets, out.Tokens}, err
+}
+
+// Holding reads the accounts' holding of asset: the units the positions hold, each worth scale / 10^18 of a token, and
+// the most they may hold.
+func (a *Accounts) Holding(opts *bind.CallOpts, asset string) (marginaccounts.HoldingOutput, error) {
+	symbol, err := ToBytes32(asset)
+	return read(a.c, opts, a.with(err), a.accounts.UnpackHolding)(a.accounts.TryPackHolding(symbol))
+}
+
+// Closure reads the closure the premium accrues over and when it last accrued, in milliseconds.
+func (a *Accounts) Closure(opts *bind.CallOpts) (marginaccounts.ClosureOutput, error) {
+	return read(a.c, opts, a.target, a.accounts.UnpackClosure)(a.accounts.TryPackClosure())
+}
+
+// BackstopPremium reads the premium set aside for the backstop and not yet claimed, in USDG.
+func (a *Accounts) BackstopPremium(opts *bind.CallOpts) (*big.Int, error) {
+	return read(a.c, opts, a.target, a.accounts.UnpackBackstopPremium)(a.accounts.TryPackBackstopPremium())
+}
+
+// HasBackstop reports whether the accounts have a backstop, which alone may then write off a position.
+func (a *Accounts) HasBackstop(opts *bind.CallOpts) (bool, error) {
+	backstop, err := read(a.c, opts, a.target, a.accounts.UnpackBackstop)(a.accounts.TryPackBackstop())
+	return backstop != (common.Address{}), err
+}
+
+// Lent reads what account's position has lent of token through its lending vault, its fee included.
+func (a *Accounts) Lent(opts *bind.CallOpts, account common.Address, position [32]byte, token common.Address) (*big.Int, error) {
+	return read(a.c, opts, a.target, a.accounts.UnpackLent)(a.accounts.TryPackLent(account, position, token))
+}
+
+// Sellable reads what the liquidator may take of token from account's position now: what it holds and what its
+// lending vault can return of what it lent.
+func (a *Accounts) Sellable(opts *bind.CallOpts, account common.Address, position [32]byte, token common.Address) (*big.Int, error) {
+	return read(a.c, opts, a.target, a.accounts.UnpackSellable)(a.accounts.TryPackSellable(account, position, token))
+}
+
+// AccruePremium accrues the premium and records the closure the band's session shows. Anyone may.
+func (a *Accounts) AccruePremium() (Tx, error) {
+	return a.tx(a.accounts.TryPackAccruePremium())
+}
+
+// Sync brings every position's holding of asset down to what the accounts hold after a burn, and syncs its lending
+// vault. Anyone may.
+func (a *Accounts) Sync(asset string) (Tx, error) {
+	symbol, err := ToBytes32(asset)
+	return a.with(err).tx(a.accounts.TryPackSync(symbol))
+}
+
+// Clear clears account's holding of asset in position once a burn has left it worth less than a raw unit. Anyone may.
+func (a *Accounts) Clear(account common.Address, position [32]byte, asset string) (Tx, error) {
+	symbol, err := ToBytes32(asset)
+	return a.with(err).tx(a.accounts.TryPackClear(account, position, symbol))
+}
+
+// Settle takes what the lending vault holds for account's position's recall of token, if it is next in turn, or gives
+// up its recalls once nothing it lent is worth anything. Anyone may.
+func (a *Accounts) Settle(account common.Address, position [32]byte, token common.Address) (Tx, error) {
+	return a.tx(a.accounts.TryPackSettle(account, position, token))
+}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"os"
 	"strings"
@@ -21,11 +22,13 @@ import (
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/band"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/bandfeed"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/basket"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/gapbackstop"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/gapcover"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/liquidator"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/marginaccounts"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/morphobandoracle"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/quoterv2"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/reopeningauction"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/shortpositions"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocklendingvault"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocktoken"
@@ -892,6 +895,172 @@ func TestACoverPaysTheFallBeyondItsDeductibleUpToItsLimit(t *testing.T) {
 	early, ok := sdk.DecodeRevertData(encodeError(t, &gapcover.GapCoverMetaData, "TooEarlyToMeasure", big.NewInt(1_790_899_200_000)))
 	if !ok || early.Error() != "TooEarlyToMeasure(1790899200000)" {
 		t.Fatalf("TooEarlyToMeasure: %v", early)
+	}
+}
+
+func TestTheKeepersCallsGoToTheRegistrysContracts(t *testing.T) {
+	d := registry(t, "46630")
+	d.StockLending = map[string]common.Address{"SPY": bob}
+	d.Baskets = map[string]common.Address{"PAIR": alice}
+	d.BandFeeds = map[string]common.Address{"SPY": alice}
+	client := sdk.NewClient(nil, d)
+	spy := bytes32(t, "SPY")
+	for _, c := range []struct {
+		pack     func() (sdk.Tx, error)
+		to       common.Address
+		metadata *bind.MetaData
+		method   string
+		args     []any
+	}{
+		{func() (sdk.Tx, error) { return client.Liquidator().Start(alice, sdk.Cross) }, d.Tapehouse["Liquidator"], &liquidator.LiquidatorMetaData, "start", []any{alice, sdk.Cross}},
+		{func() (sdk.Tx, error) { return client.Liquidator().Stop(alice, spy) }, d.Tapehouse["Liquidator"], &liquidator.LiquidatorMetaData, "stop", []any{alice, spy}},
+		{func() (sdk.Tx, error) {
+			return client.Liquidator().Buy(alice, sdk.Cross, bob, big.NewInt(5), big.NewInt(7), alice)
+		}, d.Tapehouse["Liquidator"], &liquidator.LiquidatorMetaData, "buy", []any{alice, sdk.Cross, bob, big.NewInt(5), big.NewInt(7), alice}},
+		{func() (sdk.Tx, error) { return client.Liquidator().SettleCash(alice, sdk.Cross) }, d.Tapehouse["Liquidator"], &liquidator.LiquidatorMetaData, "settleCash", []any{alice, sdk.Cross}},
+		{func() (sdk.Tx, error) { return client.Liquidator().WriteOff(alice, sdk.Cross) }, d.Tapehouse["Liquidator"], &liquidator.LiquidatorMetaData, "writeOff", []any{alice, sdk.Cross}},
+		{func() (sdk.Tx, error) { return client.Liquidator().Recall(alice, sdk.Cross, bob) }, d.Tapehouse["Liquidator"], &liquidator.LiquidatorMetaData, "recall", []any{alice, sdk.Cross, bob}},
+		{func() (sdk.Tx, error) { return client.Backstop().Claim() }, d.Tapehouse["GapBackstop"], &gapbackstop.GapBackstopMetaData, "claim", []any{}},
+		{func() (sdk.Tx, error) { return client.Backstop().Cover(alice, sdk.Cross) }, d.Tapehouse["GapBackstop"], &gapbackstop.GapBackstopMetaData, "cover", []any{alice, sdk.Cross}},
+		{func() (sdk.Tx, error) { return client.ReopeningAuction().Enroll(alice, sdk.Cross, "SPY") }, d.Tapehouse["ReopeningAuction"], &reopeningauction.ReopeningAuctionMetaData, "enroll", []any{alice, sdk.Cross, spy}},
+		{func() (sdk.Tx, error) { return client.ReopeningAuction().Clear("SPY", 1790775000000, big.NewInt(9)) }, d.Tapehouse["ReopeningAuction"], &reopeningauction.ReopeningAuctionMetaData, "clear", []any{spy, uint64(1790775000000), big.NewInt(9)}},
+		{func() (sdk.Tx, error) { return client.ReopeningAuction().Claim("SPY", 1790775000000, big.NewInt(1)) }, d.Tapehouse["ReopeningAuction"], &reopeningauction.ReopeningAuctionMetaData, "claim", []any{spy, uint64(1790775000000), big.NewInt(1)}},
+		{func() (sdk.Tx, error) { return client.ReopeningAuction().Forfeit("SPY", 1790775000000, spy) }, d.Tapehouse["ReopeningAuction"], &reopeningauction.ReopeningAuctionMetaData, "forfeit", []any{spy, uint64(1790775000000), spy}},
+		{func() (sdk.Tx, error) { return client.Accounts().AccruePremium() }, d.Tapehouse["MarginAccounts"], &marginaccounts.MarginAccountsMetaData, "accruePremium", []any{}},
+		{func() (sdk.Tx, error) { return client.Accounts().Sync("SPY") }, d.Tapehouse["MarginAccounts"], &marginaccounts.MarginAccountsMetaData, "sync", []any{spy}},
+		{func() (sdk.Tx, error) { return client.Accounts().Clear(alice, sdk.Cross, "SPY") }, d.Tapehouse["MarginAccounts"], &marginaccounts.MarginAccountsMetaData, "clear", []any{alice, sdk.Cross, spy}},
+		{func() (sdk.Tx, error) { return client.Accounts().Settle(alice, sdk.Cross, bob) }, d.Tapehouse["MarginAccounts"], &marginaccounts.MarginAccountsMetaData, "settle", []any{alice, sdk.Cross, bob}},
+		{func() (sdk.Tx, error) { return client.LendingVault("SPY").BuyIn(3) }, bob, &stocklendingvault.StockLendingVaultMetaData, "buyIn", []any{big.NewInt(3)}},
+		{func() (sdk.Tx, error) { return client.Band().SyncMultiplier("SPY") }, d.Tapehouse["Band"], &band.BandMetaData, "syncMultiplier", []any{spy}},
+		{func() (sdk.Tx, error) {
+			return client.Band().WriteHalt("SPY", true, 1790775000, 1790775900, []byte{1, 2})
+		}, d.Tapehouse["Band"], &band.BandMetaData, "writeHalt", []any{spy, true, uint64(1790775000), uint64(1790775900), []byte{1, 2}}},
+		{func() (sdk.Tx, error) { return client.Band().Seal("SPY") }, alice, &bandfeed.BandFeedMetaData, "seal", []any{}},
+		{func() (sdk.Tx, error) { return client.GapCover().Void("SPY", 1790460000000) }, d.Tapehouse["GapCover"], &gapcover.GapCoverMetaData, "void", []any{spy, uint64(1790460000000)}},
+		{func() (sdk.Tx, error) {
+			return client.Basket("PAIR").Rebalance([]*big.Int{big.NewInt(2), big.NewInt(0)}, []*big.Int{big.NewInt(0), big.NewInt(1)}, bob)
+		}, alice, &basket.BasketMetaData, "rebalance", []any{[]*big.Int{big.NewInt(2), big.NewInt(0)}, []*big.Int{big.NewInt(0), big.NewInt(1)}, bob}},
+	} {
+		tx, err := c.pack()
+		if c.to == (common.Address{}) {
+			if err == nil || !strings.Contains(err.Error(), "the registry has no") {
+				t.Errorf("%s: %v", c.method, err)
+			}
+			continue
+		}
+		if err != nil || tx.To != c.to {
+			t.Errorf("%s: %v, %v", c.method, tx, err)
+			continue
+		}
+		if args := unpack(t, c.metadata, c.method, tx.Data); fmt.Sprint(args) != fmt.Sprint(c.args) {
+			t.Errorf("%s args %v, want %v", c.method, args, c.args)
+		}
+	}
+	if _, err := client.LendingVault("NVDA").BuyIn(1); err == nil || err.Error() != "the registry has no .tapehouse.StockLending.NVDA" {
+		t.Fatalf("a vault the registry does not name: %v", err)
+	}
+	if _, err := client.Liquidator().Buy(alice, sdk.Cross, bob, nil, big.NewInt(1), alice); err == nil {
+		t.Fatal("a nil amount packed")
+	}
+}
+
+func TestTheClearingPriceIsTheOneTheReopeningAuctionAccepts(t *testing.T) {
+	bid := func(quantity, price int64) reopeningauction.ReopeningAuctionBid {
+		return reopeningauction.ReopeningAuctionBid{Quantity: big.NewInt(quantity), Price: big.NewInt(price)}
+	}
+	for _, c := range []struct {
+		name   string
+		bids   []reopeningauction.ReopeningAuctionBid
+		supply int64
+		want   int64
+		ok     bool
+	}{
+		{"no bid clears at the floor", nil, 10, 90, true},
+		{"the highest price the bids at or above it take the supply at", []reopeningauction.ReopeningAuctionBid{bid(4, 120), bid(5, 110), bid(3, 100), bid(9, 95)}, 10, 100, true},
+		{"the bids above it may fill exactly", []reopeningauction.ReopeningAuctionBid{bid(4, 120), bid(6, 110), bid(3, 100)}, 10, 110, true},
+		{"several bids at one price", []reopeningauction.ReopeningAuctionBid{bid(2, 120), bid(4, 105), bid(5, 105), bid(1, 99)}, 10, 105, true},
+		{"undersubscribed clears at the lowest bid", []reopeningauction.ReopeningAuctionBid{bid(2, 120), bid(3, 101)}, 10, 101, true},
+		{"bids and no supply cannot clear", []reopeningauction.ReopeningAuctionBid{bid(2, 120)}, 0, 0, false},
+	} {
+		price, ok := sdk.ClearingPrice(c.bids, big.NewInt(c.supply), big.NewInt(90))
+		if ok != c.ok || (ok && price.Int64() != c.want) {
+			t.Errorf("%s: %v, %v; want %d", c.name, price, ok, c.want)
+		}
+	}
+}
+
+func TestTheBandsHaltAndMultiplierErrorsAreDecoded(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		args []any
+		want string
+	}{
+		{"HaltNotNewer", []any{bytes32(t, "NVDA"), uint64(1790775000), uint64(1790775000)}, "HaltNotNewer(0x4e56444100000000000000000000000000000000000000000000000000000000, 1790775000, 1790775000)"},
+		{"HaltOutsideWindow", []any{uint64(1), uint64(3602), uint64(1)}, "HaltOutsideWindow(1, 3602, 1)"},
+		{"NoToken", []any{bytes32(t, "TSLA")}, "NoToken(0x54534c4100000000000000000000000000000000000000000000000000000000)"},
+		{"UnknownAsset", []any{bytes32(t, "X")}, "UnknownAsset(0x5800000000000000000000000000000000000000000000000000000000000000)"},
+		{"PackageNotNewer", []any{bytes32(t, "X"), uint64(2), uint64(2)}, "PackageNotNewer(0x5800000000000000000000000000000000000000000000000000000000000000, 2, 2)"},
+	} {
+		revert, ok := sdk.DecodeRevertData(encodeError(t, &band.BandMetaData, c.name, c.args...))
+		if !ok || revert.Error() != c.want {
+			t.Errorf("%s: %v, want %s", c.name, revert, c.want)
+		}
+	}
+}
+
+type auctionChain struct {
+	bind.ContractBackend
+	t       *testing.T
+	started uint64
+	closed  bool
+	now     uint64
+	blocks  map[string]*big.Int
+}
+
+func (a *auctionChain) HeaderByNumber(_ context.Context, number *big.Int) (*types.Header, error) {
+	if number == nil {
+		number = big.NewInt(11)
+	}
+	return &types.Header{Number: number, Time: a.now}, nil
+}
+
+func (a *auctionChain) CallContract(_ context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error) {
+	parsed, _ := liquidator.LiquidatorMetaData.ParseABI()
+	method, err := parsed.MethodById(call.Data)
+	if err != nil {
+		a.t.Fatal(err)
+	}
+	a.blocks[method.Name] = block
+	switch method.Name {
+	case "auctions":
+		return method.Outputs.Pack(a.started, a.closed)
+	case "shortfall":
+		return method.Outputs.Pack(big.NewInt(-1), big.NewInt(2), true, false)
+	case "OPEN_AUCTION_LIFETIME":
+		return method.Outputs.Pack(big.NewInt(3600))
+	}
+	a.t.Fatalf("unexpected %s", method.Name)
+	return nil, nil
+}
+
+func TestAnAuctionRunsOnlyInTheMarketsStateAndWithinItsLifetime(t *testing.T) {
+	chain := &auctionChain{t: t, started: 1790775000, now: 1790778599, blocks: map[string]*big.Int{}}
+	liquidation := sdk.NewClient(chain, registry(t, "46630")).Liquidator()
+	running, err := liquidation.Running(&bind.CallOpts{}, alice, sdk.Cross)
+	if err != nil || !running || chain.blocks["auctions"].Int64() != 11 || chain.blocks["OPEN_AUCTION_LIFETIME"].Int64() != 11 {
+		t.Fatalf("an auction an hour old less a second: %v, %v, %v", running, err, chain.blocks)
+	}
+	chain.now = 1790778600
+	if running, err := liquidation.Running(&bind.CallOpts{}, alice, sdk.Cross); err != nil || running {
+		t.Fatalf("an auction past its lifetime runs: %v", err)
+	}
+	chain.now, chain.closed = 1790775001, true
+	if running, err := liquidation.Running(&bind.CallOpts{}, alice, sdk.Cross); err != nil || running {
+		t.Fatalf("an auction started closed runs while open: %v", err)
+	}
+	chain.started = 0
+	if running, err := liquidation.Running(&bind.CallOpts{}, alice, sdk.Cross); err != nil || running {
+		t.Fatalf("no auction runs: %v", err)
 	}
 }
 

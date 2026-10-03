@@ -50,6 +50,15 @@ func (b *Basket) Redeem(shares *big.Int, receiver, owner common.Address) (Tx, er
 	return b.tx(b.basket.TryPackRedeem(shares, receiver, owner))
 }
 
+// Rebalance takes assetsIn of the Stock Tokens from the sender and sends assetsOut to receiver, each in the basket's
+// order, moving each toward the target in effect. Anyone may.
+func (b *Basket) Rebalance(assetsIn, assetsOut []*big.Int, receiver common.Address) (Tx, error) {
+	if err := present(append(append([]*big.Int{}, assetsIn...), assetsOut...)...); err != nil {
+		return Tx{}, err
+	}
+	return b.tx(b.basket.TryPackRebalance(assetsIn, assetsOut, receiver))
+}
+
 // Components reads the assets the basket holds and their Stock Tokens.
 func (b *Basket) Components(opts *bind.CallOpts) (Components, error) {
 	out, err := read(b.c, opts, b.target, b.basket.UnpackComponents)(b.basket.TryPackComponents())
@@ -79,6 +88,11 @@ func (b *Basket) PreviewRedeem(opts *bind.CallOpts, shares *big.Int) ([]*big.Int
 // Target reads the target in effect: raw units of each Stock Token per share.
 func (b *Basket) Target(opts *bind.CallOpts) ([]*big.Int, error) {
 	return read(b.c, opts, b.target, b.basket.UnpackTarget)(b.basket.TryPackTarget())
+}
+
+// TotalSupply reads the basket's shares outstanding.
+func (b *Basket) TotalSupply(opts *bind.CallOpts) (*big.Int, error) {
+	return read(b.c, opts, b.target, b.basket.UnpackTotalSupply)(b.basket.TryPackTotalSupply())
 }
 
 // PendingTarget reads the target proposed and not yet in effect, and when it takes effect, in seconds; empty and zero
