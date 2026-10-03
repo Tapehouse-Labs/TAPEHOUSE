@@ -1,0 +1,46 @@
+/* SPDX-License-Identifier: MIT OR Apache-2.0 */
+html {
+  color-scheme: light dark;
+  scrollbar-color: var(--rule) var(--paper);
+  scrollbar-width: thin;
+}
+
+body {
+  background: var(--paper);
+  color: var(--text-body);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--navy-80);
+  color: var(--text-on-accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+a {
+  text-underline-offset: 0.22em;
+  text-decoration-thickness: 1px;
+}
+
+@layer components {
+/* Every figure that decides money goes through this class. */
+.num {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1, "case" 0, "zero" 0, "liga" 0, "calt" 0;
+  direction: ltr;
+  letter-spacing: 0.001rem;
+  min-width: 1ch;
+}
+
+.addr {
+  font-family: var(--font-mono);
+  font-feature-settings: "zero" 1;
+}
+}

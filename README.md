@@ -7,6 +7,8 @@ Portfolio margin for Stock Tokens on Robinhood Chain.
 ## Repository layout
 
 - `apps/landing` — the website at tapehouse.xyz (Next.js)
+- `apps/app` — the app (Next.js, wagmi)
+- `packages/brand` — the design tokens and base styles the landing and the app share
 - `contracts` — Solidity contracts (Foundry)
 - `stylus` — Stylus programs (Rust): `band`, the price band, and `margin`, the portfolio margin engine, with the code they share in `stylus/crates`
 - `deployments` — contract addresses per chain, one JSON file per chain ID
@@ -94,6 +96,7 @@ make test
 | `make deploy-contracts-devnode test-contracts-devnode` | Deploys the supply vault, the margin accounts, the liquidator, the gap backstop, the reopening auction, a stock lending vault for each Stock Token, the short positions, a Morpho oracle for each Stock Token, the basket `PAIR` of NVDA and SPY, the gap cover and the band's feeds to the dev node and checks loans, a liquidation, a cover, the auction's wiring, a loan and recall of SPY, a short of SPY, each oracle's price the basket margined as its Stock Tokens and SPY gap cover priced from the margin program's weekend gap through them against the band and margin programs |
 | `make test-sdks-devnode` | Runs each SDK's example against that deployment: SPY's band and feed, stale RedStone packages refused, a short of SPY sold and bought back by an address the account authorized, a share of the basket `PAIR` minted, deposited, read as its Stock Tokens and unwrapped, and SPY gap cover quoted and bought, or refused outside the sales |
 | `make test-mcp-devnode` | Drives the MCP server against that deployment with the official TypeScript client over Streamable HTTP and the official Python client over stdio: bands, Morpho oracles and the basket `PAIR` read, a short of SPY sold and bought back, a share of `PAIR` minted, deposited and unwrapped, and gap cover written and SPY cover bought, or refused with `SalesClosed` outside the sales, through calls the server prepares and the example signs |
+| `make test-app-devnode` | Builds the app on that deployment and drives it in Chromium, desktop and phone: every band and the session as the chain reports them, a browser wallet announced through EIP-6963 connecting, moved to the app's chain as it connects, moved off it and switched back, a declined connection explained and a disconnect, and axe's WCAG 2.2 AA checks in both themes. `CHROMIUM_PATH` names a Chromium to use instead of Playwright's |
 | `make test-indexer-devnode` | Indexes that deployment from its first block, checks every log `eth_getLogs` returns against the index, decoded as the bindings decode it, reads views, halts, Morpho oracles, debts and shorts against the SDK at the same blocks, writes the RedStone relay's packages through the band and receives them on the stream, rebuilds the index from the chain alone, and loads the API |
 | `make test-backtest-devnode` | Rebuilds the dev node's band from its `PriceWritten` and `Anchored` events and checks every variance, the session and every quote against the band's own views, before its first multiplier step |
 | `make run-indexer CHAIN=<id> [REGISTRY=<file>]` | Runs the indexer and its API on the chain's registry, with the chain's RPC URL from the table below |
@@ -664,6 +667,20 @@ make run-keeper CHAIN=42161
 - **Simulate, then send.** Each action is simulated from the keeper's address and sent only if it would succeed; a revert that means nothing is due, or someone did it first, sends nothing. One transaction is sent at a time, at the node's pending nonce, and awaited: a keeper that crashes and restarts, or one running beside another, repeats nothing.
 - **Keys.** The keeper's key from a keystore, `TAPEHOUSE_KEEPER_KEYSTORE`, and the file holding its password, `TAPEHOUSE_KEEPER_PASSWORD_FILE`; the halt signer's likewise with `TAPEHOUSE_HALT_KEYSTORE` and `TAPEHOUSE_HALT_PASSWORD_FILE`. A password is read only from its file, minus one trailing newline, and never from the environment itself, an argument, a log or an error; an unreadable or empty file is an error that names the variable. `TAPEHOUSE_KEEPER_KEY` and `TAPEHOUSE_HALT_KEY` take a hex key, for a dev node only. Without a halt key the halt keeper does nothing; with one that is not the band's halt signer it fails.
 - **Configuration from the environment.** `TAPEHOUSE_DEPLOYMENTS`; `TAPEHOUSE_RPC_URL`, then `TAPEHOUSE_RPC_FALLBACK_URLS`, separated by commas, which take over when an endpoint fails, answers an HTTP error or is over its rate, never on a revert; `TAPEHOUSE_RPC_RATE`, 20 a second unless set; `TAPEHOUSE_INDEXER_URL`, the indexer that names the positions, shorts, recalls, commitments and covers to look at; `TAPEHOUSE_KEEPERS`, the keepers to run, unless set those whose contracts the registry names; `TAPEHOUSE_HALTS_URL`; `TAPEHOUSE_KEEPER_BUY=true` to buy at an auction once its ask is at the band's low edge or ETH's price, and `TAPEHOUSE_KEEPER_REBALANCE=subsidise` to rebalance baskets the pools do not pay for; `REDSTONE_API_KEY` and `REDSTONE_BACKUP_API_KEY`. RPC URLs never appear in a log.
+
+## App
+
+`apps/app` is the app: it connects a browser wallet on the chain it is built for and shows every band live, with the session seal beside them.
+
+```bash
+pnpm --filter app dev                              # Robinhood Chain testnet
+TAPEHOUSE_CHAIN_ID=4663 pnpm --filter app build    # Robinhood Chain
+```
+
+- **The chain.** The app reads `deployments/<TAPEHOUSE_CHAIN_ID>.json`, 46630 unless set, or the registry file `TAPEHOUSE_REGISTRY` names, when it is built, through the SDK's `parseDeployments`; no address is written in its code. `TAPEHOUSE_RPC_URL` replaces the chain's public RPC, which the browser calls directly.
+- **Wallets.** Browser wallets as they announce themselves through EIP-6963, or the one at `window.ethereum`. A wallet on another chain is asked to switch as it connects, and again whenever it moves; a browser with no wallet is pointed to one. Reverts are named by the SDK's `decodeRevert`.
+- **Reads.** Every band through the SDK's `band.quote` and the session through `band.session`, every 15 seconds: a halted band reads as halted and an unknown session as unknown, never as a price.
+- **Design.** The landing's tokens, from `packages/brand`, in light and dark; `apps/app/DESIGN.md` describes the system.
 
 ## Backtest
 

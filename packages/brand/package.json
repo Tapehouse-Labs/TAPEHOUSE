@@ -1,0 +1,11 @@
+{
+  "name": "@tapehouse/brand",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tapehouse's design tokens and base styles, shared by the landing and the app.",
+  "license": "MIT OR Apache-2.0",
+  "exports": {
+    "./tokens.css": "./tokens.css",
+    "./base.css": "./base.css"
+  }
+}

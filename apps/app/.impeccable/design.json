@@ -1,0 +1,670 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-03T21:18:22+00:00",
+  "title": "Design System: Tapehouse App",
+  "extensions": {
+    "colorMeta": {
+      "registry-navy": {
+        "role": "primary",
+        "displayName": "Registry Navy",
+        "canonical": "#16326b",
+        "tonalRamp": [
+          "#0b1a3a",
+          "#0e2149",
+          "#16326b",
+          "#3d5795",
+          "#7c8fbf",
+          "#c2cce2",
+          "#e3e7f0",
+          "#f1f3f8"
+        ],
+        "cssVar": "--navy-80 / --accent"
+      },
+      "registry-navy-deep": {
+        "role": "primary",
+        "displayName": "Registry Navy Deep",
+        "canonical": "#0e2149",
+        "tonalRamp": [
+          "#0b1a3a",
+          "#0e2149",
+          "#16326b",
+          "#3d5795",
+          "#7c8fbf",
+          "#c2cce2",
+          "#e3e7f0",
+          "#f1f3f8"
+        ]
+      },
+      "navy-mist": {
+        "role": "primary",
+        "displayName": "Navy Mist",
+        "canonical": "#e3e7f0",
+        "tonalRamp": [
+          "#0b1a3a",
+          "#0e2149",
+          "#16326b",
+          "#3d5795",
+          "#7c8fbf",
+          "#c2cce2",
+          "#e3e7f0",
+          "#f1f3f8"
+        ]
+      },
+      "navy-haze": {
+        "role": "primary",
+        "displayName": "Navy Haze",
+        "canonical": "#c2cce2",
+        "tonalRamp": [
+          "#0b1a3a",
+          "#0e2149",
+          "#16326b",
+          "#3d5795",
+          "#7c8fbf",
+          "#c2cce2",
+          "#e3e7f0",
+          "#f1f3f8"
+        ]
+      },
+      "navy-slate": {
+        "role": "primary",
+        "displayName": "Navy Slate",
+        "canonical": "#7c8fbf",
+        "tonalRamp": [
+          "#0b1a3a",
+          "#0e2149",
+          "#16326b",
+          "#3d5795",
+          "#7c8fbf",
+          "#c2cce2",
+          "#e3e7f0",
+          "#f1f3f8"
+        ]
+      },
+      "navy-ink": {
+        "role": "primary",
+        "displayName": "Navy Ink",
+        "canonical": "#3d5795",
+        "tonalRamp": [
+          "#0b1a3a",
+          "#0e2149",
+          "#16326b",
+          "#3d5795",
+          "#7c8fbf",
+          "#c2cce2",
+          "#e3e7f0",
+          "#f1f3f8"
+        ]
+      },
+      "bone-paper": {
+        "role": "neutral",
+        "displayName": "Bone Paper",
+        "canonical": "#f5f2ec",
+        "tonalRamp": [
+          "oklch(15% 0.009 85)",
+          "oklch(26% 0.009 85)",
+          "oklch(38% 0.009 85)",
+          "oklch(49% 0.009 85)",
+          "oklch(61% 0.009 85)",
+          "oklch(72% 0.009 85)",
+          "oklch(84% 0.009 85)",
+          "oklch(95% 0.009 85)"
+        ]
+      },
+      "bone-paper-cool": {
+        "role": "neutral",
+        "displayName": "Bone Paper Cool",
+        "canonical": "#faf9f6",
+        "tonalRamp": [
+          "oklch(15% 0.004 91)",
+          "oklch(26% 0.004 91)",
+          "oklch(38% 0.004 91)",
+          "oklch(49% 0.004 91)",
+          "oklch(61% 0.004 91)",
+          "oklch(72% 0.004 91)",
+          "oklch(84% 0.004 91)",
+          "oklch(95% 0.004 91)"
+        ]
+      },
+      "panel-white": {
+        "role": "neutral",
+        "displayName": "Panel White",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "oklch(15% 0.000 90)",
+          "oklch(26% 0.000 90)",
+          "oklch(38% 0.000 90)",
+          "oklch(49% 0.000 90)",
+          "oklch(61% 0.000 90)",
+          "oklch(72% 0.000 90)",
+          "oklch(84% 0.000 90)",
+          "oklch(95% 0.000 90)"
+        ]
+      },
+      "sunk-linen": {
+        "role": "neutral",
+        "displayName": "Sunk Linen",
+        "canonical": "#ebe7de",
+        "tonalRamp": [
+          "oklch(15% 0.013 87)",
+          "oklch(26% 0.013 87)",
+          "oklch(38% 0.013 87)",
+          "oklch(49% 0.013 87)",
+          "oklch(61% 0.013 87)",
+          "oklch(72% 0.013 87)",
+          "oklch(84% 0.013 87)",
+          "oklch(95% 0.013 87)"
+        ]
+      },
+      "hairline-rule": {
+        "role": "neutral",
+        "displayName": "Hairline Rule",
+        "canonical": "#dcd6ca",
+        "tonalRamp": [
+          "oklch(15% 0.018 85)",
+          "oklch(26% 0.018 85)",
+          "oklch(38% 0.018 85)",
+          "oklch(49% 0.018 85)",
+          "oklch(61% 0.018 85)",
+          "oklch(72% 0.018 85)",
+          "oklch(84% 0.018 85)",
+          "oklch(95% 0.018 85)"
+        ]
+      },
+      "warm-ink": {
+        "role": "neutral",
+        "displayName": "Warm Ink",
+        "canonical": "#1a1713",
+        "tonalRamp": [
+          "oklch(15% 0.009 75)",
+          "oklch(26% 0.009 75)",
+          "oklch(38% 0.009 75)",
+          "oklch(49% 0.009 75)",
+          "oklch(61% 0.009 75)",
+          "oklch(72% 0.009 75)",
+          "oklch(84% 0.009 75)",
+          "oklch(95% 0.009 75)"
+        ]
+      },
+      "ledger-green": {
+        "role": "semantic",
+        "displayName": "Ledger Green",
+        "canonical": "#1c6b4a",
+        "tonalRamp": [
+          "oklch(15% 0.093 161)",
+          "oklch(26% 0.093 161)",
+          "oklch(38% 0.093 161)",
+          "oklch(49% 0.093 161)",
+          "oklch(61% 0.093 161)",
+          "oklch(72% 0.093 161)",
+          "oklch(84% 0.093 161)",
+          "oklch(95% 0.093 161)"
+        ]
+      },
+      "brick-loss": {
+        "role": "semantic",
+        "displayName": "Brick Loss",
+        "canonical": "#b0503f",
+        "tonalRamp": [
+          "oklch(15% 0.120 32)",
+          "oklch(26% 0.120 32)",
+          "oklch(38% 0.120 32)",
+          "oklch(49% 0.120 32)",
+          "oklch(61% 0.120 32)",
+          "oklch(72% 0.120 32)",
+          "oklch(84% 0.120 32)",
+          "oklch(95% 0.120 32)"
+        ]
+      },
+      "liquidation-red": {
+        "role": "semantic",
+        "displayName": "Liquidation Red",
+        "canonical": "#9e1409",
+        "tonalRamp": [
+          "oklch(15% 0.120 30)",
+          "oklch(26% 0.120 30)",
+          "oklch(38% 0.120 30)",
+          "oklch(49% 0.120 30)",
+          "oklch(61% 0.120 30)",
+          "oklch(72% 0.120 30)",
+          "oklch(84% 0.120 30)",
+          "oklch(95% 0.120 30)"
+        ]
+      },
+      "amber-warning": {
+        "role": "semantic",
+        "displayName": "Amber Warning",
+        "canonical": "#8a5a00",
+        "tonalRamp": [
+          "oklch(15% 0.108 73)",
+          "oklch(26% 0.108 73)",
+          "oklch(38% 0.108 73)",
+          "oklch(49% 0.108 73)",
+          "oklch(61% 0.108 73)",
+          "oklch(72% 0.108 73)",
+          "oklch(84% 0.108 73)",
+          "oklch(95% 0.108 73)"
+        ]
+      },
+      "night-paper": {
+        "role": "neutral",
+        "displayName": "Night Paper",
+        "canonical": "#14120e",
+        "tonalRamp": [
+          "oklch(15% 0.009 85)",
+          "oklch(26% 0.009 85)",
+          "oklch(38% 0.009 85)",
+          "oklch(49% 0.009 85)",
+          "oklch(61% 0.009 85)",
+          "oklch(72% 0.009 85)",
+          "oklch(84% 0.009 85)",
+          "oklch(95% 0.009 85)"
+        ]
+      },
+      "night-panel": {
+        "role": "neutral",
+        "displayName": "Night Panel",
+        "canonical": "#1b1813",
+        "tonalRamp": [
+          "oklch(15% 0.011 81)",
+          "oklch(26% 0.011 81)",
+          "oklch(38% 0.011 81)",
+          "oklch(49% 0.011 81)",
+          "oklch(61% 0.011 81)",
+          "oklch(72% 0.011 81)",
+          "oklch(84% 0.011 81)",
+          "oklch(95% 0.011 81)"
+        ]
+      },
+      "night-sunk": {
+        "role": "neutral",
+        "displayName": "Night Sunk",
+        "canonical": "#221e18",
+        "tonalRamp": [
+          "oklch(15% 0.013 78)",
+          "oklch(26% 0.013 78)",
+          "oklch(38% 0.013 78)",
+          "oklch(49% 0.013 78)",
+          "oklch(61% 0.013 78)",
+          "oklch(72% 0.013 78)",
+          "oklch(84% 0.013 78)",
+          "oklch(95% 0.013 78)"
+        ]
+      },
+      "night-rule": {
+        "role": "neutral",
+        "displayName": "Night Rule",
+        "canonical": "#2f2a22",
+        "tonalRamp": [
+          "oklch(15% 0.016 80)",
+          "oklch(26% 0.016 80)",
+          "oklch(38% 0.016 80)",
+          "oklch(49% 0.016 80)",
+          "oklch(61% 0.016 80)",
+          "oklch(72% 0.016 80)",
+          "oklch(84% 0.016 80)",
+          "oklch(95% 0.016 80)"
+        ]
+      },
+      "night-ink": {
+        "role": "neutral",
+        "displayName": "Night Ink",
+        "canonical": "#f2efe8",
+        "tonalRamp": [
+          "oklch(15% 0.010 87)",
+          "oklch(26% 0.010 87)",
+          "oklch(38% 0.010 87)",
+          "oklch(49% 0.010 87)",
+          "oklch(61% 0.010 87)",
+          "oklch(72% 0.010 87)",
+          "oklch(84% 0.010 87)",
+          "oklch(95% 0.010 87)"
+        ]
+      },
+      "night-navy": {
+        "role": "primary",
+        "displayName": "Night Navy",
+        "canonical": "#8fa9e8",
+        "tonalRamp": [
+          "oklch(15% 0.096 267)",
+          "oklch(26% 0.096 267)",
+          "oklch(38% 0.096 267)",
+          "oklch(49% 0.096 267)",
+          "oklch(61% 0.096 267)",
+          "oklch(72% 0.096 267)",
+          "oklch(84% 0.096 267)",
+          "oklch(95% 0.096 267)"
+        ]
+      },
+      "night-text-on-accent": {
+        "role": "neutral",
+        "displayName": "Night Text on Accent",
+        "canonical": "#0e1116",
+        "tonalRamp": [
+          "oklch(15% 0.011 261)",
+          "oklch(26% 0.011 261)",
+          "oklch(38% 0.011 261)",
+          "oklch(49% 0.011 261)",
+          "oklch(61% 0.011 261)",
+          "oklch(72% 0.011 261)",
+          "oklch(84% 0.011 261)",
+          "oklch(95% 0.011 261)"
+        ]
+      },
+      "night-green": {
+        "role": "semantic",
+        "displayName": "Night Green",
+        "canonical": "#5fbf92",
+        "tonalRamp": [
+          "oklch(15% 0.113 161)",
+          "oklch(26% 0.113 161)",
+          "oklch(38% 0.113 161)",
+          "oklch(49% 0.113 161)",
+          "oklch(61% 0.113 161)",
+          "oklch(72% 0.113 161)",
+          "oklch(84% 0.113 161)",
+          "oklch(95% 0.113 161)"
+        ]
+      },
+      "night-loss": {
+        "role": "semantic",
+        "displayName": "Night Loss",
+        "canonical": "#e59484",
+        "tonalRamp": [
+          "oklch(15% 0.101 32)",
+          "oklch(26% 0.101 32)",
+          "oklch(38% 0.101 32)",
+          "oklch(49% 0.101 32)",
+          "oklch(61% 0.101 32)",
+          "oklch(72% 0.101 32)",
+          "oklch(84% 0.101 32)",
+          "oklch(95% 0.101 32)"
+        ]
+      },
+      "night-liquidation": {
+        "role": "semantic",
+        "displayName": "Night Liquidation",
+        "canonical": "#ff7a66",
+        "tonalRamp": [
+          "oklch(15% 0.120 30)",
+          "oklch(26% 0.120 30)",
+          "oklch(38% 0.120 30)",
+          "oklch(49% 0.120 30)",
+          "oklch(61% 0.120 30)",
+          "oklch(72% 0.120 30)",
+          "oklch(84% 0.120 30)",
+          "oklch(95% 0.120 30)"
+        ]
+      },
+      "night-amber": {
+        "role": "semantic",
+        "displayName": "Night Amber",
+        "canonical": "#e0a93c",
+        "tonalRamp": [
+          "oklch(15% 0.120 81)",
+          "oklch(26% 0.120 81)",
+          "oklch(38% 0.120 81)",
+          "oklch(49% 0.120 81)",
+          "oklch(61% 0.120 81)",
+          "oklch(72% 0.120 81)",
+          "oklch(84% 0.120 81)",
+          "oklch(95% 0.120 81)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "figure": {
+        "displayName": "Figure",
+        "purpose": "The live liquidation price under the crossing; liquidation red when live, faint ink at rest."
+      },
+      "figure-empty": {
+        "displayName": "Figure, empty",
+        "purpose": "The empty account state, \"None yet\", in muted ink."
+      },
+      "lede": {
+        "displayName": "Lede",
+        "purpose": "The one sentence under the figure, max 34ch."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Band rows, menus, error text."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Button labels."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase mono field names, table heading, band state words."
+      },
+      "seal": {
+        "displayName": "Seal",
+        "purpose": "The bracketed session seal."
+      },
+      "wordmark": {
+        "displayName": "Wordmark",
+        "purpose": "Archivo wordmark in the header only."
+      }
+    },
+    "shadows": [
+      {
+        "name": "hairline-ring",
+        "value": "inset 0 0 0 1px var(--rule)",
+        "purpose": "Outline for pills, the seal, the current tab and the quiet button."
+      },
+      {
+        "name": "hairline-ring-hover",
+        "value": "inset 0 0 0 1px var(--text-faint)",
+        "purpose": "Pill hover."
+      },
+      {
+        "name": "popover-lift",
+        "value": "0 18px 50px -12px rgb(0 0 0 / 0.35), 0 0 0 1px var(--rule)",
+        "purpose": "Wallet list and account menu only."
+      },
+      {
+        "name": "band-edges",
+        "value": "inset 1px 0 0 var(--accent), inset -1px 0 0 var(--accent)",
+        "purpose": "Left and right bounds of a band span."
+      },
+      {
+        "name": "header-glass",
+        "value": "background: color-mix(in srgb, var(--paper) 90%, transparent); backdrop-filter: blur(12px)",
+        "purpose": "Sticky header over the stem."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The app's easing for draws, swaps, lifts and glides."
+      },
+      {
+        "name": "stem-draw",
+        "value": "scaleY 0 to 1, 1.1s ease-out, once",
+        "purpose": "Stem draws top-down on load."
+      },
+      {
+        "name": "bar-draw",
+        "value": "scaleX 0 to 1 at -8deg, 1s ease-out, 0.35s delay, once",
+        "purpose": "Bar draws left to right after the stem starts."
+      },
+      {
+        "name": "swap",
+        "value": "opacity 0 and translateY(6px) to rest, 0.35s ease-out",
+        "purpose": "Wallet-state copy and actions re-enter when the state changes."
+      },
+      {
+        "name": "band-glide",
+        "value": "left/right 0.6s ease-out",
+        "purpose": "Band span edges follow a new half-width."
+      },
+      {
+        "name": "button-lift",
+        "value": "translateY(-1px), 0.2s ease-out",
+        "purpose": "Primary and quiet button hover."
+      },
+      {
+        "name": "ring-fade",
+        "value": "box-shadow and background 0.2s ease",
+        "purpose": "Pill hover."
+      },
+      {
+        "name": "pulse",
+        "value": "opacity to 0.55 at 50%, 1.6s ease-in-out infinite",
+        "purpose": "Skeleton loading blocks."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "prefers-reduced-motion: reduce disables stem, bar, swap, pulse and band glide",
+        "purpose": "Accessibility."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      }
+    ],
+    "accessibility": [
+      "Focus: 2px accent outline, 3px offset, 2px radius on every focusable element.",
+      "Primary buttons at least 44px tall.",
+      "Wallet-state copy sits in a polite live region; wallet errors use role=alert.",
+      "The seal is role=status with a full spoken label; its bracketed text is aria-hidden.",
+      "Band rows are a table with a screen-reader caption and column headers.",
+      "Stem, bar, band tracks and status dots are aria-hidden; states are always written as words.",
+      "External links announce that they open a new tab.",
+      "Theme follows the system until toggled; the choice persists and applies before first paint."
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one filled navy pill per view: connect, get a wallet, switch network.",
+      "html": "<button class=\"ds-btn\">Connect wallet</button>",
+      "css": ".ds-btn { display:inline-flex; align-items:center; justify-content:center; gap:0.6em; min-height:44px; border:0; border-radius:999px; padding:0.7em 1.4em; font-family: var(--font-sans, 'Inter Tight', system-ui, sans-serif); font-size:15px; font-weight:500; color:var(--text-on-accent, #f5f2ec); background:var(--accent, #16326b); cursor:pointer; transition:transform 0.2s var(--ease-out, cubic-bezier(0.16,1,0.3,1)), opacity 0.2s ease; } .ds-btn:hover { transform:translateY(-1px); } .ds-btn:active { transform:none; } .ds-btn:disabled { opacity:0.55; transform:none; cursor:progress; } .ds-btn:focus-visible { outline:2px solid var(--accent, #16326b); outline-offset:3px; }"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Secondary action inside menus, outlined by an inset hairline ring.",
+      "html": "<button class=\"ds-btn-quiet\">Disconnect</button>",
+      "css": ".ds-btn-quiet { display:inline-flex; align-items:center; justify-content:center; min-height:44px; border:0; border-radius:999px; padding:0.7em 1.4em; font-family: var(--font-sans, 'Inter Tight', system-ui, sans-serif); font-size:15px; font-weight:500; color:var(--text-strong, #1a1713); background:transparent; box-shadow:inset 0 0 0 1px var(--rule, #dcd6ca); cursor:pointer; transition:transform 0.2s var(--ease-out, cubic-bezier(0.16,1,0.3,1)); } .ds-btn-quiet:hover { transform:translateY(-1px); } .ds-btn-quiet:focus-visible { outline:2px solid var(--accent, #16326b); outline-offset:3px; }"
+    },
+    {
+      "name": "Network Pill",
+      "kind": "chip",
+      "refersTo": "pill",
+      "description": "Header pill with a status dot; the same shape carries the wallet address and the theme toggle.",
+      "html": "<span class=\"ds-pill\"><span class=\"ds-dot\" aria-hidden=\"true\"></span>Robinhood Chain Testnet</span>",
+      "css": ".ds-pill { display:inline-flex; align-items:center; gap:0.55em; border-radius:999px; padding:0.5em 1em; font-family: var(--font-sans, 'Inter Tight', system-ui, sans-serif); font-size:13px; line-height:1.2; color:var(--text-strong, #1a1713); background:var(--panel, #fff); box-shadow:inset 0 0 0 1px var(--rule, #dcd6ca); transition:box-shadow 0.2s ease; } .ds-pill:hover { box-shadow:inset 0 0 0 1px var(--text-faint, rgba(26,23,19,0.42)); } .ds-dot { width:6px; height:6px; border-radius:999px; background:var(--gain, #1c6b4a); }"
+    },
+    {
+      "name": "Section Tabs",
+      "kind": "nav",
+      "refersTo": "nav-tab-current",
+      "description": "Centred header tabs; the current page takes the panel fill and hairline ring.",
+      "html": "<nav aria-label=\"Sections\"><ul class=\"ds-tabs\"><li><a href=\"#\" aria-current=\"page\" class=\"ds-tab\">Account</a></li><li><a href=\"#\" class=\"ds-tab\">Borrow</a></li></ul></nav>",
+      "css": ".ds-tabs { display:flex; gap:4px; list-style:none; margin:0; padding:0; } .ds-tab { display:block; border-radius:999px; padding:8px 14px; font-family: var(--font-sans, 'Inter Tight', system-ui, sans-serif); font-size:14px; color:var(--text-muted, rgba(26,23,19,0.62)); text-decoration:none; } .ds-tab:hover { color:var(--text-strong, #1a1713); } .ds-tab[aria-current=page] { background:var(--panel, #fff); color:var(--text-strong, #1a1713); box-shadow:inset 0 0 0 1px var(--rule, #dcd6ca); } .ds-tab:focus-visible { outline:2px solid var(--accent, #16326b); outline-offset:3px; }"
+    },
+    {
+      "name": "Session Seal",
+      "kind": "custom",
+      "refersTo": "seal",
+      "description": "The market session in brackets with hours to its next boundary; amber when UNKNOWN.",
+      "html": "<span class=\"ds-seal\" role=\"status\" aria-label=\"Market closed, opens in 26 hours\"><span aria-hidden=\"true\">[ CLOSED ]</span><span aria-hidden=\"true\" class=\"ds-seal-sep\">·</span><span aria-hidden=\"true\">OPENS 26H</span></span>",
+      "css": ".ds-seal { display:inline-flex; align-items:center; gap:0.6em; white-space:nowrap; border-radius:2px; padding:0.3em 0.75em; font-family: var(--font-mono, 'Spline Sans Mono', ui-monospace, monospace); font-size:11px; letter-spacing:0.09em; font-variant-numeric:tabular-nums lining-nums; color:var(--text-strong, #1a1713); background:var(--panel, #fff); box-shadow:inset 0 0 0 1px var(--rule, #dcd6ca); } .ds-seal-sep { color:var(--text-muted, rgba(26,23,19,0.62)); } .ds-seal[data-state=UNKNOWN] { color:var(--warning, #8a5a00); }"
+    },
+    {
+      "name": "The Thread",
+      "kind": "custom",
+      "refersTo": "",
+      "description": "Navy stem down the column and the -8 degree bar crossing above the liquidation-price figure; both draw once.",
+      "html": "<div class=\"ds-thread\"><span class=\"ds-stem\" aria-hidden=\"true\"></span><span class=\"ds-bar\" aria-hidden=\"true\"></span><p class=\"ds-label\">Liquidation price</p><p class=\"ds-figure\">None yet</p></div>",
+      "css": ".ds-thread { position:relative; padding:56px 16px 24px 68px; } .ds-stem { position:absolute; top:0; bottom:0; left:26px; width:2px; background:var(--accent, #16326b); transform-origin:50% 0; animation:ds-stem 1.1s var(--ease-out, cubic-bezier(0.16,1,0.3,1)) both; } .ds-bar { position:absolute; top:24px; left:6px; width:80%; height:2px; background:var(--accent, #16326b); transform-origin:20px 50%; transform:rotate(-8deg); animation:ds-bar 1s 0.35s var(--ease-out, cubic-bezier(0.16,1,0.3,1)) both; } @keyframes ds-stem { from { transform:scaleY(0); } } @keyframes ds-bar { from { transform:rotate(-8deg) scaleX(0); } } .ds-label { margin:0; font-family: var(--font-mono, 'Spline Sans Mono', ui-monospace, monospace); font-size:10.5px; font-weight:500; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-muted, rgba(26,23,19,0.62)); } .ds-figure { margin:12px 0 0; font-family: var(--font-sans, 'Inter Tight', system-ui, sans-serif); font-size:clamp(2.75rem, 8vw, 4.5rem); font-weight:500; line-height:1; letter-spacing:-0.03em; color:var(--text-muted, rgba(26,23,19,0.62)); } @media (prefers-reduced-motion: reduce) { .ds-stem, .ds-bar { animation:none; } }"
+    },
+    {
+      "name": "Band Row",
+      "kind": "custom",
+      "refersTo": "band-row",
+      "description": "One asset's live band: ticker, tinted span with navy edges and a mid tick, state words, tabular centre and half-width.",
+      "html": "<table class=\"ds-bands\"><tbody><tr><th scope=\"row\">TSLA</th><td><span class=\"ds-track\" aria-hidden=\"true\"><span class=\"ds-span\" style=\"left:43%;right:43%\"></span><span class=\"ds-mid\"></span></span></td><td class=\"ds-state\">CLOSED <span>· 1 live</span></td><td class=\"ds-fig\"><span>371.05</span><small>±0.55%</small></td></tr><tr><th scope=\"row\">NVDA</th><td><span class=\"ds-flat\" aria-hidden=\"true\"></span></td><td class=\"ds-state ds-warn\">HALTED <span>· 0 live</span></td><td class=\"ds-fig\"><span>—</span></td></tr></tbody></table>",
+      "css": ".ds-bands { width:100%; border-collapse:collapse; font-family: var(--font-sans, 'Inter Tight', system-ui, sans-serif); font-size:14px; } .ds-bands tr { height:60px; border-top:1px solid var(--rule, #dcd6ca); } .ds-bands th { width:72px; text-align:left; font-weight:600; color:var(--text-strong, #1a1713); } .ds-bands td { padding:0 12px; } .ds-track { position:relative; display:block; height:18px; } .ds-span { position:absolute; top:0; bottom:0; background:var(--band-area, rgba(22,50,107,0.12)); box-shadow:inset 1px 0 0 var(--accent, #16326b), inset -1px 0 0 var(--accent, #16326b); transition:left 0.6s var(--ease-out, cubic-bezier(0.16,1,0.3,1)), right 0.6s var(--ease-out, cubic-bezier(0.16,1,0.3,1)); } .ds-mid { position:absolute; top:-3px; bottom:-3px; left:50%; width:2px; margin-left:-1px; background:var(--text-strong, #1a1713); } .ds-flat { display:block; height:1px; background:var(--rule, #dcd6ca); } .ds-state { width:118px; text-align:right; font-family: var(--font-mono, 'Spline Sans Mono', ui-monospace, monospace); font-size:10.5px; font-weight:500; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-muted, rgba(26,23,19,0.62)); } .ds-warn { color:var(--warning, #8a5a00); } .ds-warn span { color:var(--text-muted, rgba(26,23,19,0.62)); } .ds-fig { width:112px; text-align:right; font-variant-numeric:tabular-nums lining-nums; } .ds-fig span { display:block; font-weight:600; color:var(--text-strong, #1a1713); } .ds-fig small { display:block; font-size:12px; color:var(--text-muted, rgba(26,23,19,0.62)); }"
+    },
+    {
+      "name": "Wallet Menu",
+      "kind": "card",
+      "refersTo": "menu",
+      "description": "Popover list of browser wallets; the only element with a cast shadow.",
+      "html": "<ul class=\"ds-menu\" aria-label=\"Wallets in this browser\"><li><button class=\"ds-opt\"><span class=\"ds-ico\" aria-hidden=\"true\"></span>Browser wallet</button></li><li><button class=\"ds-opt\"><span class=\"ds-ico\" aria-hidden=\"true\"></span>Second wallet</button></li></ul>",
+      "css": ".ds-menu { list-style:none; margin:0; width:256px; border-radius:10px; padding:8px; background:var(--panel, #fff); box-shadow:0 18px 50px -12px rgb(0 0 0 / 0.35), 0 0 0 1px var(--rule, #dcd6ca); } .ds-opt { display:flex; width:100%; align-items:center; gap:12px; border:0; border-radius:6px; padding:10px 12px; background:transparent; text-align:left; font-family: var(--font-sans, 'Inter Tight', system-ui, sans-serif); font-size:14px; color:var(--text-strong, #1a1713); cursor:pointer; } .ds-opt:hover { background:var(--sunk, #ebe7de); } .ds-opt:focus-visible { outline:2px solid var(--accent, #16326b); outline-offset:3px; } .ds-ico { width:22px; height:22px; border-radius:5px; background:var(--sunk, #ebe7de); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Thread",
+    "overview": "The account is the brand mark drawn at working scale. A 2px registry-navy stem runs down the left edge of one centred column; a 2px bar rises across it at 8°, and the liquidation price sits directly under that crossing at display size. Everything else hangs off the stem: a short hairline reaches from the stem to each live band row. There is one column, one accent and one line language; no tiles, no side rail, no cards.\n\nThe ground is warm bone paper in light and a warm near-black in dark. Text hierarchy is made by the ink's alpha over that ground, never by separate greys. Navy is used as line and as the single filled primary action. Semantic colour is reserved for market events: gain, loss, warning and liquidation. The interface is dense and exact where it speaks numbers (tabular figures, monospaced labels, the bracketed session seal) and warm where it speaks to the person (one plain sentence in second person under the figure).\n\nMotion is drawn once and then holds still: the stem and the bar draw on load, the sentence under the figure swaps with a short rise when the wallet state changes, band spans glide when the band moves. Nothing loops except the loading skeleton.",
+    "keyCharacteristics": [
+      "One centred column (780px max) with a navy stem on its left edge and the 8° bar crossing above the main figure.",
+      "Warm ink at four alpha steps (100 / 80 / 62 / 42%) over bone paper; no grey palette.",
+      "Navy accent as 2px lines and one filled pill button; never as a tint wash outside the band area.",
+      "Inter Tight for interface and figures, Spline Sans Mono for labels, addresses and the seal, Archivo only for the wordmark.",
+      "Pill controls with inset 1px hairline rings; the seal is the one squared object.",
+      "Every market state is written as a word; colour only reinforces it."
+    ],
+    "rules": [
+      {
+        "name": "The Alpha Ink Rule",
+        "body": "Text hierarchy is ink over paper at 100, 80, 62 or 42% via `color-mix`. Never introduce a grey hex.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Red Rule",
+        "body": "Liquidation red is spent on exactly one element: the live liquidation-price figure. Errors and losses use their own tokens.",
+        "section": "colors"
+      },
+      {
+        "name": "The Line Accent Rule",
+        "body": "Navy appears as 2px lines and one filled button per view. It is not used for backgrounds, cards or decorative tints.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Money Rule",
+        "body": "Every figure that decides money carries the `num` treatment: tabular, lining numerals, ligatures and contextual alternates off, left-to-right. Addresses add mono with slashed zero.",
+        "section": "typography"
+      },
+      {
+        "name": "The Wordmark-Only Display Rule",
+        "body": "Archivo appears in the wordmark and nowhere else in the app; headings and figures are Inter Tight.",
+        "section": "typography"
+      },
+      {
+        "name": "The Ring Not Border Rule",
+        "body": "Controls are outlined with an inset 1px ring so they keep their box size; true borders are used only for full-width rules (header bottom, table rows).",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do hang every new account element off the stem: a single column, a 1px rule from the stem where a row needs anchoring.",
+      "Do keep the bar at -8° and the stem and bar at 2px navy; let them draw once on load and then stay still.",
+      "Do set every money figure with the tabular `num` treatment and every address in mono with slashed zero.",
+      "Do state market and wallet state in words (HALTED, CLOSED, \"Your wallet is on another network\"); colour only reinforces.",
+      "Do build text hierarchy from ink alpha (100 / 80 / 62 / 42%) and depth from paper, panel and sunk steps.",
+      "Do keep primary actions at least 44px tall and reserve their row so state changes don't shift the column.",
+      "Do disable the draw, swap, pulse and glide motions under `prefers-reduced-motion: reduce`."
+    ],
+    "donts": [
+      "Don't lay the account out as a grid of equal tiles or add a side rail of menus.",
+      "Don't use liquidation red for anything but the live liquidation-price figure.",
+      "Don't introduce greys, cool neutrals or a second accent hue.",
+      "Don't add drop shadows to controls or rows; only popover menus lift.",
+      "Don't use Archivo for headings or figures; it belongs to the wordmark.",
+      "Don't show illustrative or placeholder figures; an unpriced asset shows an em dash and an empty account says \"None yet\"."
+    ]
+  }
+}

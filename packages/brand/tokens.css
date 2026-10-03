@@ -1,0 +1,114 @@
+/* SPDX-License-Identifier: MIT OR Apache-2.0 */
+/* ── Layer 0 · warm neutrals ─────────────────────────────────────────── */
+:root {
+  --paper: #f5f2ec;
+  --paper-cool: #faf9f6;
+  --panel: #ffffff;
+  --sunk: #ebe7de;
+  --rule: #dcd6ca;
+  --ink: #1a1713;
+
+  /* Layer 1 · one accent, six stops */
+  --navy-10: #e3e7f0;
+  --navy-20: #c2cce2;
+  --navy-40: #7c8fbf;
+  --navy-60: #3d5795;
+  --navy-80: #16326b;
+  --navy-100: #0e2149;
+  --accent: var(--navy-80);
+  --accent-surface: var(--navy-10);
+  --text-on-accent: #f5f2ec;
+
+  /* Layer 2 · semantics, named for the domain event */
+  --gain: #1c6b4a;
+  --loss: #b0503f;
+  --error: #9e1409;
+  --warning: #8a5a00;
+  --liquidation: #9e1409;
+  --band-area: color-mix(in srgb, var(--accent) 12%, transparent);
+
+  /* Surfaces that never invert: a lit screen in a dark room stays lit. */
+  --always-night: #0b0f1a;
+  --always-bone: #f5f2ec;
+  --always-ink: #1a1713;
+  --always-rule: #dcd6ca;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #14120e;
+    --paper-cool: #121316;
+    --panel: #1b1813;
+    --sunk: #221e18;
+    --rule: #2f2a22;
+    --ink: #f2efe8;
+    --navy-10: #1b2434;
+    --navy-20: #23314a;
+    --navy-40: #3d5795;
+    --navy-60: #6e88c8;
+    --navy-80: #8fa9e8;
+    --navy-100: #b7c6f0;
+    --text-on-accent: #0e1116;
+    --gain: #5fbf92;
+    --loss: #e59484;
+    --error: #ff7a66;
+    --warning: #e0a93c;
+    --liquidation: #ff7a66;
+    --band-area: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #14120e;
+  --paper-cool: #121316;
+  --panel: #1b1813;
+  --sunk: #221e18;
+  --rule: #2f2a22;
+  --ink: #f2efe8;
+  --navy-10: #1b2434;
+  --navy-20: #23314a;
+  --navy-40: #3d5795;
+  --navy-60: #6e88c8;
+  --navy-80: #8fa9e8;
+  --navy-100: #b7c6f0;
+  --text-on-accent: #0e1116;
+  --gain: #5fbf92;
+  --loss: #e59484;
+  --error: #ff7a66;
+  --warning: #e0a93c;
+  --liquidation: #ff7a66;
+  --band-area: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Text hierarchy by alpha over the ground, never by greys. */
+:root,
+:root[data-theme] {
+  --text-strong: var(--ink);
+  --text-body: color-mix(in srgb, var(--ink) 80%, transparent);
+  --text-muted: color-mix(in srgb, var(--ink) 62%, transparent);
+  --text-faint: color-mix(in srgb, var(--ink) 42%, transparent);
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-panel: var(--panel);
+  --color-sunk: var(--sunk);
+  --color-rule: var(--rule);
+  --color-ink: var(--ink);
+  --color-accent: var(--accent);
+  --color-accent-surface: var(--accent-surface);
+  --color-on-accent: var(--text-on-accent);
+  --color-strong: var(--text-strong);
+  --color-body: var(--text-body);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-gain: var(--gain);
+  --color-loss: var(--loss);
+  --color-liquidation: var(--liquidation);
+  --color-warning: var(--warning);
+  --font-display: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
+  --font-sans: var(--font-inter-tight), system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-spline-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
