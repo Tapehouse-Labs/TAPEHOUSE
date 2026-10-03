@@ -60,7 +60,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	check-toolchains check-node check-foundry check-slither check-reuse check-stylus check-docker submodules \
 	check-go check-golangci-lint check-rust check-uv \
 	build-apps test-apps lint-apps build-services test-services lint-services build-crates test-crates lint-crates \
-	bindings check-bindings test-sdks-devnode test-mcp-devnode test-indexer-devnode run-indexer backtest test-backtest-devnode test-keeper-devnode run-keeper test-bidder-devnode run-bidder \
+	bindings check-bindings test-sdks-devnode test-mcp-devnode test-app-devnode test-indexer-devnode run-indexer backtest test-backtest-devnode test-keeper-devnode run-keeper test-bidder-devnode run-bidder \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
@@ -427,6 +427,12 @@ test-mcp-devnode: check-node check-uv node_modules/.modules.yaml
 	uv run --locked --script packages/mcp/examples/devnode.py $(DEVNODE_RPC_URL) \
 		$(abspath stylus/target/devnode-registry.json) $(abspath packages/mcp/dist/main.js)
 
+test-app-devnode: export TAPEHOUSE_REGISTRY := $(abspath stylus/target/devnode-registry.json)
+test-app-devnode: export TAPEHOUSE_RPC_URL := $(DEVNODE_RPC_URL)
+test-app-devnode: check-node node_modules/.modules.yaml
+	pnpm --filter app... run build
+	pnpm --filter app exec playwright test
+
 test-indexer-devnode: export PRIVATE_KEY := $(DEVNODE_KEY)
 test-indexer-devnode: export TAPEHOUSE_RPC_URL := $(DEVNODE_RPC_URL)
 test-indexer-devnode: export TAPEHOUSE_DEPLOYMENTS := $(abspath stylus/target/devnode-registry.json)
@@ -537,7 +543,7 @@ verify-stylus: check-docker
 devnode: check-docker check-foundry
 	@docker rm -f tapehouse-devnode >/dev/null 2>&1 || true
 	docker run -d --name tapehouse-devnode -p 127.0.0.1:8547:8547 $(NITRO_IMAGE) \
-		--dev --init.dev-max-code-size 98304 --http.addr 0.0.0.0 --http.api=net,web3,eth,debug
+		--dev --init.dev-max-code-size 98304 --http.addr 0.0.0.0 --http.api=net,web3,eth,debug --http.corsdomain=*
 	@i=0; until cast chain-id --rpc-url $(DEVNODE_RPC_URL) >/dev/null 2>&1; do \
 		i=$$((i + 1)); [ $$i -lt 150 ] || { docker logs --tail 20 tapehouse-devnode; \
 		echo "The dev node did not answer on $(DEVNODE_RPC_URL)."; exit 1; }; \

@@ -33,6 +33,10 @@ path = [
     "stylus/contracts/margin/testdata/scenario-vectors.json",
     "stylus/contracts/margin/testdata/session-timeline.json",
     "stylus/contracts/margin/parameters.json",
+    "apps/app/package.json",
+    "apps/app/.impeccable/surfaces/app.md",
+    "apps/app/DESIGN.md",
+    "apps/app/.impeccable/design.json",
     "apps/landing/package.json",
     "apps/landing/PRODUCT.md",
     "apps/landing/.impeccable/config.json",
@@ -42,6 +46,7 @@ path = [
     "apps/landing/app/twitter-image.alt.txt",
     "apps/landing/app/twitter-image.png",
     "apps/landing/app/icon.svg",
+    "packages/brand/package.json",
     "packages/sdk/package.json",
     "packages/sdk/README.md",
     "packages/sdk/tsconfig.json",
@@ -82,6 +87,12 @@ SPDX-FileComment = "Generated with OpenAI's gpt-image-1; each file embeds its pr
 
 [[annotations]]
 path = [
+    "apps/app/AGENTS.md",
+    "apps/app/CLAUDE.md",
+    "apps/app/README.md",
+    "apps/app/eslint.config.mjs",
+    "apps/app/next.config.ts",
+    "apps/app/postcss.config.mjs",
     "apps/landing/AGENTS.md",
     "apps/landing/CLAUDE.md",
     "apps/landing/README.md",
@@ -96,11 +107,18 @@ SPDX-License-Identifier = "MIT"
 SPDX-FileComment = "Written unchanged by create-next-app and next dev."
 
 [[annotations]]
-path = "apps/landing/.gitignore"
+path = ["apps/app/.gitignore", "apps/landing/.gitignore"]
 precedence = "override"
 SPDX-FileCopyrightText = ["Vercel, Inc.", "Tapehouse contributors"]
 SPDX-License-Identifier = "MIT"
 SPDX-FileComment = "Written by create-next-app; the last lines are Tapehouse's."
+
+[[annotations]]
+path = "apps/app/tsconfig.json"
+precedence = "override"
+SPDX-FileCopyrightText = ["Vercel, Inc.", "Tapehouse contributors"]
+SPDX-License-Identifier = "MIT"
+SPDX-FileComment = "Written by create-next-app; Tapehouse raised its target to ES2020 for BigInt literals."
 
 [[annotations]]
 path = "stylus/scripts/stylus-deployer.hex"
