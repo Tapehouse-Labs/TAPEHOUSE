@@ -154,3 +154,13 @@ func (b *Backstop) Claim() (Tx, error) {
 func (b *Backstop) Cover(account common.Address, position [32]byte) (Tx, error) {
 	return b.tx(b.backstop.TryPackCover(account, position))
 }
+
+// EthUsd reads the Chainlink feed that prices WETH for the liquidator.
+func (l *Liquidator) EthUsd(opts *bind.CallOpts) (common.Address, error) {
+	return read(l.c, opts, l.target, l.liquidator.UnpackEthUsd)(l.liquidator.TryPackEthUsd())
+}
+
+// RecallHaircut reads the share of a lent Stock Token's value the liquidator discounts, in basis points.
+func (l *Liquidator) RecallHaircut(opts *bind.CallOpts) (*big.Int, error) {
+	return read(l.c, opts, l.target, l.liquidator.UnpackRecallHaircut)(l.liquidator.TryPackRecallHaircut())
+}

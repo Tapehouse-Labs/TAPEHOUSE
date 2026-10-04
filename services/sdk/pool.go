@@ -69,3 +69,8 @@ func (p *Pool) LiquidityNet(opts *bind.CallOpts, tick int32) (*big.Int, error) {
 	out, err := read(p.c, opts, p.target, p.pool.UnpackTicks)(p.pool.TryPackTicks(big.NewInt(int64(tick))))
 	return out.LiquidityNet, err
 }
+
+// Observe reads the pool's cumulative tick and seconds-per-liquidity at each of secondsAgos seconds before the block.
+func (p *Pool) Observe(opts *bind.CallOpts, secondsAgos []uint32) (uniswapv3pool.ObserveOutput, error) {
+	return read(p.c, opts, p.target, p.pool.UnpackObserve)(p.pool.TryPackObserve(secondsAgos))
+}
