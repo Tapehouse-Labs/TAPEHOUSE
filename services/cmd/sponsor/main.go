@@ -144,7 +144,8 @@ func run(ctx context.Context, cfg config, key *ecdsa.PrivateKey, log *slog.Logge
 	if err != nil {
 		return err
 	}
-	server := &http.Server{Addr: cfg.addr, Handler: service, ReadHeaderTimeout: 5 * time.Second}
+	server := &http.Server{Addr: cfg.addr, Handler: service, ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: time.Minute}
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)

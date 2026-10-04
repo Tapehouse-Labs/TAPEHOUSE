@@ -114,7 +114,7 @@ const refusal = await bundler
     () => undefined,
     (error: unknown) => String(error),
   )
-check(refusal?.includes('is not to a Tapehouse contract') === true, 'the service sponsored a call outside Tapehouse')
+check(refusal?.includes("is not a user's call to a Tapehouse contract") === true, 'the service sponsored a call outside Tapehouse')
 
 console.log(`smart account ${account.address}, created and authorized in ${receipt.transactionHash}`)
 console.log(`from an address holding ether: ${eoaGas} L2 gas in two transactions`)

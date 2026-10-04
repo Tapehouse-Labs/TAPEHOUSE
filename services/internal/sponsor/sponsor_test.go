@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/tapehouse/tapehouse/services/sdk"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/sponsorpaymaster"
+	"golang.org/x/time/rate"
 )
 
 var (
@@ -35,6 +37,8 @@ var (
 	usdg           = common.HexToAddress("0x8888888888888888888888888888888888888888")
 	owner          = common.HexToAddress("0x9999999999999999999999999999999999999999")
 	stranger       = common.HexToAddress("0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa")
+	liquidator     = common.HexToAddress("0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB")
+	proxyCode      = []byte{0x60, 0x80, 0x60, 0x40}
 	signerKey, _   = crypto.HexToECDSA("4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318")
 	now            = time.Unix(1_790_000_000, 0)
 )
@@ -47,12 +51,13 @@ type fakeChain struct {
 	baseFee    *big.Int
 	l1Gas      uint64
 	failHeader bool
+	estimate   uint64
 }
 
 func newChain() *fakeChain {
 	return &fakeChain{signer: crypto.PubkeyToAddress(signerKey.PublicKey), used: map[common.Address]int64{},
 		code: map[common.Address][]byte{}, slots: map[common.Address]common.Address{}, baseFee: big.NewInt(100_000_000),
-		l1Gas: 1_000_000}
+		l1Gas: 1_000_000, estimate: 100_000}
 }
 
 func counterfactual(owner common.Address, salt *big.Int) common.Address {
@@ -77,8 +82,21 @@ func (c *fakeChain) HeaderByNumber(context.Context, *big.Int) (*types.Header, er
 	return &types.Header{BaseFee: c.baseFee}, nil
 }
 
+func (c *fakeChain) EstimateGas(_ context.Context, msg ethereum.CallMsg) (uint64, error) {
+	if msg.From != entryPoint {
+		return 0, errors.New("not from the EntryPoint")
+	}
+	if c.estimate == 0 {
+		return 0, errors.New("execution reverted")
+	}
+	return c.estimate, nil
+}
+
 func (c *fakeChain) CallContract(_ context.Context, msg ethereum.CallMsg, _ *big.Int) ([]byte, error) {
 	paymasterABI := sponsorpaymaster.NewSponsorPaymaster()
+	if msg.To == nil {
+		return proxyCode, nil
+	}
 	switch *msg.To {
 	case factory:
 		method, err := factoryABI.MethodById(msg.Data[:4])
@@ -101,7 +119,9 @@ func (c *fakeChain) CallContract(_ context.Context, msg ethereum.CallMsg, _ *big
 			return word(big.NewInt(c.used[sender])), nil
 		}
 	case nodeInterface:
-		return nodeInterfaceABI.Methods["gasEstimateL1Component"].Outputs.Pack(c.l1Gas, c.baseFee, big.NewInt(1))
+		args, _ := nodeInterfaceABI.Methods["gasEstimateL1Component"].Inputs.Unpack(msg.Data[4:])
+		l1 := c.l1Gas + uint64(len(args[2].([]byte)))*16
+		return nodeInterfaceABI.Methods["gasEstimateL1Component"].Outputs.Pack(l1, c.baseFee, big.NewInt(1))
 	}
 	return nil, errors.New("unexpected call")
 }
@@ -110,8 +130,8 @@ func registry(t *testing.T) *sdk.Deployments {
 	t.Helper()
 	d, err := sdk.ParseDeployments([]byte(`{"chainId":412346,
 		"tokens":{"USDG":"` + usdg.Hex() + `"},
-		"tapehouse":{"MarginAccounts":"` + accounts.Hex() + `","Owner":"` + owner.Hex() + `","SponsorPaymaster":"` +
-		paymaster.Hex() + `"},
+		"tapehouse":{"MarginAccounts":"` + accounts.Hex() + `","Liquidator":"` + liquidator.Hex() + `","Owner":"` +
+		owner.Hex() + `","SponsorPaymaster":"` + paymaster.Hex() + `"},
 		"erc4337":{"EntryPoint":"` + entryPoint.Hex() + `","SimpleAccountFactory":"` + factory.Hex() + `"}}`))
 	if err != nil {
 		t.Fatal(err)
@@ -131,6 +151,9 @@ func service(t *testing.T, chain *fakeChain) *Service {
 }
 
 func big64(v int64) *hexutil.Big { return (*hexutil.Big)(big.NewInt(v)) }
+
+// authorize is a user's call to the margin accounts.
+var authorize = slices.Concat(crypto.Keccak256([]byte("setAuthorization(address,bool)"))[:4], make([]byte, 64))
 
 func execute(to common.Address, value int64, data []byte) []byte {
 	out, _ := accountABI.Pack("execute", to, big.NewInt(value), data)
@@ -157,7 +180,7 @@ func creation(callData []byte) *UserOperation {
 func existing(chain *fakeChain, callData []byte) *UserOperation {
 	op := creation(callData)
 	op.Factory, op.FactoryData = nil, nil
-	chain.code[op.Sender] = []byte{0x60}
+	chain.code[op.Sender] = proxyCode
 	chain.slots[op.Sender] = implementation
 	return op
 }
@@ -218,17 +241,17 @@ func TestCallsToTapehouseAndApprovalsOfItAreSponsored(t *testing.T) {
 	chain := newChain()
 	s := service(t, chain)
 	batch, _ := accountABI.Pack("executeBatch", []common.Address{usdg, accounts}, []*big.Int{},
-		[][]byte{approve(accounts), {0x01, 0x02, 0x03, 0x04}})
-	for _, callData := range [][]byte{execute(accounts, 0, nil), batch} {
+		[][]byte{approve(accounts), authorize})
+	for _, callData := range [][]byte{execute(accounts, 0, authorize), batch} {
 		if _, err := s.StubData(context.Background(), existing(chain, callData)); err != nil {
 			t.Fatal(err)
 		}
 	}
 	chain.used[counterfactual(owner, big.NewInt(0))] = 2
-	if _, err := s.Data(context.Background(), creation(execute(accounts, 0, nil))); err != nil {
+	if _, err := s.Data(context.Background(), creation(execute(accounts, 0, authorize))); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Data(context.Background(), existing(chain, execute(accounts, 0, nil))); err != nil {
+	if _, err := s.Data(context.Background(), existing(chain, execute(accounts, 0, authorize))); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -246,29 +269,29 @@ func TestEverythingElseIsRefused(t *testing.T) {
 	otherSender := creation([]byte{})
 	otherSender.Sender = stranger
 	refused(t, s.check(ctx, otherSender), "not "+stranger.Hex())
-	upgraded := existing(chain, execute(accounts, 0, nil))
+	upgraded := existing(chain, execute(accounts, 0, authorize))
 	chain.slots[upgraded.Sender] = stranger
 	refused(t, s.check(ctx, upgraded), "is not a SimpleAccount v0.7")
 	emptyBatch, _ := accountABI.Pack("executeBatch", []common.Address{}, []*big.Int{}, [][]byte{})
 	shortValues, _ := accountABI.Pack("executeBatch", []common.Address{accounts, accounts}, []*big.Int{big.NewInt(0)},
 		[][]byte{nil, nil})
 	for callData, reason := range map[string]string{
-		string(execute(stranger, 0, nil)):                         "is not to a Tapehouse contract",
-		string(execute(usdg, 0, approve(stranger))):               "is not to a Tapehouse contract",
-		string(execute(stranger, 0, approve(accounts))):           "is not to a Tapehouse contract",
-		string(execute(usdg, 0, approve(accounts)[:36])):          "is not to a Tapehouse contract",
-		string(execute(accounts, 1, nil)):                         "sends value",
-		string(emptyBatch):                                        "arrays do not match",
-		string(shortValues):                                       "arrays do not match",
-		"\x34\xfc\xd5\xbe":                                        "not execute or executeBatch",
-		"\xb6\x1d":                                                "not execute or executeBatch",
-		string(append(execute(accounts, 0, nil)[:4], 0x01, 0x02)): "does not decode",
+		string(execute(stranger, 0, nil)):                               "is not a user's call to a Tapehouse contract",
+		string(execute(usdg, 0, approve(stranger))):                     "is not a user's call to a Tapehouse contract",
+		string(execute(stranger, 0, approve(accounts))):                 "is not a user's call to a Tapehouse contract",
+		string(execute(usdg, 0, approve(accounts)[:36])):                "is not a user's call to a Tapehouse contract",
+		string(execute(accounts, 1, nil)):                               "sends value",
+		string(emptyBatch):                                              "arrays do not match",
+		string(shortValues):                                             "arrays do not match",
+		"\x34\xfc\xd5\xbe":                                              "not execute or executeBatch",
+		"\xb6\x1d":                                                      "not execute or executeBatch",
+		string(append(execute(accounts, 0, authorize)[:4], 0x01, 0x02)): "does not decode",
 	} {
 		refused(t, s.check(ctx, existing(chain, []byte(callData))), reason)
 	}
 	refused(t, s.check(ctx, existing(chain, []byte{})), "neither creates the account nor makes a call")
 	chain.used[counterfactual(owner, big.NewInt(0))] = FreeOperations
-	refused(t, s.check(ctx, existing(chain, execute(accounts, 0, nil))), "has used its 3 free operations")
+	refused(t, s.check(ctx, existing(chain, execute(accounts, 0, authorize))), "has used its 3 free operations")
 	if _, err := s.StubData(ctx, creation([]byte{})); err != nil {
 		t.Fatalf("a creation alone is free whatever the count: %v", err)
 	}
@@ -277,7 +300,7 @@ func TestEverythingElseIsRefused(t *testing.T) {
 
 func TestTheSignatureIsWhatThePaymasterChecks(t *testing.T) {
 	s := service(t, newChain())
-	op := creation(execute(accounts, 0, nil))
+	op := creation(execute(accounts, 0, authorize))
 	data, err := s.Data(context.Background(), op)
 	if err != nil {
 		t.Fatal(err)
@@ -307,9 +330,9 @@ func TestGasBeyondTheOperationsCostIsRefused(t *testing.T) {
 		"call gas limit is above":               func(op *UserOperation) { op.CallGasLimit = big64(2_000_001) },
 		"priority fee is above":                 func(op *UserOperation) { op.MaxPriorityFeePerGas = big64(10_000_001) },
 		"fee cap is above 3 times the base fee": func(op *UserOperation) { op.MaxFeePerGas = big64(300_000_001) },
-		"pre-verification gas is above 1400000": func(op *UserOperation) { op.PreVerificationGas = big64(1_400_001) },
+		"pre-verification gas is above":         func(op *UserOperation) { op.PreVerificationGas = big64(2_000_000) },
 	} {
-		op := creation(execute(accounts, 0, nil))
+		op := creation(execute(accounts, 0, authorize))
 		raise(op)
 		_, err := s.Data(ctx, op)
 		if reason == "post-op" {
@@ -318,7 +341,7 @@ func TestGasBeyondTheOperationsCostIsRefused(t *testing.T) {
 		refused(t, err, reason)
 	}
 	chain.failHeader = true
-	if _, err := s.Data(ctx, creation(execute(accounts, 0, nil))); err == nil || err.Error() != "the node is down" {
+	if _, err := s.Data(ctx, creation(execute(accounts, 0, authorize))); err == nil || err.Error() != "the node is down" {
 		t.Fatalf("a node down: %v", err)
 	}
 }
@@ -355,16 +378,16 @@ func TestTheServiceAnswersERC7677OverJSONRPC(t *testing.T) {
 		result["paymaster"] != paymaster.Hex() {
 		t.Fatalf("stub %v", stub)
 	}
-	data := rpc(t, s, "203.0.113.1", "", "pm_getPaymasterData", creation(execute(accounts, 0, nil)), entryPoint, chainID, nil)
+	data := rpc(t, s, "203.0.113.1", "", "pm_getPaymasterData", creation(execute(accounts, 0, authorize)), entryPoint, chainID, nil)
 	if _, ok := data["result"].(map[string]any)["paymasterData"]; !ok {
 		t.Fatalf("data %v", data)
 	}
 	for want, out := range map[string]map[string]any{
-		"the method eth_chainId does not exist": rpc(t, s, "203.0.113.1", "", "eth_chainId"),
-		"the params are":                        rpc(t, s, "203.0.113.1", "", "pm_getPaymasterData", 1),
-		"the params do not parse":               rpc(t, s, "203.0.113.1", "", "pm_getPaymasterData", 1, 2, 3),
-		"on chain 412346":                       rpc(t, s, "203.0.113.1", "", "pm_getPaymasterData", creation([]byte{}), entryPoint, hexutil.Uint64(1)),
-		"is not to a Tapehouse contract":        rpc(t, s, "203.0.113.1", "", "pm_getPaymasterStubData", creation(execute(stranger, 0, nil)), entryPoint, chainID),
+		"the method eth_chainId does not exist":        rpc(t, s, "203.0.113.1", "", "eth_chainId"),
+		"the params are":                               rpc(t, s, "203.0.113.1", "", "pm_getPaymasterData", 1),
+		"the params do not parse":                      rpc(t, s, "203.0.113.1", "", "pm_getPaymasterData", 1, 2, 3),
+		"on chain 412346":                              rpc(t, s, "203.0.113.1", "", "pm_getPaymasterData", creation([]byte{}), entryPoint, hexutil.Uint64(1)),
+		"is not a user's call to a Tapehouse contract": rpc(t, s, "203.0.113.1", "", "pm_getPaymasterStubData", creation(execute(stranger, 0, nil)), entryPoint, chainID),
 	} {
 		if !strings.Contains(messageOf(out), want) {
 			t.Fatalf("got %v, want %q", out, want)
@@ -393,7 +416,7 @@ func TestEachClientGetsItsDailySignatures(t *testing.T) {
 	s := service(t, chain)
 	s.limits.Daily = 2
 	chainID := hexutil.Uint64(412346)
-	op := creation(execute(accounts, 0, nil))
+	op := creation(execute(accounts, 0, authorize))
 	sign := func(remote, forwarded string) string {
 		return messageOf(rpc(t, s, remote, forwarded, "pm_getPaymasterData", op, entryPoint, chainID))
 	}
@@ -402,7 +425,7 @@ func TestEachClientGetsItsDailySignatures(t *testing.T) {
 			t.Fatal("the first two")
 		}
 	}
-	if got := sign("203.0.113.1", ""); got != "the daily 2 sponsorships of this client are used" {
+	if got := sign("203.0.113.1", ""); got != "the day's sponsorships of this client, or of all clients, are used" {
 		t.Fatalf("the third: %q", got)
 	}
 	if sign("10.0.0.1", "198.51.100.7, 10.0.0.2") != "" {
@@ -421,5 +444,81 @@ func TestEachClientGetsItsDailySignatures(t *testing.T) {
 	chain.failHeader = true
 	if got := sign("192.0.2.1", ""); got != "the chain could not be read" {
 		t.Fatalf("a node down: %q", got)
+	}
+}
+
+func TestOnlyAUsersCallsAreSponsored(t *testing.T) {
+	chain := newChain()
+	s := service(t, chain)
+	setLiquidator := slices.Concat(crypto.Keccak256([]byte("setLiquidator(address)"))[:4], make([]byte, 32))
+	for _, callData := range [][]byte{execute(accounts, 0, setLiquidator), execute(liquidator, 0, authorize),
+		execute(usdg, 0, approve(liquidator)), execute(accounts, 0, nil)} {
+		refused(t, s.check(context.Background(), existing(chain, callData)), "is not a user's call")
+	}
+}
+
+func TestAContractThatIsNotTheFactorysProxyIsRefused(t *testing.T) {
+	chain := newChain()
+	s := service(t, chain)
+	op := existing(chain, execute(accounts, 0, authorize))
+	chain.code[op.Sender] = []byte{0x60, 0x00}
+	refused(t, s.check(context.Background(), op), "is not a SimpleAccount v0.7")
+}
+
+func TestTheCallGasFollowsTheCalls(t *testing.T) {
+	chain := newChain()
+	s := service(t, chain)
+	ctx := context.Background()
+	alone := creation([]byte{})
+	alone.CallGasLimit = big64(50_001)
+	_, err := s.Data(ctx, alone)
+	refused(t, err, "call gas limit is above 50000")
+	created := creation(execute(accounts, 0, authorize))
+	created.CallGasLimit = big64(1_000_001)
+	_, err = s.Data(ctx, created)
+	refused(t, err, "call gas limit is above 1000000")
+	later := existing(chain, execute(accounts, 0, authorize))
+	later.CallGasLimit = big64(150_001)
+	_, err = s.Data(ctx, later)
+	refused(t, err, "call gas limit is above 150000")
+	chain.estimate = 0
+	_, err = s.Data(ctx, existing(chain, execute(accounts, 0, authorize)))
+	refused(t, err, "the calls fail")
+}
+
+func TestTheL1EstimateCountsA65ByteSignature(t *testing.T) {
+	s := service(t, newChain())
+	op := creation(execute(accounts, 0, authorize))
+	short, err := s.l1Gas(context.Background(), op)
+	if err != nil {
+		t.Fatal(err)
+	}
+	op.Signature = make([]byte, 60_000)
+	long, err := s.l1Gas(context.Background(), op)
+	if err != nil || long != short {
+		t.Fatalf("a long dummy signature moved the estimate from %d to %d: %v", short, long, err)
+	}
+}
+
+func TestAnIPv6NetworkIsOneClientAndAllClientsShareADailyBudget(t *testing.T) {
+	s := service(t, newChain())
+	s.limits.Daily = 1
+	chainID := hexutil.Uint64(412346)
+	op := creation(execute(accounts, 0, authorize))
+	sign := func(remote string) string {
+		return messageOf(rpc(t, s, remote, "", "pm_getPaymasterData", op, entryPoint, chainID))
+	}
+	if sign("[2001:db8::1]") != "" || sign("[2001:db8::2]") == "" || sign("[2001:db8:0:1::1]") != "" {
+		t.Fatal("an IPv6 /64 is one client")
+	}
+	s.global = rate.NewLimiter(rate.Every(time.Hour), 1)
+	if sign("192.0.2.10") != "" || sign("192.0.2.11") == "" {
+		t.Fatal("the global budget")
+	}
+	for i := range 21 {
+		got := messageOf(rpc(t, s, "192.0.2.20", "", "pm_getPaymasterStubData", creation([]byte{}), entryPoint, chainID))
+		if (got == "this client asks too often") != (i == 20) {
+			t.Fatalf("stub %d: %q", i, got)
+		}
 	}
 }

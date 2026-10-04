@@ -3,9 +3,10 @@
 // Package sponsor is Tapehouse's sponsor service. It decides which ERC-4337 user operations the sponsor paymaster pays
 // for and signs each one it sponsors, serving ERC-7677's pm_getPaymasterStubData and pm_getPaymasterData over
 // JSON-RPC. It sponsors an operation of a SimpleAccount v0.7 made by the registry's factory when it only creates the
-// account, or when every call goes to a Tapehouse contract of the registry, or approves one to spend a token of the
-// registry, and sends no value; while the account has free operations left on the paymaster; at gas limits, fees and a
-// pre-verification gas close to what the operation costs; and within a daily number of signatures for each client.
+// account, or when every call is a user's call to a Tapehouse contract of the registry, or approves one to spend a token
+// of the registry, and sends no value; while the account has free operations left on the paymaster; at gas limits, fees
+// and a pre-verification gas close to what the operation costs; and within a daily number of signatures for each client
+// and for all of them.
 package sponsor
 
 import (
@@ -27,6 +28,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/core/vm/program"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/tapehouse/tapehouse/services/sdk"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/sponsorpaymaster"
@@ -42,8 +45,12 @@ const (
 
 // Limits are what the service accepts of an operation's gas, and how many signatures it gives each client a day.
 type Limits struct {
-	// MaxVerificationGas and MaxCallGas bound the account's gas limits.
-	MaxVerificationGas, MaxCallGas uint64
+	// MaxVerificationGas bounds the account's verification gas limit.
+	MaxVerificationGas uint64
+	// MaxCreationCallGas bounds the call gas limit of an operation that only creates its account, and MaxCallGas that of
+	// one that also creates it, whose calls cannot be estimated before. An existing account's call gas limit is bounded
+	// by 130% of its calls' estimate, plus EstimateMargin.
+	MaxCreationCallGas, MaxCallGas, EstimateMargin uint64
 	// MaxPriorityFee bounds the priority fee, in wei per gas.
 	MaxPriorityFee *big.Int
 	// FeeMultiple bounds the fee cap to this many times the latest base fee.
@@ -53,18 +60,21 @@ type Limits struct {
 	StaticPreVerificationGas uint64
 	// Validity is how long a signature stays valid.
 	Validity time.Duration
-	// Daily is how many signatures each client gets a day.
-	Daily int
+	// Daily is how many signatures each client gets a day, a client being an IPv4 address or an IPv6 /64, and
+	// GlobalDaily how many all clients get together.
+	Daily, GlobalDaily int
 }
 
 // DefaultLimits are the service's limits unless configured otherwise.
-var DefaultLimits = Limits{MaxVerificationGas: 1_000_000, MaxCallGas: 2_000_000, MaxPriorityFee: big.NewInt(10_000_000),
-	FeeMultiple: 3, StaticPreVerificationGas: 100_000, Validity: 10 * time.Minute, Daily: 30}
+var DefaultLimits = Limits{MaxVerificationGas: 1_000_000, MaxCreationCallGas: 50_000, MaxCallGas: 1_000_000,
+	EstimateMargin: 20_000, MaxPriorityFee: new(big.Int), FeeMultiple: 3, StaticPreVerificationGas: 60_000,
+	Validity: 10 * time.Minute, Daily: 30, GlobalDaily: 5_000}
 
 // Chain is what the service reads of the chain. *ethclient.Client implements it.
 type Chain interface {
 	CodeAt(ctx context.Context, account common.Address, block *big.Int) ([]byte, error)
 	CallContract(ctx context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error)
+	EstimateGas(ctx context.Context, call ethereum.CallMsg) (uint64, error)
 	StorageAt(ctx context.Context, account common.Address, key common.Hash, block *big.Int) ([]byte, error)
 	HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error)
 }
@@ -95,8 +105,9 @@ type Service struct {
 	factory        common.Address
 	paymaster      common.Address
 	implementation common.Address
+	proxyCodeHash  common.Hash
 	domain         common.Hash
-	targets        map[common.Address]bool
+	targets        map[common.Address]map[[4]byte]bool
 	tokens         map[common.Address]bool
 	limits         Limits
 	proxies        []netip.Prefix
@@ -105,11 +116,19 @@ type Service struct {
 
 	mu      sync.Mutex
 	clients map[string]*client
+	global  *rate.Limiter
+	swept   time.Time
 }
 
+// requestTimeout bounds the chain reads a request makes.
+const requestTimeout = 20 * time.Second
+
+// maxClients bounds the clients the service remembers; beyond it, a new client waits for the next sweep.
+const maxClients = 100_000
+
 type client struct {
-	limiter *rate.Limiter
-	seen    time.Time
+	limiter, stubs *rate.Limiter
+	seen           time.Time
 }
 
 // New returns the service of the registry d, signing with key, which must be the paymaster's signer. It trusts
@@ -117,7 +136,8 @@ type client struct {
 func New(ctx context.Context, chain Chain, d *sdk.Deployments, key *ecdsa.PrivateKey, limits Limits,
 	proxies []netip.Prefix, log *slog.Logger) (*Service, error) {
 	s := &Service{chain: chain, key: key, chainID: d.ChainID, limits: limits, proxies: proxies, log: log, now: time.Now,
-		clients: map[string]*client{}, targets: map[common.Address]bool{}, tokens: map[common.Address]bool{}}
+		clients: map[string]*client{}, tokens: map[common.Address]bool{},
+		global: rate.NewLimiter(rate.Every(24*time.Hour/time.Duration(limits.GlobalDaily)), limits.GlobalDaily)}
 	for _, entry := range []struct {
 		into  *common.Address
 		group map[string]common.Address
@@ -133,22 +153,18 @@ func New(ctx context.Context, chain Chain, d *sdk.Deployments, key *ecdsa.Privat
 		}
 		*entry.into = address
 	}
-	for name, address := range d.Tapehouse {
-		if name != "Owner" && name != "HaltSigner" && name != "SponsorPaymaster" {
-			s.targets[address] = true
-		}
-	}
-	for _, group := range []map[string]common.Address{d.StockLending, d.Baskets} {
-		for _, address := range group {
-			s.targets[address] = true
-		}
+	var err error
+	if s.targets, err = sponsoredFunctions(d); err != nil {
+		return nil, err
 	}
 	for _, address := range d.Tokens {
 		s.tokens[address] = true
 	}
-	var err error
 	if s.implementation, err = s.address(ctx, s.factory, factoryABI, "accountImplementation"); err != nil {
 		return nil, fmt.Errorf("the factory's account implementation: %w", err)
+	}
+	if s.proxyCodeHash, err = s.accountCodeHash(ctx); err != nil {
+		return nil, fmt.Errorf("the factory's account code: %w", err)
 	}
 	paymaster := sponsorpaymaster.NewSponsorPaymaster()
 	signer, err := s.call(ctx, s.paymaster, paymaster.PackSigner())
@@ -277,26 +293,51 @@ func (s *Service) checkAccount(ctx context.Context, op *UserOperation) error {
 	if err != nil {
 		return err
 	}
-	if len(code) == 0 || common.BytesToAddress(slot) != s.implementation {
+	if crypto.Keccak256Hash(code) != s.proxyCodeHash || common.BytesToAddress(slot) != s.implementation {
 		return refuse("the account %s is not a SimpleAccount v0.7 of the registry's factory", op.Sender.Hex())
 	}
 	return nil
 }
 
-// checkCall refuses a call that is not to a Tapehouse contract, nor an approval of one to spend a registry token.
+// checkCall refuses a call that is not a user's call to a Tapehouse contract, nor an approval of one to spend a
+// registry token.
 func (s *Service) checkCall(c call) error {
 	if c.value.Sign() != 0 {
 		return refuse("the call to %s sends value", c.to.Hex())
 	}
-	if s.targets[c.to] {
-		return nil
-	}
-	if s.tokens[c.to] && len(c.data) >= 4 && [4]byte(c.data[:4]) == approveSelector {
-		if args, err := unpack(erc20ABI, "approve", c.data); err == nil && s.targets[args[0].(common.Address)] {
+	if len(c.data) >= 4 {
+		selector := [4]byte(c.data[:4])
+		if s.targets[c.to][selector] {
 			return nil
 		}
+		if s.tokens[c.to] && selector == approveSelector {
+			if args, err := unpack(erc20ABI, "approve", c.data); err == nil && s.targets[args[0].(common.Address)] != nil {
+				return nil
+			}
+		}
 	}
-	return refuse("the call to %s is not to a Tapehouse contract, nor an approval of one", c.to.Hex())
+	return refuse("the call to %s is not a user's call to a Tapehouse contract, nor an approval of one", c.to.Hex())
+}
+
+// accountCodeHash is the hash of the code of the factory's accounts, ERC-1967 proxies with no immutable: the code
+// returned by a creation, simulated with eth_call, that has the factory create an account and returns its code.
+func (s *Service) accountCodeHash(ctx context.Context) (common.Hash, error) {
+	create, err := factoryABI.Pack("createAccount", common.HexToAddress("0x000000000000000000000000000000000000dEaD"),
+		new(big.Int))
+	if err != nil {
+		return common.Hash{}, err
+	}
+	probe := program.New().Mstore(create, 0).Call(nil, s.factory, 0, 0, len(create), 0, 32).Op(vm.POP).
+		Push(0).Op(vm.MLOAD, vm.DUP1, vm.EXTCODESIZE, vm.DUP1).Push(0).Push(32).Op(vm.DUP5, vm.EXTCODECOPY).
+		Push(32).Op(vm.RETURN)
+	code, err := s.chain.CallContract(ctx, ethereum.CallMsg{Data: probe.Bytes()}, nil)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	if len(code) == 0 {
+		return common.Hash{}, errors.New("the factory created no account")
+	}
+	return crypto.Keccak256Hash(code), nil
 }
 
 // checkGas refuses gas limits, fees or a pre-verification gas beyond what the operation costs.
@@ -314,8 +355,12 @@ func (s *Service) checkGas(ctx context.Context, op *UserOperation) error {
 	if !op.VerificationGasLimit.ToInt().IsUint64() || op.VerificationGasLimit.ToInt().Uint64() > s.limits.MaxVerificationGas {
 		return refuse("the verification gas limit is above %d", s.limits.MaxVerificationGas)
 	}
-	if !op.CallGasLimit.ToInt().IsUint64() || op.CallGasLimit.ToInt().Uint64() > s.limits.MaxCallGas {
-		return refuse("the call gas limit is above %d", s.limits.MaxCallGas)
+	callGas, err := s.callGasLimit(ctx, op)
+	if err != nil {
+		return err
+	}
+	if !op.CallGasLimit.ToInt().IsUint64() || op.CallGasLimit.ToInt().Uint64() > callGas {
+		return refuse("the call gas limit is above %d", callGas)
 	}
 	if op.MaxPriorityFeePerGas.ToInt().Cmp(s.limits.MaxPriorityFee) > 0 {
 		return refuse("the priority fee is above %s wei", s.limits.MaxPriorityFee)
@@ -341,9 +386,27 @@ func (s *Service) checkGas(ctx context.Context, op *UserOperation) error {
 	return nil
 }
 
-// l1Gas is the L1 gas of handleOps carrying the operation, signed, as Arbitrum's NodeInterface estimates it.
+// callGasLimit is the most call gas the operation may ask for.
+func (s *Service) callGasLimit(ctx context.Context, op *UserOperation) (uint64, error) {
+	switch {
+	case len(op.CallData) == 0:
+		return s.limits.MaxCreationCallGas, nil
+	case op.Factory != nil:
+		return s.limits.MaxCallGas, nil
+	}
+	estimate, err := s.chain.EstimateGas(ctx, ethereum.CallMsg{From: s.entryPoint, To: &op.Sender, Data: op.CallData})
+	if err != nil {
+		return 0, refuse("the calls fail: %v", err)
+	}
+	return min(estimate*13/10+s.limits.EstimateMargin, s.limits.MaxCallGas), nil
+}
+
+// l1Gas is the L1 gas of handleOps carrying the operation, signed by the account and the service, as Arbitrum's
+// NodeInterface estimates it. A SimpleAccount's signature is 65 bytes, whatever the operation carries yet.
 func (s *Service) l1Gas(ctx context.Context, op *UserOperation) (uint64, error) {
-	handleOps, err := entryPointABI.Pack("handleOps", []packedUserOperation{pack(op, paymasterAndData(s.paymaster,
+	signed := *op
+	signed.Signature = make([]byte, 65)
+	handleOps, err := entryPointABI.Pack("handleOps", []packedUserOperation{pack(&signed, paymasterAndData(s.paymaster,
 		paymasterData(0, 0, make([]byte, 65))))}, common.Address{})
 	if err != nil {
 		return 0, err
@@ -363,23 +426,53 @@ func (s *Service) l1Gas(ctx context.Context, op *UserOperation) (uint64, error) 
 	return values[0].(uint64), nil
 }
 
-// allow spends one of the client's daily signatures, or reports that none is left.
+// allowStub spends one of the client's stubs, a second each with bursts of 20, or reports that none is left.
+func (s *Service) allowStub(address string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c := s.remember(address)
+	return c != nil && c.stubs.AllowN(s.now(), 1)
+}
+
+// allow spends one of the client's daily signatures and one of all clients', or reports that none is left.
 func (s *Service) allow(address string) bool {
 	now := s.now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for key, c := range s.clients {
-		if now.Sub(c.seen) > 24*time.Hour {
-			delete(s.clients, key)
+	c := s.remember(address)
+	if c == nil || !c.limiter.AllowN(now, 1) {
+		return false
+	}
+	if !s.global.AllowN(now, 1) {
+		c.limiter.ReserveN(now, -1)
+		return false
+	}
+	return true
+}
+
+// remember returns the client at address, forgetting those unseen for a day, or nil when it is new and the service
+// remembers as many as it may. The caller holds s.mu.
+func (s *Service) remember(address string) *client {
+	now := s.now()
+	if now.Sub(s.swept) > time.Minute {
+		for key, c := range s.clients {
+			if now.Sub(c.seen) > 24*time.Hour {
+				delete(s.clients, key)
+			}
 		}
+		s.swept = now
 	}
 	c, ok := s.clients[address]
 	if !ok {
-		c = &client{limiter: rate.NewLimiter(rate.Every(24*time.Hour/time.Duration(s.limits.Daily)), s.limits.Daily)}
+		if len(s.clients) >= maxClients {
+			return nil
+		}
+		c = &client{limiter: rate.NewLimiter(rate.Every(24*time.Hour/time.Duration(s.limits.Daily)), s.limits.Daily),
+			stubs: rate.NewLimiter(1, 20)}
 		s.clients[address] = c
 	}
 	c.seen = now
-	return c.limiter.AllowN(now, 1)
+	return c
 }
 
 type request struct {
@@ -436,14 +529,17 @@ func (s *Service) serve(r *http.Request, req *request) (any, *rpcError) {
 	}
 	var result map[string]any
 	var err error
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
 	switch {
+	case req.Method == "pm_getPaymasterStubData" && !s.allowStub(s.client(r)):
+		return nil, &rpcError{Code: -32005, Message: "this client asks too often"}
 	case req.Method == "pm_getPaymasterStubData":
-		result, err = s.StubData(r.Context(), &op)
+		result, err = s.StubData(ctx, &op)
 	case !s.allow(s.client(r)):
-		return nil, &rpcError{Code: -32005, Message: fmt.Sprintf("the daily %d sponsorships of this client are used",
-			s.limits.Daily)}
+		return nil, &rpcError{Code: -32005, Message: "the day's sponsorships of this client, or of all clients, are used"}
 	default:
-		result, err = s.Data(r.Context(), &op)
+		result, err = s.Data(ctx, &op)
 	}
 	var refusal *Refusal
 	switch {
@@ -460,27 +556,39 @@ func (s *Service) serve(r *http.Request, req *request) (any, *rpcError) {
 }
 
 // client is the request's client: its remote address, or, through a trusted proxy, the last address in
-// X-Forwarded-For that is not a trusted proxy.
+// X-Forwarded-For that is not a trusted proxy; an IPv6 address stands for its /64.
 func (s *Service) client(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	remote, err := parseHop(r.RemoteAddr)
 	if err != nil {
-		host = r.RemoteAddr
+		return r.RemoteAddr
 	}
-	remote, err := netip.ParseAddr(host)
-	if err != nil || !s.trusted(remote) {
-		return host
-	}
-	hops := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
-	for i := len(hops) - 1; i >= 0; i-- {
-		hop, err := netip.ParseAddr(strings.TrimSpace(hops[i]))
-		if err != nil {
-			break
+	if s.trusted(remote) {
+		hops := strings.Split(strings.Join(r.Header.Values("X-Forwarded-For"), ","), ",")
+		for i := len(hops) - 1; i >= 0; i-- {
+			hop, err := parseHop(strings.TrimSpace(hops[i]))
+			if err != nil {
+				break
+			}
+			if !s.trusted(hop) {
+				remote = hop
+				break
+			}
 		}
-		if !s.trusted(hop) {
-			return hop.String()
-		}
 	}
-	return host
+	if remote.Is6() {
+		prefix, _ := remote.Prefix(64)
+		return prefix.String()
+	}
+	return remote.String()
+}
+
+// parseHop reads an address, with or without its port.
+func parseHop(text string) (netip.Addr, error) {
+	if host, _, err := net.SplitHostPort(text); err == nil {
+		text = host
+	}
+	address, err := netip.ParseAddr(text)
+	return address.Unmap(), err
 }
 
 func (s *Service) trusted(address netip.Addr) bool {
