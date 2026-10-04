@@ -36,6 +36,7 @@ path = [
     "apps/app/package.json",
     "apps/app/.impeccable/surfaces/app.md",
     "apps/app/.impeccable/surfaces/account.md",
+    "apps/app/.impeccable/surfaces/earn.md",
     "apps/app/.impeccable/config.json",
     "apps/app/PRODUCT.md",
     "apps/app/DESIGN.md",

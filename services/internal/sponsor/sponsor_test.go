@@ -38,6 +38,7 @@ var (
 	owner          = common.HexToAddress("0x9999999999999999999999999999999999999999")
 	stranger       = common.HexToAddress("0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa")
 	liquidator     = common.HexToAddress("0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB")
+	backstop       = common.HexToAddress("0xcCCCcCCCcCCCCCCcCcccCcCcCcCcCcCcCCcCcCCc")
 	proxyCode      = []byte{0x60, 0x80, 0x60, 0x40}
 	signerKey, _   = crypto.HexToECDSA("4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318")
 	now            = time.Unix(1_790_000_000, 0)
@@ -52,6 +53,7 @@ type fakeChain struct {
 	l1Gas      uint64
 	failHeader bool
 	estimate   uint64
+	ownerReads int
 }
 
 func newChain() *fakeChain {
@@ -122,6 +124,10 @@ func (c *fakeChain) CallContract(_ context.Context, msg ethereum.CallMsg, _ *big
 		l1 := c.l1Gas + uint64(len(args[2].([]byte)))*16
 		return nodeInterfaceABI.Methods["gasEstimateL1Component"].Outputs.Pack(l1, c.baseFee, big.NewInt(1))
 	}
+	if c.code[*msg.To] != nil && bytes.Equal(msg.Data, accountABI.Methods["owner"].ID) {
+		c.ownerReads++
+		return common.LeftPadBytes(owner.Bytes(), 32), nil
+	}
 	return nil, errors.New("unexpected call")
 }
 
@@ -129,7 +135,7 @@ func registry(t *testing.T) *sdk.Deployments {
 	t.Helper()
 	d, err := sdk.ParseDeployments([]byte(`{"chainId":412346,
 		"tokens":{"USDG":"` + usdg.Hex() + `"},
-		"tapehouse":{"MarginAccounts":"` + accounts.Hex() + `","Liquidator":"` + liquidator.Hex() + `","Owner":"` +
+		"tapehouse":{"MarginAccounts":"` + accounts.Hex() + `","Liquidator":"` + liquidator.Hex() + `","GapBackstop":"` + backstop.Hex() + `","Owner":"` +
 		owner.Hex() + `","SponsorPaymaster":"` + paymaster.Hex() + `"},
 		"erc4337":{"EntryPoint":"` + entryPoint.Hex() + `","SimpleAccountFactory":"` + factory.Hex() + `"}}`))
 	if err != nil {
@@ -279,7 +285,59 @@ func TestTheAccountMayPullARegistryTokenFromAPermit(t *testing.T) {
 		refused(t, s.check(context.Background(), existing(chain, callData)), "is not a user's call")
 	}
 	alone, _ := accountABI.Pack("executeBatch", []common.Address{usdg, usdg}, []*big.Int{}, [][]byte{permit, pull})
-	refused(t, s.check(context.Background(), existing(chain, alone)), "takes tokens without a call to Tapehouse")
+	refused(t, s.check(context.Background(), existing(chain, alone)), "moves tokens without a call to Tapehouse")
+}
+
+func TestTheAccountMaySendItsOwnerWhatItClaimed(t *testing.T) {
+	chain := newChain()
+	s := service(t, chain)
+	ctx := context.Background()
+	claimGains := func(token common.Address) []byte {
+		return slices.Concat(crypto.Keccak256([]byte("claimGains(address)"))[:4], common.LeftPadBytes(token.Bytes(), 32))
+	}
+	toOwner, _ := erc20ABI.Pack("transfer", owner, big.NewInt(1))
+	batch := func(to []common.Address, data ...[]byte) []byte {
+		out, _ := accountABI.Pack("executeBatch", to, []*big.Int{}, data)
+		return out
+	}
+	claimed := batch([]common.Address{backstop, usdg}, claimGains(usdg), toOwner)
+	chain.ownerReads = 0
+	if err := s.check(ctx, existing(chain, claimed)); err != nil {
+		t.Fatal(err)
+	}
+	if chain.ownerReads != 1 {
+		t.Fatalf("the owner is read %d times, want once", chain.ownerReads)
+	}
+	if err := s.check(ctx, creation(claimed)); err != nil {
+		t.Fatalf("the owner of an account being created is the factory data's: %v", err)
+	}
+	premium := crypto.Keccak256([]byte("claim()"))[:4]
+	if err := s.check(ctx, existing(chain, execute(backstop, 0, premium))); err != nil {
+		t.Fatalf("anyone may claim the backstop's premium: %v", err)
+	}
+	toStranger, _ := erc20ABI.Pack("transfer", stranger, big.NewInt(1))
+	refused(t, s.check(ctx, existing(chain, batch([]common.Address{backstop, usdg}, claimGains(usdg), toStranger))),
+		"sends a token to someone other than its owner")
+	for _, callData := range [][]byte{
+		execute(usdg, 0, toOwner),
+		batch([]common.Address{backstop, usdg}, premium, toOwner),
+		batch([]common.Address{backstop, usdg}, claimGains(stranger), toOwner),
+		batch([]common.Address{usdg, backstop}, toOwner, claimGains(usdg)),
+		batch([]common.Address{backstop, usdg, usdg}, claimGains(usdg), toOwner, toOwner),
+	} {
+		refused(t, s.check(ctx, existing(chain, callData)), "sends a token it did not just claim")
+	}
+	chain.ownerReads = 0
+	many := make([][]byte, 150)
+	targets := make([]common.Address, 150)
+	for i := range many {
+		many[i], targets[i] = toOwner, usdg
+	}
+	refused(t, s.check(ctx, existing(chain, batch(targets, many...))), "sends a token it did not just claim")
+	if chain.ownerReads != 0 {
+		t.Fatalf("a refused batch read the owner %d times", chain.ownerReads)
+	}
+	refused(t, s.check(ctx, existing(chain, execute(stranger, 0, toOwner))), "is not a user's call")
 }
 
 func TestEverythingElseIsRefused(t *testing.T) {

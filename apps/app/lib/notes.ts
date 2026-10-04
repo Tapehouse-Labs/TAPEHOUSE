@@ -4,7 +4,7 @@ import type { AccountState, Position } from "./accountRead";
 import { tokens, usd, usdg } from "./amounts";
 import { premiumOver, weekendPlan } from "./week";
 
-export type Note = { text: string; tone?: "warning" | "loss" };
+export type Note = { text: string; tone?: "warning" | "loss"; term?: string };
 
 /** Whether a closure lies ahead of new loans: from the regular open on its last trading day, or while unknown. */
 export function weekendAhead(state: AccountState, position: Position): boolean {

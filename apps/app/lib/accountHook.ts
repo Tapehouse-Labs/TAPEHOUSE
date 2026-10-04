@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 "use client";
 
-import { accounts, decodeRevertData, type Deployments, sponsorship } from "@tapehouse/sdk";
+import { accounts, backstop, decodeRevertData, type Deployments, gapCover, sponsorship, supply } from "@tapehouse/sdk";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
@@ -21,7 +21,7 @@ import { useDeployments } from "@/app/providers";
 import { readAccount } from "./accountRead";
 import { describeRevert } from "./errors";
 import { REFRESH_MS, useSettled } from "./hooks";
-import { asCall, type Call, direct, type Intent, smartAccountPlan } from "./intent";
+import { asCall, type Call, direct, type Intent, smartAccountPlan, vaultAddress } from "./intent";
 import { useSmartAccount } from "./smartAccountHook";
 
 /**
@@ -102,6 +102,15 @@ export function useLiquidationPreview(
 
 export type SendPhase = "wrapping" | "permit" | "checking" | "signing" | "sending";
 
+/** What the primary button says while a send is in each phase. */
+export const PHASE: Record<SendPhase, string> = {
+  wrapping: "Wrapping your ether…",
+  permit: "Sign the permit in your wallet…",
+  checking: "Checking it against the chain…",
+  signing: "Waiting for your wallet…",
+  sending: "Sending…",
+};
+
 type Sender = {
   deployments: Deployments;
   client: PublicClient;
@@ -128,7 +137,8 @@ export function useSend() {
   const [phase, setPhase] = useState<SendPhase>();
   const mutation = useMutation({
     mutationKey: ["send"],
-    mutationFn: async (intent: Intent) => {
+    mutationFn: async (request: Intent | (() => Promise<Intent>)) => {
+      const intent = typeof request === "function" ? await request() : request;
       if (!client || !wallet || !account || !owner) throw new Error("Connect your wallet first.");
       const sender = { deployments, client, wallet, account, owner, bundler: smart.bundler, phase: setPhase };
       if (smart.enabled) await sendFromSmartAccount(sender, intent);
@@ -140,7 +150,7 @@ export function useSend() {
     },
   });
   return {
-    send: (intent: Intent) => mutation.mutate(intent),
+    send: (intent: Intent | (() => Promise<Intent>), options?: { onSuccess?: () => void }) => mutation.mutate(intent, options),
     phase,
     pending: mutation.isPending,
     error: mutation.error ?? undefined,
@@ -231,10 +241,9 @@ async function sendWithFreshGas(s: Sender, bundler: ReturnType<NonNullable<Sende
 }
 
 async function sendFromWallet(s: Sender, intent: Intent) {
-  const transactions = await walletTransactions(s.deployments, intent, s.owner, async (token, amount) => {
+  const transactions = await walletTransactions(s.deployments, intent, s.owner, async (token, amount, spender) => {
     s.phase("permit");
     const deadline = permitDeadline();
-    const spender = s.deployments.tapehouse.MarginAccounts as Address;
     const permit = await sponsorship.permit(s.client, { token, owner: s.owner, account: spender, value: amount, deadline });
     return { deadline, signature: await s.wallet.signTypedData({ account: s.owner, ...permit }) };
   });
@@ -254,19 +263,31 @@ async function confirm(s: Sender, hash: Hex) {
 
 /**
  * The transactions the wallet sends for `intent` when it is the margin account: a deposit with a permit `sign`
- * returns, ether wrapped first, a repayment after its approval, and anything else as it is.
+ * returns for `spender`, ether wrapped first, a supply with a USDG permit, a repayment or a deposit with the backstop
+ * or the cover's writers after its approval, and anything else as it is.
  */
 async function walletTransactions(
   deployments: Deployments,
   intent: Intent,
   owner: Address,
-  sign: (token: Address, amount: bigint) => Promise<{ deadline: bigint; signature: Hex }>,
+  sign: (token: Address, amount: bigint, spender: Address) => Promise<{ deadline: bigint; signature: Hex }>,
 ) {
   const spender = deployments.tapehouse.MarginAccounts as Address;
+  const usdg = deployments.tokens.USDG as Address;
+  if (intent.kind === "vaultDeposit") {
+    const vault = vaultAddress(deployments, intent.vault);
+    const assets = intent.amount;
+    if (intent.vault === "supply") {
+      const { deadline, signature } = await sign(usdg, assets, vault);
+      return [supply.depositWithPermit(deployments, { assets, receiver: owner, deadline, signature })];
+    }
+    const deposit = (intent.vault === "backstop" ? backstop : gapCover).deposit(deployments, { assets, receiver: owner });
+    return [{ address: usdg, abi: erc20Abi, functionName: "approve", args: [vault, assets] } as const, deposit];
+  }
   if (intent.kind === "deposit") {
     const eth = intent.token === "ETH";
     const token = eth ? (deployments.tokens.WETH as Address) : (intent.token as Address);
-    const { deadline, signature } = await sign(token, intent.amount);
+    const { deadline, signature } = await sign(token, intent.amount, spender);
     const deposit = accounts.depositWithPermit(deployments, {
       position: intent.position,
       token,
@@ -278,7 +299,6 @@ async function walletTransactions(
     return eth ? [accounts.wrap(deployments, { account: owner, value: intent.amount }), deposit] : [deposit];
   }
   if (intent.kind === "repay") {
-    const usdg = deployments.tokens.USDG as Address;
     return [
       { address: usdg, abi: erc20Abi, functionName: "approve", args: [spender, intent.amount] } as const,
       accounts.repay(deployments, { position: intent.position, assets: intent.amount, account: owner }),

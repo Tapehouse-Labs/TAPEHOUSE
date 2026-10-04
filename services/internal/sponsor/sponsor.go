@@ -108,6 +108,7 @@ type Service struct {
 	domain         common.Hash
 	targets        map[common.Address]map[[4]byte]bool
 	tokens         map[common.Address]bool
+	backstop       common.Address
 	limits         Limits
 	proxies        []netip.Prefix
 	log            *slog.Logger
@@ -159,6 +160,7 @@ func New(ctx context.Context, chain Chain, d *sdk.Deployments, key *ecdsa.Privat
 	for _, address := range d.Tokens {
 		s.tokens[address] = true
 	}
+	s.backstop = d.Tapehouse["GapBackstop"]
 	if s.implementation, err = s.address(ctx, s.factory, factoryABI, "accountImplementation"); err != nil {
 		return nil, fmt.Errorf("the factory's account implementation: %w", err)
 	}
@@ -250,19 +252,33 @@ func (s *Service) check(ctx context.Context, op *UserOperation) error {
 	if err != nil {
 		return err
 	}
-	takes, tapehouse := false, false
+	moves, tapehouse := false, false
+	claimed := map[common.Address]bool{}
+	var holder *common.Address
 	for _, c := range calls {
+		if s.tokens[c.to] && len(c.data) >= 4 && [4]byte(c.data[:4]) == transferSelector {
+			if err := s.checkTransfer(ctx, op, c, claimed, &holder); err != nil {
+				return err
+			}
+			moves = true
+			continue
+		}
 		if err := s.checkCall(op.Sender, c); err != nil {
 			return err
 		}
 		if len(c.data) >= 4 {
 			selector := [4]byte(c.data[:4])
-			takes = takes || (s.tokens[c.to] && (selector == permitSelector || selector == transferFromSelector))
+			moves = moves || (s.tokens[c.to] && (selector == permitSelector || selector == transferFromSelector))
 			tapehouse = tapehouse || s.targets[c.to][selector]
+			if c.to == s.backstop && selector == claimGainsSelector {
+				if args, err := unpack(backstopABI, "claimGains", c.data); err == nil {
+					claimed[args[0].(common.Address)] = true
+				}
+			}
 		}
 	}
-	if takes && !tapehouse {
-		return refuse("the operation takes tokens without a call to Tapehouse")
+	if moves && !tapehouse {
+		return refuse("the operation moves tokens without a call to Tapehouse")
 	}
 	used, err := s.call(ctx, s.paymaster, sponsorpaymaster.NewSponsorPaymaster().PackOperations(op.Sender))
 	if err != nil {
@@ -336,6 +352,41 @@ func (s *Service) checkCall(sender common.Address, c call) error {
 		}
 	}
 	return refuse("the call to %s is not a user's call to a Tapehouse contract, nor an approval of one", c.to.Hex())
+}
+
+// checkTransfer refuses a transfer of a registry token unless it sends op's account owner a token the account claimed
+// from the backstop's gains earlier in the same operation, once per claim. The owner is read once an operation, into
+// holder.
+func (s *Service) checkTransfer(ctx context.Context, op *UserOperation, c call, claimed map[common.Address]bool,
+	holder **common.Address) error {
+	args, err := unpack(erc20ABI, "transfer", c.data)
+	if err != nil || !claimed[c.to] {
+		return refuse("the operation sends a token it did not just claim")
+	}
+	delete(claimed, c.to)
+	if *holder == nil {
+		owner, err := s.owner(ctx, op)
+		if err != nil {
+			return err
+		}
+		*holder = &owner
+	}
+	if args[0].(common.Address) != **holder {
+		return refuse("the operation sends a token to someone other than its owner")
+	}
+	return nil
+}
+
+// owner is the owner of op's account: the factory data's while the operation creates it, else the account's own.
+func (s *Service) owner(ctx context.Context, op *UserOperation) (common.Address, error) {
+	if op.Factory != nil {
+		args, err := unpack(factoryABI, "createAccount", op.FactoryData)
+		if err != nil {
+			return common.Address{}, refuse("the factory data is not createAccount(owner, salt)")
+		}
+		return args[0].(common.Address), nil
+	}
+	return s.address(ctx, op.Sender, accountABI, "owner")
 }
 
 // accountCodeHash is the hash of the code of the factory's accounts, ERC-1967 proxies with no immutable: the code
