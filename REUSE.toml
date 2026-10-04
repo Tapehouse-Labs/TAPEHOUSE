@@ -7,6 +7,11 @@ SPDX-FileCopyrightText = "Tapehouse contributors"
 [[annotations]]
 path = [
     "README.md",
+    "docs/REFERENCE.md",
+    "deploy/README.md",
+    "deploy/railway/*/railway.json",
+    "services/Dockerfile",
+    "services/Dockerfile.dockerignore",
     ".nvmrc",
     "package.json",
     "pnpm-lock.yaml",
