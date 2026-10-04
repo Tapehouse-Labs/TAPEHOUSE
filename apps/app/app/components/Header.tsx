@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useChains } from "wagmi";
+import { faucetUrl } from "@/lib/chains";
 import { Mark } from "./Mark";
 import { Seal } from "./Seal";
 import { ThemeToggle } from "./ThemeToggle";
@@ -19,6 +20,7 @@ export const SECTIONS = [
 export function Header() {
   const pathname = usePathname();
   const [chain] = useChains();
+  const faucet = faucetUrl(chain.id);
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-rule bg-paper/90 backdrop-blur-md">
@@ -51,6 +53,11 @@ export function Header() {
               <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-gain" />
               {chain.name}
             </span>
+            {faucet && (
+              <a href={faucet} target="_blank" rel="noopener noreferrer" className="pill hidden md:inline-flex">
+                Get test USDG
+              </a>
+            )}
             <WalletControl />
             <ThemeToggle />
           </div>

@@ -19,3 +19,8 @@ export function chainOf(id: number, rpcUrl?: string): Chain {
   if (!chain) throw new Error(`Tapehouse runs on no chain ${id}.`);
   return rpcUrl ? { ...chain, rpcUrls: { default: { http: [rpcUrl] } } } : chain;
 }
+
+/** Where a visitor takes test USDG on chain `id`, only on Robinhood Chain's testnet. */
+export function faucetUrl(id: number): string | undefined {
+  return id === robinhoodTestnet.id ? "https://faucet.paxos.com/?network=robinhood" : undefined;
+}

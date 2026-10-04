@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import { describe, expect, test } from "vitest";
-import { chainOf } from "./chains";
+import { chainOf, faucetUrl } from "./chains";
 
 describe("chainOf", () => {
   test("Robinhood Chain and its testnet keep viem's definitions", () => {
@@ -18,5 +18,13 @@ describe("chainOf", () => {
 
   test("refuses a chain Tapehouse is not deployed on", () => {
     expect(() => chainOf(1)).toThrow("Tapehouse runs on no chain 1.");
+  });
+});
+
+describe("faucetUrl", () => {
+  test("only Robinhood Chain's testnet has a USDG faucet", () => {
+    expect(faucetUrl(46630)).toBe("https://faucet.paxos.com/?network=robinhood");
+    expect(faucetUrl(4663)).toBeUndefined();
+    expect(faucetUrl(412346)).toBeUndefined();
   });
 });
