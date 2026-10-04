@@ -178,6 +178,27 @@ func (g *GapCover) MinDeductible(opts *bind.CallOpts, asset string) (*big.Int, e
 	return read(g.c, opts, to, g.cover.UnpackMinDeductible)(g.cover.TryPackMinDeductible(symbol))
 }
 
+// Tail reads the constants of the cover's fitted tail, in millionths: its threshold and scale, in gaps, and the share of
+// falls beyond the threshold.
+func (g *GapCover) Tail(opts *bind.CallOpts) (threshold, scale, probability uint32, err error) {
+	for _, c := range []struct {
+		into   *uint32
+		pack   func() ([]byte, error)
+		unpack func([]byte) (*big.Int, error)
+	}{
+		{&threshold, g.cover.TryPackTAILTHRESHOLDPPM, g.cover.UnpackTAILTHRESHOLDPPM},
+		{&scale, g.cover.TryPackTAILSCALEPPM, g.cover.UnpackTAILSCALEPPM},
+		{&probability, g.cover.TryPackTAILPROBABILITYPPM, g.cover.UnpackTAILPROBABILITYPPM},
+	} {
+		value, err := read(g.c, opts, g.target, c.unpack)(c.pack())
+		if err != nil {
+			return 0, 0, 0, err
+		}
+		*c.into = uint32(value.Uint64())
+	}
+	return threshold, scale, probability, nil
+}
+
 // PricingGap reads the weekend gap the cover prices asset at now and the week's realised move it follows.
 func (g *GapCover) PricingGap(opts *bind.CallOpts, asset string) (PricingGap, error) {
 	to, symbol := g.of(asset)

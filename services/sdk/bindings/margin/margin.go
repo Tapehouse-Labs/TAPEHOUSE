@@ -26,7 +26,7 @@ var (
 
 // MarginMetaData contains all meta data concerning the Margin contract.
 var MarginMetaData = bind.MetaData{
-	ABI: "[{\"type\":\"function\",\"name\":\"assets\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"bytes32[]\",\"internalType\":\"bytes32[]\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"band\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"correlation\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"other\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"value\",\"type\":\"uint16\",\"internalType\":\"uint16\"},{\"name\":\"floor\",\"type\":\"uint16\",\"internalType\":\"uint16\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"currentRequirement\",\"inputs\":[{\"name\":\"quantities\",\"type\":\"int256[]\",\"internalType\":\"int256[]\"},{\"name\":\"prices\",\"type\":\"uint256[]\",\"internalType\":\"uint256[]\"}],\"outputs\":[{\"name\":\"margin\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"missing\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"regime\",\"type\":\"uint8\",\"internalType\":\"uint8\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"depth\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"selling\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"buying\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"sellingCeiling\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"buyingCeiling\",\"type\":\"uint32\",\"internalType\":\"uint32\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"ethUsdFeed\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"lastUpdate\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"uint64\",\"internalType\":\"uint64\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"market\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"owner\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"pendingOwner\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"pool\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"requirement\",\"inputs\":[{\"name\":\"quantities\",\"type\":\"int256[]\",\"internalType\":\"int256[]\"},{\"name\":\"prices\",\"type\":\"uint256[]\",\"internalType\":\"uint256[]\"},{\"name\":\"horizon\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"spansClosure\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"outputs\":[{\"name\":\"margin\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"missing\",\"type\":\"uint8\",\"internalType\":\"uint8\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"volatility\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"value\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"floor\",\"type\":\"uint32\",\"internalType\":\"uint32\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"weekendGap\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"value\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"floor\",\"type\":\"uint32\",\"internalType\":\"uint32\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"weekendLeverage\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"uint32\",\"internalType\":\"uint32\"}],\"stateMutability\":\"view\"},{\"type\":\"event\",\"name\":\"CorrelationSet\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"other\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"value\",\"type\":\"uint16\",\"indexed\":false,\"internalType\":\"uint16\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"DepthSet\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"selling\",\"type\":\"uint32\",\"indexed\":false,\"internalType\":\"uint32\"},{\"name\":\"buying\",\"type\":\"uint32\",\"indexed\":false,\"internalType\":\"uint32\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"GapSet\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"value\",\"type\":\"uint32\",\"indexed\":false,\"internalType\":\"uint32\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"OwnershipTransferStarted\",\"inputs\":[{\"name\":\"previousOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"newOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"OwnershipTransferred\",\"inputs\":[{\"name\":\"previousOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"newOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"VolatilitySet\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"value\",\"type\":\"uint32\",\"indexed\":false,\"internalType\":\"uint32\"}],\"anonymous\":false}]",
+	ABI: "[{\"type\":\"function\",\"name\":\"assets\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"bytes32[]\",\"internalType\":\"bytes32[]\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"band\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"correlation\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"other\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"value\",\"type\":\"uint16\",\"internalType\":\"uint16\"},{\"name\":\"floor\",\"type\":\"uint16\",\"internalType\":\"uint16\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"currentRequirement\",\"inputs\":[{\"name\":\"quantities\",\"type\":\"int256[]\",\"internalType\":\"int256[]\"},{\"name\":\"prices\",\"type\":\"uint256[]\",\"internalType\":\"uint256[]\"}],\"outputs\":[{\"name\":\"margin\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"missing\",\"type\":\"uint8\",\"internalType\":\"uint8\"},{\"name\":\"regime\",\"type\":\"uint8\",\"internalType\":\"uint8\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"depth\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"selling\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"buying\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"sellingCeiling\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"buyingCeiling\",\"type\":\"uint32\",\"internalType\":\"uint32\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"ethUsdFeed\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"lastUpdate\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"uint64\",\"internalType\":\"uint64\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"market\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"owner\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"pendingOwner\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"pool\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"requirement\",\"inputs\":[{\"name\":\"quantities\",\"type\":\"int256[]\",\"internalType\":\"int256[]\"},{\"name\":\"prices\",\"type\":\"uint256[]\",\"internalType\":\"uint256[]\"},{\"name\":\"horizon\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"spansClosure\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"outputs\":[{\"name\":\"margin\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"missing\",\"type\":\"uint8\",\"internalType\":\"uint8\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"setParameters\",\"inputs\":[{\"name\":\"volatilities\",\"type\":\"uint32[]\",\"internalType\":\"uint32[]\"},{\"name\":\"correlations\",\"type\":\"uint16[]\",\"internalType\":\"uint16[]\"},{\"name\":\"gaps\",\"type\":\"uint32[]\",\"internalType\":\"uint32[]\"},{\"name\":\"depths\",\"type\":\"uint32[]\",\"internalType\":\"uint32[]\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"volatility\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"value\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"floor\",\"type\":\"uint32\",\"internalType\":\"uint32\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"weekendGap\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"value\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"floor\",\"type\":\"uint32\",\"internalType\":\"uint32\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"weekendLeverage\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"uint32\",\"internalType\":\"uint32\"}],\"stateMutability\":\"view\"},{\"type\":\"event\",\"name\":\"CorrelationSet\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"other\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"value\",\"type\":\"uint16\",\"indexed\":false,\"internalType\":\"uint16\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"DepthSet\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"selling\",\"type\":\"uint32\",\"indexed\":false,\"internalType\":\"uint32\"},{\"name\":\"buying\",\"type\":\"uint32\",\"indexed\":false,\"internalType\":\"uint32\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"GapSet\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"value\",\"type\":\"uint32\",\"indexed\":false,\"internalType\":\"uint32\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"OwnershipTransferStarted\",\"inputs\":[{\"name\":\"previousOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"newOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"OwnershipTransferred\",\"inputs\":[{\"name\":\"previousOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"newOwner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"VolatilitySet\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"value\",\"type\":\"uint32\",\"indexed\":false,\"internalType\":\"uint32\"}],\"anonymous\":false},{\"type\":\"error\",\"name\":\"CorrelationStepTooLarge\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"other\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"previous\",\"type\":\"uint16\",\"internalType\":\"uint16\"},{\"name\":\"value\",\"type\":\"uint16\",\"internalType\":\"uint16\"}]},{\"type\":\"error\",\"name\":\"DepthStepTooLarge\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"previous\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"value\",\"type\":\"uint32\",\"internalType\":\"uint32\"}]},{\"type\":\"error\",\"name\":\"GapStepTooLarge\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"previous\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"value\",\"type\":\"uint32\",\"internalType\":\"uint32\"}]},{\"type\":\"error\",\"name\":\"InvalidCorrelation\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"other\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"value\",\"type\":\"uint16\",\"internalType\":\"uint16\"},{\"name\":\"floor\",\"type\":\"uint16\",\"internalType\":\"uint16\"}]},{\"type\":\"error\",\"name\":\"InvalidDepth\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"value\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"ceiling\",\"type\":\"uint32\",\"internalType\":\"uint32\"}]},{\"type\":\"error\",\"name\":\"InvalidGap\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"value\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"floor\",\"type\":\"uint32\",\"internalType\":\"uint32\"}]},{\"type\":\"error\",\"name\":\"InvalidVolatility\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"value\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"floor\",\"type\":\"uint32\",\"internalType\":\"uint32\"}]},{\"type\":\"error\",\"name\":\"LengthMismatch\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"NotPositiveDefinite\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"OwnableUnauthorizedAccount\",\"inputs\":[{\"name\":\"account\",\"type\":\"address\",\"internalType\":\"address\"}]},{\"type\":\"error\",\"name\":\"UnknownAsset\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}]},{\"type\":\"error\",\"name\":\"UpdateTooSoon\",\"inputs\":[{\"name\":\"nextUpdateAt\",\"type\":\"uint64\",\"internalType\":\"uint64\"}]},{\"type\":\"error\",\"name\":\"VolatilityStepTooLarge\",\"inputs\":[{\"name\":\"symbol\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"previous\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"value\",\"type\":\"uint32\",\"internalType\":\"uint32\"}]}]",
 	ID:  "Margin",
 }
 
@@ -517,6 +517,28 @@ func (margin *Margin) UnpackRequirement(data []byte) (RequirementOutput, error) 
 	return *outstruct, nil
 }
 
+// PackSetParameters is the Go binding used to pack the parameters required for calling
+// the contract method with ID 0x332403cd.  This method will panic if any
+// invalid/nil inputs are passed.
+//
+// Solidity: function setParameters(uint32[] volatilities, uint16[] correlations, uint32[] gaps, uint32[] depths) returns()
+func (margin *Margin) PackSetParameters(volatilities []uint32, correlations []uint16, gaps []uint32, depths []uint32) []byte {
+	enc, err := margin.abi.Pack("setParameters", volatilities, correlations, gaps, depths)
+	if err != nil {
+		panic(err)
+	}
+	return enc
+}
+
+// TryPackSetParameters is the Go binding used to pack the parameters required for calling
+// the contract method with ID 0x332403cd.  This method will return an error
+// if any inputs are invalid/nil.
+//
+// Solidity: function setParameters(uint32[] volatilities, uint16[] correlations, uint32[] gaps, uint32[] depths) returns()
+func (margin *Margin) TryPackSetParameters(volatilities []uint32, correlations []uint16, gaps []uint32, depths []uint32) ([]byte, error) {
+	return margin.abi.Pack("setParameters", volatilities, correlations, gaps, depths)
+}
+
 // PackVolatility is the Go binding used to pack the parameters required for calling
 // the contract method with ID 0x6f205fca.  This method will panic if any
 // invalid/nil inputs are passed.
@@ -909,5 +931,378 @@ func (margin *Margin) UnpackVolatilitySetEvent(log *types.Log) (*MarginVolatilit
 		return nil, err
 	}
 	out.Raw = log
+	return out, nil
+}
+
+// UnpackError attempts to decode the provided error data using user-defined
+// error definitions.
+func (margin *Margin) UnpackError(raw []byte) (any, error) {
+	if bytes.Equal(raw[:4], margin.abi.Errors["CorrelationStepTooLarge"].ID.Bytes()[:4]) {
+		return margin.UnpackCorrelationStepTooLargeError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], margin.abi.Errors["DepthStepTooLarge"].ID.Bytes()[:4]) {
+		return margin.UnpackDepthStepTooLargeError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], margin.abi.Errors["GapStepTooLarge"].ID.Bytes()[:4]) {
+		return margin.UnpackGapStepTooLargeError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], margin.abi.Errors["InvalidCorrelation"].ID.Bytes()[:4]) {
+		return margin.UnpackInvalidCorrelationError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], margin.abi.Errors["InvalidDepth"].ID.Bytes()[:4]) {
+		return margin.UnpackInvalidDepthError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], margin.abi.Errors["InvalidGap"].ID.Bytes()[:4]) {
+		return margin.UnpackInvalidGapError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], margin.abi.Errors["InvalidVolatility"].ID.Bytes()[:4]) {
+		return margin.UnpackInvalidVolatilityError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], margin.abi.Errors["LengthMismatch"].ID.Bytes()[:4]) {
+		return margin.UnpackLengthMismatchError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], margin.abi.Errors["NotPositiveDefinite"].ID.Bytes()[:4]) {
+		return margin.UnpackNotPositiveDefiniteError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], margin.abi.Errors["OwnableUnauthorizedAccount"].ID.Bytes()[:4]) {
+		return margin.UnpackOwnableUnauthorizedAccountError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], margin.abi.Errors["UnknownAsset"].ID.Bytes()[:4]) {
+		return margin.UnpackUnknownAssetError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], margin.abi.Errors["UpdateTooSoon"].ID.Bytes()[:4]) {
+		return margin.UnpackUpdateTooSoonError(raw[4:])
+	}
+	if bytes.Equal(raw[:4], margin.abi.Errors["VolatilityStepTooLarge"].ID.Bytes()[:4]) {
+		return margin.UnpackVolatilityStepTooLargeError(raw[4:])
+	}
+	return nil, errors.New("Unknown error")
+}
+
+// MarginCorrelationStepTooLarge represents a CorrelationStepTooLarge error raised by the Margin contract.
+type MarginCorrelationStepTooLarge struct {
+	Symbol   [32]byte
+	Other    [32]byte
+	Previous uint16
+	Value    uint16
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error CorrelationStepTooLarge(bytes32 symbol, bytes32 other, uint16 previous, uint16 value)
+func MarginCorrelationStepTooLargeErrorID() common.Hash {
+	return common.HexToHash("0xa94553bf2d20232e14257f0357cb3fabd1dc8058595cd5880d85d26025600959")
+}
+
+// UnpackCorrelationStepTooLargeError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error CorrelationStepTooLarge(bytes32 symbol, bytes32 other, uint16 previous, uint16 value)
+func (margin *Margin) UnpackCorrelationStepTooLargeError(raw []byte) (*MarginCorrelationStepTooLarge, error) {
+	out := new(MarginCorrelationStepTooLarge)
+	if err := margin.abi.UnpackIntoInterface(out, "CorrelationStepTooLarge", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MarginDepthStepTooLarge represents a DepthStepTooLarge error raised by the Margin contract.
+type MarginDepthStepTooLarge struct {
+	Symbol   [32]byte
+	Previous uint32
+	Value    uint32
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error DepthStepTooLarge(bytes32 symbol, uint32 previous, uint32 value)
+func MarginDepthStepTooLargeErrorID() common.Hash {
+	return common.HexToHash("0x393e5a737a0b014eb025529ebf646c70ab68ff951ad87b380281464500979553")
+}
+
+// UnpackDepthStepTooLargeError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error DepthStepTooLarge(bytes32 symbol, uint32 previous, uint32 value)
+func (margin *Margin) UnpackDepthStepTooLargeError(raw []byte) (*MarginDepthStepTooLarge, error) {
+	out := new(MarginDepthStepTooLarge)
+	if err := margin.abi.UnpackIntoInterface(out, "DepthStepTooLarge", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MarginGapStepTooLarge represents a GapStepTooLarge error raised by the Margin contract.
+type MarginGapStepTooLarge struct {
+	Symbol   [32]byte
+	Previous uint32
+	Value    uint32
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error GapStepTooLarge(bytes32 symbol, uint32 previous, uint32 value)
+func MarginGapStepTooLargeErrorID() common.Hash {
+	return common.HexToHash("0x4025bda0577ba1c10b1e9e8cda3c5932c41be72ce75524ed44db7e3754d9c338")
+}
+
+// UnpackGapStepTooLargeError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error GapStepTooLarge(bytes32 symbol, uint32 previous, uint32 value)
+func (margin *Margin) UnpackGapStepTooLargeError(raw []byte) (*MarginGapStepTooLarge, error) {
+	out := new(MarginGapStepTooLarge)
+	if err := margin.abi.UnpackIntoInterface(out, "GapStepTooLarge", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MarginInvalidCorrelation represents a InvalidCorrelation error raised by the Margin contract.
+type MarginInvalidCorrelation struct {
+	Symbol [32]byte
+	Other  [32]byte
+	Value  uint16
+	Floor  uint16
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error InvalidCorrelation(bytes32 symbol, bytes32 other, uint16 value, uint16 floor)
+func MarginInvalidCorrelationErrorID() common.Hash {
+	return common.HexToHash("0x2793e7a38b41f4e235ba876e439ef42912bd52d6535de25a746e674d607a7f13")
+}
+
+// UnpackInvalidCorrelationError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error InvalidCorrelation(bytes32 symbol, bytes32 other, uint16 value, uint16 floor)
+func (margin *Margin) UnpackInvalidCorrelationError(raw []byte) (*MarginInvalidCorrelation, error) {
+	out := new(MarginInvalidCorrelation)
+	if err := margin.abi.UnpackIntoInterface(out, "InvalidCorrelation", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MarginInvalidDepth represents a InvalidDepth error raised by the Margin contract.
+type MarginInvalidDepth struct {
+	Symbol  [32]byte
+	Value   uint32
+	Ceiling uint32
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error InvalidDepth(bytes32 symbol, uint32 value, uint32 ceiling)
+func MarginInvalidDepthErrorID() common.Hash {
+	return common.HexToHash("0xb0d313fafa07d738d8c40f14fc13d6cacd381ae9c6f44fe13eb3c4f7a9d50798")
+}
+
+// UnpackInvalidDepthError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error InvalidDepth(bytes32 symbol, uint32 value, uint32 ceiling)
+func (margin *Margin) UnpackInvalidDepthError(raw []byte) (*MarginInvalidDepth, error) {
+	out := new(MarginInvalidDepth)
+	if err := margin.abi.UnpackIntoInterface(out, "InvalidDepth", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MarginInvalidGap represents a InvalidGap error raised by the Margin contract.
+type MarginInvalidGap struct {
+	Symbol [32]byte
+	Value  uint32
+	Floor  uint32
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error InvalidGap(bytes32 symbol, uint32 value, uint32 floor)
+func MarginInvalidGapErrorID() common.Hash {
+	return common.HexToHash("0x3f8f34a39014bc849f003199531c41c98797c005c12dea027575ae15a68797e8")
+}
+
+// UnpackInvalidGapError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error InvalidGap(bytes32 symbol, uint32 value, uint32 floor)
+func (margin *Margin) UnpackInvalidGapError(raw []byte) (*MarginInvalidGap, error) {
+	out := new(MarginInvalidGap)
+	if err := margin.abi.UnpackIntoInterface(out, "InvalidGap", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MarginInvalidVolatility represents a InvalidVolatility error raised by the Margin contract.
+type MarginInvalidVolatility struct {
+	Symbol [32]byte
+	Value  uint32
+	Floor  uint32
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error InvalidVolatility(bytes32 symbol, uint32 value, uint32 floor)
+func MarginInvalidVolatilityErrorID() common.Hash {
+	return common.HexToHash("0xd271f5a0fc3a046c1c6ddb3fab0f263b153ad9d4a5ec5f25acb3bfeaa67e3769")
+}
+
+// UnpackInvalidVolatilityError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error InvalidVolatility(bytes32 symbol, uint32 value, uint32 floor)
+func (margin *Margin) UnpackInvalidVolatilityError(raw []byte) (*MarginInvalidVolatility, error) {
+	out := new(MarginInvalidVolatility)
+	if err := margin.abi.UnpackIntoInterface(out, "InvalidVolatility", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MarginLengthMismatch represents a LengthMismatch error raised by the Margin contract.
+type MarginLengthMismatch struct {
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error LengthMismatch()
+func MarginLengthMismatchErrorID() common.Hash {
+	return common.HexToHash("0xff633a3803c58b9bc21e58efecee59f27e033cc0b1883fccb4969c76146fe60f")
+}
+
+// UnpackLengthMismatchError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error LengthMismatch()
+func (margin *Margin) UnpackLengthMismatchError(raw []byte) (*MarginLengthMismatch, error) {
+	out := new(MarginLengthMismatch)
+	if err := margin.abi.UnpackIntoInterface(out, "LengthMismatch", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MarginNotPositiveDefinite represents a NotPositiveDefinite error raised by the Margin contract.
+type MarginNotPositiveDefinite struct {
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error NotPositiveDefinite()
+func MarginNotPositiveDefiniteErrorID() common.Hash {
+	return common.HexToHash("0x2637f6156652a16e5c1b9cbfa2476bf319413deb18f6064f6d972e9bb8f8c163")
+}
+
+// UnpackNotPositiveDefiniteError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error NotPositiveDefinite()
+func (margin *Margin) UnpackNotPositiveDefiniteError(raw []byte) (*MarginNotPositiveDefinite, error) {
+	out := new(MarginNotPositiveDefinite)
+	if err := margin.abi.UnpackIntoInterface(out, "NotPositiveDefinite", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MarginOwnableUnauthorizedAccount represents a OwnableUnauthorizedAccount error raised by the Margin contract.
+type MarginOwnableUnauthorizedAccount struct {
+	Account common.Address
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error OwnableUnauthorizedAccount(address account)
+func MarginOwnableUnauthorizedAccountErrorID() common.Hash {
+	return common.HexToHash("0x118cdaa7a341953d1887a2245fd6665d741c67c8c50581daa59e1d03373fa188")
+}
+
+// UnpackOwnableUnauthorizedAccountError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error OwnableUnauthorizedAccount(address account)
+func (margin *Margin) UnpackOwnableUnauthorizedAccountError(raw []byte) (*MarginOwnableUnauthorizedAccount, error) {
+	out := new(MarginOwnableUnauthorizedAccount)
+	if err := margin.abi.UnpackIntoInterface(out, "OwnableUnauthorizedAccount", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MarginUnknownAsset represents a UnknownAsset error raised by the Margin contract.
+type MarginUnknownAsset struct {
+	Symbol [32]byte
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error UnknownAsset(bytes32 symbol)
+func MarginUnknownAssetErrorID() common.Hash {
+	return common.HexToHash("0x1059be3ed9f1c1f061f09edf206f56e7c80b74fd01671cbec1b3788a1f49417e")
+}
+
+// UnpackUnknownAssetError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error UnknownAsset(bytes32 symbol)
+func (margin *Margin) UnpackUnknownAssetError(raw []byte) (*MarginUnknownAsset, error) {
+	out := new(MarginUnknownAsset)
+	if err := margin.abi.UnpackIntoInterface(out, "UnknownAsset", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MarginUpdateTooSoon represents a UpdateTooSoon error raised by the Margin contract.
+type MarginUpdateTooSoon struct {
+	NextUpdateAt uint64
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error UpdateTooSoon(uint64 nextUpdateAt)
+func MarginUpdateTooSoonErrorID() common.Hash {
+	return common.HexToHash("0x9ec53c104f5bae60d4b964d7b3a05382856feed221816cc69bf052042f8a27bf")
+}
+
+// UnpackUpdateTooSoonError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error UpdateTooSoon(uint64 nextUpdateAt)
+func (margin *Margin) UnpackUpdateTooSoonError(raw []byte) (*MarginUpdateTooSoon, error) {
+	out := new(MarginUpdateTooSoon)
+	if err := margin.abi.UnpackIntoInterface(out, "UpdateTooSoon", raw); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MarginVolatilityStepTooLarge represents a VolatilityStepTooLarge error raised by the Margin contract.
+type MarginVolatilityStepTooLarge struct {
+	Symbol   [32]byte
+	Previous uint32
+	Value    uint32
+}
+
+// ErrorID returns the hash of canonical representation of the error's signature.
+//
+// Solidity: error VolatilityStepTooLarge(bytes32 symbol, uint32 previous, uint32 value)
+func MarginVolatilityStepTooLargeErrorID() common.Hash {
+	return common.HexToHash("0x7b13cffaf373ffa0aa2e300be8863abfb4ab9f6f2ea904e8087766f866c32147")
+}
+
+// UnpackVolatilityStepTooLargeError is the Go binding used to decode the provided
+// error data into the corresponding Go error struct.
+//
+// Solidity: error VolatilityStepTooLarge(bytes32 symbol, uint32 previous, uint32 value)
+func (margin *Margin) UnpackVolatilityStepTooLargeError(raw []byte) (*MarginVolatilityStepTooLarge, error) {
+	out := new(MarginVolatilityStepTooLarge)
+	if err := margin.abi.UnpackIntoInterface(out, "VolatilityStepTooLarge", raw); err != nil {
+		return nil, err
+	}
 	return out, nil
 }

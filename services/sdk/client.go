@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-// Package sdk reads Tapehouse's price band, its feeds, the margin accounts, the liquidator, the gap backstop, the
+// Package sdk reads Tapehouse's price band, its feeds, the margin engine, the margin accounts, the liquidator, the gap backstop, the
 // reopening auction, the stock lending vaults, the baskets, the short positions, the Morpho oracles and the gap cover,
 // and packs their transactions, over go-ethereum bindings generated from the contracts' ABIs. Addresses come from a
 // chain's registry, deployments/<chainId>.json, read at runtime.
@@ -41,6 +41,11 @@ func NewClient(backend bind.ContractBackend, deployments *Deployments) *Client {
 // Deployments returns the registry the client reads its addresses from.
 func (c *Client) Deployments() *Deployments {
 	return c.deployments
+}
+
+// Header reads the header of block number, or of the latest block where number is nil.
+func (c *Client) Header(ctx context.Context, number *big.Int) (*types.Header, error) {
+	return c.backend.HeaderByNumber(ctx, number)
 }
 
 // Simulate runs tx from opts.From with eth_call. A revert comes back as a *Revert where its data decodes.
