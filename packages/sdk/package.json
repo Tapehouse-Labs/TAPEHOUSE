@@ -25,7 +25,8 @@
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "lint": "tsc --noEmit && eslint --max-warnings 0",
-    "devnode": "node examples/devnode.ts"
+    "devnode": "node examples/devnode.ts",
+    "sponsored": "node examples/sponsored.ts"
   },
   "peerDependencies": {
     "viem": "^2.57.2"
@@ -34,6 +35,7 @@
     "@eslint/js": "9.39.5",
     "@types/node": "24.19.0",
     "eslint": "9.39.5",
+    "permissionless": "0.4.1",
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.0",
     "viem": "2.57.2",

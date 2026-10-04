@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import type { Page } from "@playwright/test";
+import type { Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 
 export type TestWallet = {
   /** The account the wallet holds. */
@@ -10,6 +12,8 @@ export type TestWallet = {
   rpcUrl: string;
   /** Whether the wallet's owner declines the connection. */
   decline?: boolean;
+  /** The key the wallet signs messages with, if it signs at all; `account` must be its address. */
+  key?: Hex;
 };
 
 /** Moves the page's test wallet to `chainId`. */
@@ -21,9 +25,14 @@ export async function moveWallet(page: Page, chainId: number) {
  * Installs a browser wallet in the page before it loads: an EIP-1193 provider announced through EIP-6963, which
  * holds `account`, starts on `chainId`, switches to the chains it is asked for and forwards every other request to
  * `rpcUrl`. `window.testWallet.moveTo(chainId)` moves it to another chain, as its owner would. A test double: it
- * signs nothing.
+ * signs messages (`personal_sign`) with `key` when it is given one, and nothing else.
  */
 export async function installWallet(page: Page, wallet: TestWallet) {
+  if (wallet.key) {
+    const signer = privateKeyToAccount(wallet.key);
+    if (signer.address.toLowerCase() !== wallet.account.toLowerCase()) throw new Error("The key does not hold account.");
+    await page.exposeFunction("testWalletSign", (message: Hex) => signer.signMessage({ message: { raw: message } }));
+  }
   await page.addInitScript((w: TestWallet) => {
     let chainId = w.chainId;
     let connected = false;
@@ -43,6 +52,11 @@ export async function installWallet(page: Page, wallet: TestWallet) {
             return connected ? [w.account] : [];
           case "eth_chainId":
             return hex(chainId);
+          case "personal_sign": {
+            const sign = (window as unknown as { testWalletSign?: (message: string) => Promise<string> }).testWalletSign;
+            if (!sign) throw Object.assign(new Error("The test wallet signs nothing."), { code: 4200 });
+            return sign((params as [string, string])[0]);
+          }
           case "wallet_requestPermissions":
             return [{ parentCapability: "eth_accounts" }];
           case "wallet_switchEthereumChain": {

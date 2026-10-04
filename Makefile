@@ -18,7 +18,8 @@ SDK_BINDINGS := Aggregator:AggregatorV3Interface.sol/AggregatorV3Interface Band:
 	GapCover:GapCover.sol/GapCover Liquidator:Liquidator.sol/Liquidator Margin:IMarginParameters.sol/IMarginParameters \
 	MarginAccounts:MarginAccounts.sol/MarginAccounts MorphoBandOracle:MorphoBandOracle.sol/MorphoBandOracle \
 	MorphoBlue:Interfaces.sol/IMorpho QuoterV2:IQuoterV2.sol/IQuoterV2 ReopeningAuction:ReopeningAuction.sol/ReopeningAuction \
-	ShortPositions:ShortPositions.sol/ShortPositions StockLendingVault:StockLendingVault.sol/StockLendingVault \
+	ShortPositions:ShortPositions.sol/ShortPositions SponsorPaymaster:SponsorPaymaster.sol/SponsorPaymaster \
+	StockLendingVault:StockLendingVault.sol/StockLendingVault \
 	StockToken:Interfaces.sol/IStockToken SupplyVault:SupplyVault.sol/SupplyVault \
 	UniswapV3Pool:IUniswapV3Pool.sol/IUniswapV3Pool Usdg:IUSDG.sol/IUSDG
 SDK_GENERATED := crates/sdk/abi services/sdk/bindings packages/sdk/src/generated.ts
@@ -32,6 +33,11 @@ ARBITRUM_ONE_CONTRACTS := BandFeed
 DEVNODE_RPC_URL := http://127.0.0.1:8547
 DEVNODE_KEY := 0xb6b15c8cb491557369f3c7d2c287b053eb229daa9c22138887752191c9520659
 DEVNODE_ACCOUNT := 0x3f1Eae7D46d88F08fc2F8ed27FCb2AB183EB2d0E
+ALTO_IMAGE := ghcr.io/pimlicolabs/alto:v1.2.8
+BUNDLER_URL := http://127.0.0.1:4337
+BUNDLER_KEY := 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
+SPONSOR_URL := http://127.0.0.1:4338
+SPONSOR_KEY := 0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a
 COVERAGE_MIN := 95
 STYLUS_MAX_FRAGMENTS := 4
 DEVNODE_GAS_TOLERANCE_BPS := 50
@@ -66,7 +72,8 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
 	deploy-band-feeds verify-band-feeds simulate-supply-vault deploy-supply-vault verify-supply-vault \
-	deploy-margin-accounts verify-margin-accounts deploy-liquidator verify-liquidator deploy-gap-backstop verify-gap-backstop deploy-reopening-auction verify-reopening-auction deploy-stock-lending verify-stock-lending deploy-short-positions verify-short-positions deploy-morpho-oracles verify-morpho-oracles deploy-basket verify-baskets deploy-gap-cover verify-gap-cover deploy-contracts-devnode test-contracts-devnode lint-scripts lint-licenses
+	deploy-margin-accounts verify-margin-accounts deploy-liquidator verify-liquidator deploy-gap-backstop verify-gap-backstop deploy-reopening-auction verify-reopening-auction deploy-stock-lending verify-stock-lending deploy-short-positions verify-short-positions deploy-morpho-oracles verify-morpho-oracles deploy-basket verify-baskets deploy-gap-cover verify-gap-cover deploy-sponsor-paymaster verify-sponsor-paymaster deploy-contracts-devnode test-contracts-devnode \
+	bundler bundler-stop sponsor sponsor-stop run-sponsor test-sponsorship-devnode lint-scripts lint-licenses
 
 all: build
 
@@ -368,6 +375,11 @@ deploy-gap-cover: check-foundry submodules
 		{ echo "Usage: make deploy-gap-cover CHAIN=<4663|412346> SIGNER='<forge wallet flags>' [REGISTRY=<file>]"; exit 1; }
 	@contracts/script/deploy-gap-cover.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
 
+deploy-sponsor-paymaster: check-foundry submodules
+	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
+		{ echo "Usage: SPONSOR_SIGNER=<address> MAX_COST=<wei> DEPOSIT=<wei> STAKE=<wei> [UNSTAKE_DELAY=<seconds>] make deploy-sponsor-paymaster CHAIN=<4663|46630|412346> SIGNER='<forge wallet flags of the registry's owner>' [REGISTRY=<file>]"; exit 1; }
+	@contracts/script/deploy-sponsor-paymaster.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
+
 deploy-contracts-devnode:
 	rm -rf contracts/broadcast/*/412346
 	$(MAKE) deploy-supply-vault CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
@@ -387,6 +399,10 @@ deploy-contracts-devnode:
 	BASKET=PAIR NAME="Tapehouse NVDA SPY Basket" SYMBOL=thPAIR ASSETS=NVDA,SPY UNITS=1000000000000000000,500000000000000000 \
 		$(MAKE) deploy-basket CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
 	$(MAKE) deploy-gap-cover CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
+	contracts/script/devnode-erc4337.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY) stylus/target/devnode-registry.json
+	SPONSOR_SIGNER=$$(cast wallet address --private-key $(SPONSOR_KEY)) \
+		MAX_COST=10000000000000000 DEPOSIT=1000000000000000000 STAKE=1000000000000000000 \
+		$(MAKE) deploy-sponsor-paymaster CHAIN=412346 SIGNER="--private-key $(DEVNODE_KEY)" REGISTRY=stylus/target/devnode-registry.json
 	BAND_ASSETS="NVDA TSLA SPY" contracts/script/deploy-band-feeds.sh $(DEVNODE_RPC_URL) stylus/target/devnode-registry.json \
 		--private-key $(DEVNODE_KEY) > stylus/target/devnode-band-feeds
 	jq --rawfile feeds stylus/target/devnode-band-feeds \
@@ -417,6 +433,12 @@ test-sdks-devnode: check-node check-go check-rust node_modules/.modules.yaml
 	cd crates && cargo run --locked --example devnode -- $(DEVNODE_RPC_URL) \
 		../stylus/target/devnode-registry.json ../$(SDK_PAYLOAD)
 
+test-sponsorship-devnode: export PRIVATE_KEY := $(DEVNODE_KEY)
+test-sponsorship-devnode: check-node node_modules/.modules.yaml
+	pnpm --filter @tapehouse/sdk run build
+	pnpm --filter @tapehouse/sdk run sponsored $(DEVNODE_RPC_URL) $(BUNDLER_URL) $(SPONSOR_URL) \
+		$(abspath stylus/target/devnode-registry.json)
+
 test-backtest-devnode: check-go
 	cd services && go run ./cmd/backtest record $(DEVNODE_RPC_URL) ../stylus/target/devnode-registry.json
 
@@ -430,6 +452,8 @@ test-mcp-devnode: check-node check-uv node_modules/.modules.yaml
 
 test-app-devnode: export TAPEHOUSE_REGISTRY := $(abspath stylus/target/devnode-registry.json)
 test-app-devnode: export TAPEHOUSE_RPC_URL := $(DEVNODE_RPC_URL)
+test-app-devnode: export TAPEHOUSE_BUNDLER_URL := $(BUNDLER_URL)
+test-app-devnode: export TAPEHOUSE_SPONSOR_URL := $(SPONSOR_URL)
 test-app-devnode: check-node node_modules/.modules.yaml
 	pnpm --filter app... run build
 	pnpm --filter app exec playwright test
@@ -551,6 +575,11 @@ verify-gap-cover: check-foundry submodules
 		{ echo "Usage: make verify-gap-cover CHAIN=4663, with the chain's RPC URL set"; exit 1; }
 	@contracts/script/verify-gap-cover.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
 
+verify-sponsor-paymaster: check-foundry submodules
+	@case "$(CHAIN)" in 4663|46630) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
+		{ echo "Usage: make verify-sponsor-paymaster CHAIN=<4663|46630>, with the chain's RPC URL set"; exit 1; }
+	@contracts/script/verify-sponsor-paymaster.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
+
 verify-band-feeds: check-foundry submodules
 	@case "$(CHAIN)" in 4663|46630|42161) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
 		{ echo "Usage: make verify-band-feeds CHAIN=<4663|46630|42161>, with the chain's RPC URL set"; exit 1; }
@@ -579,6 +608,49 @@ devnode: check-docker check-foundry
 
 devnode-stop:
 	docker rm -f tapehouse-devnode
+
+bundler: check-docker
+	@docker rm -f tapehouse-bundler >/dev/null 2>&1 || true
+	@entry_point=$$(jq -er .erc4337.EntryPoint stylus/target/devnode-registry.json) || \
+		{ echo "The dev-node registry has no EntryPoint. Run: make deploy-contracts-devnode"; exit 1; }; \
+	cast send --rpc-url $(DEVNODE_RPC_URL) --private-key $(DEVNODE_KEY) --value 10ether \
+		$$(cast wallet address --private-key $(BUNDLER_KEY)) >/dev/null && \
+	docker run -d --name tapehouse-bundler --network host $(ALTO_IMAGE) --entrypoints $$entry_point \
+		--executor-private-keys $(BUNDLER_KEY) --utility-private-key $(BUNDLER_KEY) --rpc-url $(DEVNODE_RPC_URL) \
+		--port 4337 --chain-type arbitrum --safe-mode false --enable-cors true >/dev/null
+	@i=0; until curl -sf -X POST -H 'content-type: application/json' \
+		-d '{"jsonrpc":"2.0","id":1,"method":"eth_supportedEntryPoints","params":[]}' $(BUNDLER_URL) >/dev/null; do \
+		i=$$((i + 1)); [ $$i -lt 150 ] || { docker logs --tail 20 tapehouse-bundler; \
+		echo "The bundler did not answer on $(BUNDLER_URL)."; exit 1; }; \
+		sleep 0.2; done
+	@echo "Bundler ready on $(BUNDLER_URL), on the dev node's EntryPoint $$(jq -r .erc4337.EntryPoint stylus/target/devnode-registry.json)."
+
+bundler-stop:
+	docker rm -f tapehouse-bundler
+
+sponsor: export TAPEHOUSE_RPC_URL := $(DEVNODE_RPC_URL)
+sponsor: export TAPEHOUSE_DEPLOYMENTS := $(abspath stylus/target/devnode-registry.json)
+sponsor: export TAPEHOUSE_SPONSOR_KEY := $(SPONSOR_KEY)
+sponsor: check-go
+	@test ! -f stylus/target/sponsor.pid || kill $$(cat stylus/target/sponsor.pid) 2>/dev/null || true
+	cd services && go build -o ../stylus/target/sponsor ./cmd/sponsor
+	@stylus/target/sponsor > stylus/target/sponsor.log 2>&1 & echo $$! > stylus/target/sponsor.pid
+	@i=0; until curl -s -o /dev/null -X OPTIONS $(SPONSOR_URL); do \
+		i=$$((i + 1)); [ $$i -lt 150 ] || { tail -5 stylus/target/sponsor.log; \
+		echo "The sponsor service did not answer on $(SPONSOR_URL)."; exit 1; }; \
+		sleep 0.2; done
+	@echo "Sponsor service ready on $(SPONSOR_URL), signing as $$(cast wallet address --private-key $(SPONSOR_KEY))."
+
+sponsor-stop:
+	@test ! -f stylus/target/sponsor.pid || kill $$(cat stylus/target/sponsor.pid) 2>/dev/null || true
+	@rm -f stylus/target/sponsor.pid
+
+run-sponsor: export TAPEHOUSE_RPC_URL = $(RPC_URL_$(CHAIN))
+run-sponsor: export TAPEHOUSE_DEPLOYMENTS = $(abspath $(or $(REGISTRY),deployments/$(CHAIN).json))
+run-sponsor: check-go
+	@case "$(CHAIN)" in 4663|46630|412346) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
+		{ echo "Usage: make run-sponsor CHAIN=<4663|46630|412346> [REGISTRY=<file>], with TAPEHOUSE_SPONSOR_KEYSTORE and TAPEHOUSE_SPONSOR_PASSWORD_FILE and the chain's RPC URL set"; exit 1; }
+	cd services && go run ./cmd/sponsor
 
 deploy-stylus-devnode: check-stylus check-foundry submodules
 	stylus/scripts/devnode-deploy.sh $(DEVNODE_RPC_URL) $(DEVNODE_KEY)

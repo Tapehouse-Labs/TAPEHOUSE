@@ -4,6 +4,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { band, parseDeployments } from "@tapehouse/sdk";
 import { createPublicClient, http } from "viem";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { bandPercent, price, shortAddress } from "../lib/format";
 import { bandState } from "../lib/session";
 import { installWallet, moveWallet } from "./wallet";
@@ -45,6 +46,22 @@ test("a wallet connects on the app's chain", async ({ page }) => {
   await expect(page.getByText("appears here the moment you deposit")).toBeVisible();
 });
 
+test("a wallet with no ether creates its smart account for free", async ({ page }) => {
+  const key = generatePrivateKey();
+  const owner = privateKeyToAccount(key).address;
+  await installWallet(page, { account: owner, chainId: deployments.chainId, rpcUrl, key });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Connect wallet" }).first().click();
+  const smart = page.getByRole("region", { name: "Smart account" });
+  await expect(smart).toContainText("NOT CREATED");
+  await expect(smart).toContainText("Creating it costs you nothing, and so do your first 3 actions.");
+  await smart.getByRole("button", { name: "Create account" }).click();
+  await expect(smart).toContainText("LIVE", { timeout: 30_000 });
+  await expect(smart).toContainText("3 free actions left");
+  await expect(smart.getByRole("button")).toHaveCount(0);
+  expect(await client.getBalance({ address: owner })).toBe(0n);
+});
+
 test("a wallet on another chain is moved to the app's chain as it connects", async ({ page }) => {
   await installWallet(page, { account, chainId: 1, rpcUrl });
   await page.goto("/");
@@ -83,7 +100,7 @@ test("a disconnect returns to the connect state", async ({ page }) => {
 });
 
 for (const colorScheme of ["light", "dark"] as const) {
-  test(`meets WCAG 2.2 AA in the ${colorScheme} theme, connected and not`, async ({ page }) => {
+  test(`meets WCAG 2.2 AA in the ${colorScheme} theme, connected, with its smart account, and not`, async ({ page }) => {
     await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
     await installWallet(page, { account, chainId: deployments.chainId, rpcUrl });
     await page.goto("/");
@@ -91,6 +108,8 @@ for (const colorScheme of ["light", "dark"] as const) {
     const tags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
     expect((await new AxeBuilder({ page }).withTags(tags).analyze()).violations).toEqual([]);
     await page.getByRole("button", { name: "Connect wallet" }).first().click();
+    await expect(page.getByRole("region", { name: "Smart account" })).toContainText("NOT CREATED");
+    expect((await new AxeBuilder({ page }).withTags(tags).analyze()).violations).toEqual([]);
     await moveWallet(page, 1);
     await expect(page.getByRole("button", { name: /^Switch to / })).toBeVisible();
     expect((await new AxeBuilder({ page }).withTags(tags).analyze()).violations).toEqual([]);

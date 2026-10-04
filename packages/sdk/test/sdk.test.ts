@@ -42,6 +42,8 @@ import {
   sharePriceFeed,
   shortPositionsAbi,
   shorts,
+  sponsorPaymasterAbi,
+  sponsorship,
   stockLendingVaultAbi,
   stockTokenAbi,
   toBytes32,
@@ -754,3 +756,44 @@ describe('gap cover', () => {
 function testnetWithShorts(): Deployments {
   return { ...testnet, tapehouse: { ...testnet.tapehouse, ShortPositions: bob } }
 }
+
+describe('sponsorship', () => {
+  const d: Deployments = { ...testnet, tapehouse: { ...testnet.tapehouse, SponsorPaymaster: bob } }
+
+  test('smart accounts are SimpleAccount v0.7 on the registry\'s EntryPoint', () => {
+    expect(sponsorship.entryPoint(robinhood)).toEqual({
+      address: '0x0000000071727De22E5E9d8BAf0edAc6f37da032',
+      version: '0.7',
+    })
+    expect(sponsorship.accountFactory(testnet)).toBe('0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985')
+    expect(() => sponsorship.entryPoint(arbitrum)).toThrow('The registry has no .erc4337.EntryPoint.')
+  })
+
+  test('the paymaster is read from .tapehouse.SponsorPaymaster', () => {
+    expect(sponsorship.paymaster(d)).toBe(bob)
+    expect(() => sponsorship.paymaster(testnet)).toThrow('The registry has no .tapehouse.SponsorPaymaster.')
+  })
+
+  test('a transaction becomes a call of a user operation', () => {
+    const call = sponsorship.asCall(accounts.setAuthorization(d, alice, true))
+    expect(call.to).toBe(d.tapehouse.MarginAccounts)
+    expect(encodeFunctionData(call)).toBe(encodeFunctionData(accounts.setAuthorization(d, alice, true)))
+  })
+
+  test('the free operations left are read from the paymaster', async () => {
+    const client = createClient({
+      transport: custom({
+        async request({ method, params }) {
+          if (method !== 'eth_call') throw new Error(`unexpected ${method}`)
+          const [{ to, data }] = params as [{ to: string; data: Hex }]
+          expect(to).toBe(bob)
+          const { functionName, args } = decodeFunctionData({ abi: sponsorPaymasterAbi, data })
+          expect(functionName).toBe('freeOperationsLeft')
+          expect(args).toEqual([alice])
+          return encodeFunctionResult({ abi: sponsorPaymasterAbi, functionName: 'freeOperationsLeft', result: 2n })
+        },
+      }),
+    })
+    expect(await sponsorship.freeOperationsLeft(client, d, alice)).toBe(2n)
+  })
+})

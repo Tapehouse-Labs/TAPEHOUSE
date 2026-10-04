@@ -278,6 +278,13 @@ The session's state in brackets: `[ CLOSED ] · OPENS 26H`. Mono 11px at 0.09em,
 - **Loading:** sunk-linen skeleton blocks pulsing to 55% opacity every 1.6s. **Error:** one muted 13px sentence spanning the row.
 - Built as a real table with a screen-reader caption and column headers.
 
+### The Notches (signature)
+The smart account's free actions, drawn into the mark. Three 2px navy strokes, 1.7rem long, cross the stem at the bar's -8° beside the account, 9px apart; each one goes out to the rule colour as its action is spent, over 0.5s. They draw once on arrival, left to right, staggered by 80ms, and hold still; while the account loads they rest in sunk linen. Decorative and hidden from assistive technology: the line under the seal says the same in words.
+- **Seal:** the account's address in the session seal's shape, `[ 0x42CE…E870 ] · NOT CREATED` in muted ink, or `· LIVE` in ledger green once it exists.
+- **Line:** one 14px body sentence: "Creating it costs you nothing, and so do your first 3 actions.", then "2 free actions left", then "Free actions used. You pay gas from here."
+- **Action:** "Create account" as the view's one filled button, only while the account does not exist; it reads "Waiting for your wallet…" while the owner signs and "Creating your account…" while the bundler lands it.
+- The block loads only once a wallet connects, so it costs the first load nothing.
+
 ### Menus
 Native popovers anchored below the header at the right: 256px wide, panel fill, 10px corners, popover lift. The wallet list shows each connector with its 22px icon; options are 14px strong ink, 6px corners, sunk-linen on hover. The account menu shows a label, the full address in 12.5px mono, and a full-width quiet Disconnect button.
 
@@ -288,12 +295,12 @@ Light and dark ship together. The theme follows `prefers-color-scheme` until the
 
 ### Do:
 - **Do** hang every new account element off the stem: a single column, a 1px rule from the stem where a row needs anchoring.
-- **Do** keep the bar at -8° and the stem and bar at 2px navy; let them draw once on load and then stay still.
+- **Do** keep the bar at -8° and the stem and bar at 2px navy; let them draw once on load and then stay still. The notches share that angle and weight.
 - **Do** set every money figure with the tabular `num` treatment and every address in mono with slashed zero.
 - **Do** state market and wallet state in words (HALTED, CLOSED, "Your wallet is on another network"); colour only reinforces.
 - **Do** build text hierarchy from ink alpha (100 / 80 / 62 / 42%) and depth from paper, panel and sunk steps.
 - **Do** keep primary actions at least 44px tall and reserve their row so state changes don't shift the column.
-- **Do** disable the draw, swap, pulse and glide motions under `prefers-reduced-motion: reduce`.
+- **Do** disable the draw, swap, pulse, glide and notch motions under `prefers-reduced-motion: reduce`.
 
 ### Don't:
 - **Don't** lay the account out as a grid of equal tiles or add a side rail of menus.

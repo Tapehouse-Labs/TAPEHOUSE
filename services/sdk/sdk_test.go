@@ -474,6 +474,16 @@ func TestMorphoBlueAndTheBandsMorphoOraclesAreRead(t *testing.T) {
 	}
 }
 
+func TestTheERC4337EntryPointAndFactoryAreRead(t *testing.T) {
+	for _, chain := range []string{"4663", "46630"} {
+		d := registry(t, chain)
+		if d.ERC4337["EntryPoint"] != common.HexToAddress("0x0000000071727De22E5E9d8BAf0edAc6f37da032") ||
+			d.ERC4337["SimpleAccountFactory"] != common.HexToAddress("0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985") {
+			t.Fatalf("%s erc4337: %v", chain, d.ERC4337)
+		}
+	}
+}
+
 func TestMorphoBluesMarketsAreReadFromMarketsAs32ByteIDs(t *testing.T) {
 	id := "0x3a85e619751152991742810df6ec69ce473daef99e28a64ab2340d7b7ccfee49"
 	d, err := sdk.ParseDeployments([]byte(`{"chainId":412346,"morpho":{"Blue":"` + alice.Hex() +

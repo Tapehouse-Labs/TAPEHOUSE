@@ -13,6 +13,8 @@ Audience and job: the holder who will not sell, arriving from the landing's "Ope
 
 Constraints: the landing's world (bone, warm ink, registry navy, Archivo / Inter Tight / Spline Sans Mono, tabular figures, the session seal) through a shared tokens package. Reads only through @tapehouse/sdk. Gain and loss never by colour alone. Reduced motion respected.
 
+Smart account: once connected, the visitor's SimpleAccount v0.7, owned by their wallet, sits under the sentence: its address in a seal, whether it exists, and the free actions Tapehouse's paymaster pays for, drawn as three notches across the stem at the bar's angle (direction C of three previews, chosen by the user). Creating it is free and needs no ether.
+
 Unresolved: account figures arrive with the account surface; the shell holds their place.
 
 ## Direction contract

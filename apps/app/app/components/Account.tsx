@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 "use client";
 
+import dynamic from "next/dynamic";
 import { useChains } from "wagmi";
 import { explain } from "@/lib/errors";
 import { useWallet } from "@/lib/hooks";
 import type { WalletState } from "@/lib/wallet";
 import { Bands } from "./Bands";
 import { Wallets } from "./Wallets";
+
+const SmartAccount = dynamic(() => import("./SmartAccount").then((m) => m.SmartAccount), { ssr: false });
 
 const COPY: Record<WalletState, string> = {
   "no-wallet": "Add a browser wallet and your liquidation price appears here, before you sign anything.",
@@ -43,14 +46,18 @@ export function Account() {
               COPY[wallet.state]
             )}
           </p>
-          <div className="mt-8 flex min-h-[44px] flex-wrap items-center gap-3">
-            {wallet.state === "wrong-network" && (
-              <button type="button" onClick={wallet.switchChain} disabled={wallet.pending} className="btn">
-                {wallet.pending ? "Waiting for your wallet…" : `Switch to ${chain.name}`}
-              </button>
-            )}
-            {(wallet.state === "disconnected" || wallet.state === "no-wallet") && <Wallets />}
-          </div>
+          {wallet.state === "connected" ? (
+            <SmartAccount />
+          ) : (
+            <div className="mt-8 flex min-h-[44px] flex-wrap items-center gap-3">
+              {wallet.state === "wrong-network" && (
+                <button type="button" onClick={wallet.switchChain} disabled={wallet.pending} className="btn">
+                  {wallet.pending ? "Waiting for your wallet…" : `Switch to ${chain.name}`}
+                </button>
+              )}
+              {(wallet.state === "disconnected" || wallet.state === "no-wallet") && <Wallets />}
+            </div>
+          )}
           {wallet.error && (
             <p role="alert" className="mt-4 max-w-[52ch] text-[14px] text-[var(--error)]">
               {explain(wallet.error)}

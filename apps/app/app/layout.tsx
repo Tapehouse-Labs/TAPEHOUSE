@@ -24,7 +24,7 @@ export const viewport: Viewport = {
 const THEME = `(function(){try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`;
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const { deployments, rpcUrl } = await loadRegistry(process.env);
+  const { deployments, rpcUrl, bundlerUrl, sponsorUrl } = await loadRegistry(process.env);
   return (
     <html
       lang="en"
@@ -35,7 +35,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: THEME }} />
       </head>
       <body>
-        <Providers deployments={deployments} rpcUrl={rpcUrl}>
+        <Providers deployments={deployments} rpcUrl={rpcUrl} bundlerUrl={bundlerUrl} sponsorUrl={sponsorUrl}>
           {children}
         </Providers>
       </body>
