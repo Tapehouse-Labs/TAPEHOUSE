@@ -112,3 +112,13 @@ export function useBands() {
   });
   return assets.map((asset, i) => ({ asset, query: queries[i] }));
 }
+
+/** `value`, once it has held still for `ms`. */
+export function useSettled<T>(value: T, ms = 250): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const id = window.setTimeout(() => setSettled(value), ms);
+    return () => window.clearTimeout(id);
+  }, [value, ms]);
+  return settled;
+}

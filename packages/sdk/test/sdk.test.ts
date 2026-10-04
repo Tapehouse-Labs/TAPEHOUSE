@@ -7,17 +7,24 @@ import {
   createClient,
   custom,
   decodeFunctionData,
+  encodeAbiParameters,
   encodeErrorResult,
   encodeFunctionData,
   encodeFunctionResult,
+  erc20Abi,
   type Hex,
+  hashDomain,
   hexToBigInt,
   padHex,
+  parseAbi,
+  parseAbiParameters,
   parseEventLogs,
   toEventSelector,
   toFunctionSelector,
+  recoverTypedDataAddress,
   zeroAddress,
 } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
 import { describe, expect, test } from 'vitest'
 import {
   accounts,
@@ -30,9 +37,11 @@ import {
   decodeRevert,
   decodeRevertData,
   type Deployments,
+  engine,
   gapCover,
   gapCoverAbi,
   liquidatorAbi,
+  marginAbi,
   marginAccountsAbi,
   morpho,
   morphoBandOracleAbi,
@@ -44,10 +53,14 @@ import {
   shorts,
   sponsorPaymasterAbi,
   sponsorship,
+  stockLending,
   stockLendingVaultAbi,
   stockTokenAbi,
+  stockTokenRegistryAbi,
+  supplyVaultAbi,
   toBytes32,
   tokenPriceFeed,
+  usdgAbi,
 } from '../src/index.ts'
 
 const registry = (chainId: number): unknown =>
@@ -780,6 +793,42 @@ describe('sponsorship', () => {
     expect(encodeFunctionData(call)).toBe(encodeFunctionData(accounts.setAuthorization(d, alice, true)))
   })
 
+  test("an account's calls are estimated cold, the L1 gas taken off", async () => {
+    const client = createClient({
+      transport: custom({
+        async request({ method, params }) {
+          if (method !== 'eth_call') throw new Error(`unexpected ${method}`)
+          const [{ from, to, data }] = params as [{ from: string; to: string; data: Hex }]
+          expect(from.toLowerCase()).toBe(sponsorship.entryPoint(robinhood).address.toLowerCase())
+          expect(to.toLowerCase()).toBe('0x00000000000000000000000000000000000000c8')
+          expect(data.slice(0, 10)).toBe(toFunctionSelector('gasEstimateComponents(address,bool,bytes)'))
+          return encodeAbiParameters(parseAbiParameters('uint64, uint64, uint256, uint256'), [3_068_532n, 2_444_200n, 1n, 1n])
+        },
+      }),
+    })
+    expect(await sponsorship.callGas(client, robinhood, alice, '0xb61d27f6')).toBe(624_332n)
+  })
+
+  test("an owner's account is read from the factory, salt 0", async () => {
+    const client = createClient({
+      transport: custom({
+        async request({ params }) {
+          const [{ to, data }] = params as [{ to: string; data: Hex }]
+          expect(to).toBe(sponsorship.accountFactory(testnet))
+          expect(data).toBe(
+            encodeFunctionData({
+              abi: parseAbi(['function getAddress(address,uint256) view returns (address)']),
+              functionName: 'getAddress',
+              args: [alice, 0n],
+            }),
+          )
+          return padHex(bob, { size: 32 })
+        },
+      }),
+    })
+    expect(await sponsorship.accountAddress(client, testnet, alice)).toBe(bob)
+  })
+
   test('the free operations left are read from the paymaster', async () => {
     const client = createClient({
       transport: custom({
@@ -795,5 +844,311 @@ describe('sponsorship', () => {
       }),
     })
     expect(await sponsorship.freeOperationsLeft(client, d, alice)).toBe(2n)
+  })
+})
+
+const nvda = '0x90F79bf6EB2c4f870365E785982E1f101E93b906'
+const withStocks: Deployments = { ...testnet, tokens: { ...testnet.tokens, NVDA: nvda }, stockLending: { NVDA: bob } }
+
+describe('borrowing', () => {
+  const testnet = withStocks
+  const signature =
+    '0x6e100a352ec6ad1b70802290e18aeed190704973570f3b8ed42cb9808e2ea6bf4a90a229a244495b41890987806fcbd2d5d23fc0dbe5f5256c2613c039d76db81c' as Hex
+
+  test('a deposit with a permit carries its signature as v, r and s', () => {
+    const call = accounts.depositWithPermit(testnet, {
+      position: CROSS,
+      token: nvda,
+      amount: 3n,
+      account: alice,
+      deadline: 9n,
+      signature,
+    })
+    const { functionName, args } = decodeFunctionData({ abi: marginAccountsAbi, data: encodeFunctionData(call) })
+    expect(functionName).toBe('depositWithPermit')
+    expect(args).toEqual([
+      CROSS,
+      nvda,
+      3n,
+      alice,
+      9n,
+      28,
+      '0x6e100a352ec6ad1b70802290e18aeed190704973570f3b8ed42cb9808e2ea6bf',
+      '0x4a90a229a244495b41890987806fcbd2d5d23fc0dbe5f5256c2613c039d76db8',
+    ])
+  })
+
+  test('ether is wrapped into WETH for the account that deposits it', () => {
+    const call = accounts.wrap(testnet, { account: alice, value: 7n })
+    expect(call.address).toBe(testnet.tokens.WETH)
+    expect(call.value).toBe(7n)
+    expect(encodeFunctionData(call)).toBe(
+      `${toFunctionSelector('depositTo(address)')}${alice.slice(2).toLowerCase().padStart(64, '0')}`,
+    )
+  })
+
+  test('a position lends, takes back, recalls and settles its Stock Tokens', () => {
+    const at = { position: toBytes32('NVDA'), token: nvda, amount: 5n, account: alice } as const
+    for (const [call, signature] of [
+      [accounts.lend(testnet, at), 'lend(bytes32,address,uint256,address)'],
+      [accounts.unlend(testnet, at), 'unlend(bytes32,address,uint256,address)'],
+      [accounts.recall(testnet, at), 'recall(bytes32,address,uint256,address)'],
+    ] as const) {
+      const data = encodeFunctionData(call)
+      expect(data.slice(0, 10)).toBe(toFunctionSelector(signature))
+      expect(decodeFunctionData({ abi: marginAccountsAbi, data }).args).toEqual([toBytes32('NVDA'), nvda, 5n, alice])
+    }
+    const settle = accounts.settle(testnet, { account: alice, position: CROSS, token: nvda })
+    expect(decodeFunctionData({ abi: marginAccountsAbi, data: encodeFunctionData(settle) }).args).toEqual([
+      alice,
+      CROSS,
+      nvda,
+    ])
+  })
+
+  const blockTags: string[] = []
+  const client = createClient({
+    transport: custom({
+      async request({ method, params }) {
+        if (method === 'eth_blockNumber') return '0xb'
+        if (method !== 'eth_call') throw new Error(`unexpected ${method}`)
+        const [{ to, data }, block] = params as [{ to: string; data: Hex }, string]
+        blockTags.push(block)
+        if (to === testnet.tapehouse.SupplyVault) {
+          return encodeFunctionResult({ abi: supplyVaultAbi, functionName: 'debt', result: 412n })
+        }
+        if (to === nvda) {
+          expect(decodeFunctionData({ abi: erc20Abi, data }).args).toEqual([testnet.tapehouse.MarginAccounts])
+          return encodeFunctionResult({ abi: erc20Abi, functionName: 'balanceOf', result: 14n * 10n ** 18n })
+        }
+        if (to === testnet.tapehouse.Margin) {
+          const { functionName, args } = decodeFunctionData({ abi: marginAbi, data })
+          if (functionName === 'requirement') {
+            expect(args).toEqual([[10n ** 18n], [17_120_000_000n], 172_800n, true])
+            return encodeFunctionResult({ abi: marginAbi, functionName, result: [608n, 1] })
+          }
+          expect(functionName).toBe('currentRequirement')
+          return encodeFunctionResult({ abi: marginAbi, functionName: 'currentRequirement', result: [500n, 0, 3] })
+        }
+        if (to === bob) {
+          const { functionName, args } = decodeFunctionData({ abi: stockLendingVaultAbi, data })
+          if (functionName === 'head') return encodeFunctionResult({ abi: stockLendingVaultAbi, functionName, result: 4n })
+          expect(args).toEqual([6n])
+          if (functionName === 'claimable')
+            return encodeFunctionResult({ abi: stockLendingVaultAbi, functionName, result: 7n })
+          expect(functionName).toBe('ticket')
+          return encodeFunctionResult({
+            abi: stockLendingVaultAbi,
+            functionName: 'ticket',
+            result: [10n, 20n, 3n, 1_790_000_000n],
+          })
+        }
+        expect(to).toBe(testnet.tapehouse.MarginAccounts)
+        const { functionName, args } = decodeFunctionData({ abi: marginAccountsAbi, data })
+        const result = {
+          stocks: [
+            [toBytes32('NVDA'), toBytes32('TSLA'), toBytes32('SPY')],
+            [nvda, zeroAddress, bob],
+          ],
+          lent: 2n,
+          sellable: 9n,
+          claim: 1n,
+          recalls: [6n],
+          holding: [16n * 10n ** 18n, 9n * 10n ** 17n, 100n * 10n ** 18n],
+          debtCap: 1_000n,
+          weekendDebtCap: 500n,
+          weekendLeverage: 50_000,
+          borrowingPaused: false,
+          premiumRate: 500,
+        }
+        if (functionName === 'holding') expect(args).toEqual([toBytes32('NVDA')])
+        if (['lent', 'sellable', 'claim', 'recalls'].includes(functionName)) expect(args).toEqual([alice, CROSS, nvda])
+        if (!(functionName in result)) throw new Error(`unexpected ${functionName}`)
+        return encodeFunctionResult({
+          abi: marginAccountsAbi,
+          functionName: functionName as keyof typeof result,
+          result: result[functionName as keyof typeof result],
+        } as never)
+      },
+    }),
+  })
+
+  test("an account's positions are the cross one and each Stock Token's isolated one", async () => {
+    expect(await accounts.stocks(client, testnet)).toEqual([
+      { asset: 'NVDA', token: nvda },
+      { asset: 'TSLA', token: zeroAddress },
+      { asset: 'SPY', token: bob },
+    ])
+    expect(await accounts.positions(client, testnet)).toEqual([CROSS, toBytes32('NVDA'), toBytes32('SPY')])
+    blockTags.splice(0)
+  })
+
+  test('what a position lent, may sell, recalled and waits for is read at one block', async () => {
+    expect(await accounts.lending(client, testnet, alice, CROSS, nvda)).toEqual({
+      lent: 2n,
+      sellable: 9n,
+      claim: 1n,
+      recalls: [6n],
+    })
+    expect(blockTags.splice(0).map((tag) => hexToBigInt(tag as Hex))).toEqual([11n, 11n, 11n, 11n])
+  })
+
+  test("an asset's holding reads its quantity, its cap and the tokens the accounts hold", async () => {
+    expect(await accounts.holding(client, testnet, 'NVDA', nvda)).toEqual({
+      units: 16n * 10n ** 18n,
+      scale: 9n * 10n ** 17n,
+      quantity: 144n * 10n ** 17n,
+      cap: 100n * 10n ** 18n,
+      balance: 14n * 10n ** 18n,
+    })
+    expect(new Set(blockTags.splice(0))).toEqual(new Set(['0xb']))
+  })
+
+  test("the accounts' limits on borrowing are read at one block", async () => {
+    expect(await accounts.limits(client, testnet)).toEqual({
+      debt: 412n,
+      debtCap: 1_000n,
+      weekendDebtCap: 500n,
+      weekendLeverage: 50_000,
+      borrowingPaused: false,
+      premiumRate: 500,
+    })
+    expect(blockTags.splice(0)).toHaveLength(6)
+  })
+
+  test('the engine margins any portfolio, over two days by default', async () => {
+    const portfolio = { quantities: [10n ** 18n], prices: [17_120_000_000n] }
+    expect(await engine.requirement(client, testnet, portfolio, { spansClosure: true })).toEqual({
+      margin: 608n,
+      missing: 1,
+    })
+    expect(await engine.currentRequirement(client, testnet, portfolio)).toEqual({ margin: 500n, missing: 0, regime: 3 })
+    blockTags.splice(0)
+  })
+
+  test('a recall ticket reads its span, its notice, what waits for it and the head, at one block', async () => {
+    expect(await stockLending.ticket(client, testnet, 'NVDA', 6n)).toEqual({
+      start: 10n,
+      end: 20n,
+      taken: 3n,
+      dueAt: 1_790_000_000n,
+      claimable: 7n,
+      head: 4n,
+    })
+    expect(blockTags.splice(0)).toEqual(['0xb', '0xb', '0xb'])
+  })
+})
+
+describe('issuer', () => {
+  test("a Stock Token's pause and its registry's blocks are read at one block", async () => {
+    const registry = '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'
+    const tags: string[] = []
+    const client = createClient({
+      transport: custom({
+        async request({ method, params }) {
+          if (method === 'eth_blockNumber') return '0xc'
+          const [{ to, data }, block] = params as [{ to: string; data: Hex }, string]
+          tags.push(block)
+          if (to === registry) {
+            const { args } = decodeFunctionData({ abi: stockTokenRegistryAbi, data })
+            return encodeFunctionResult({ abi: stockTokenRegistryAbi, functionName: 'isBlocked', result: args[0] === bob })
+          }
+          const { functionName } = decodeFunctionData({ abi: stockTokenAbi, data })
+          if (functionName === 'paused') return encodeFunctionResult({ abi: stockTokenAbi, functionName, result: true })
+          expect(functionName).toBe('ACCESS_CONTROLLED_REGISTRY')
+          return encodeFunctionResult({ abi: stockTokenAbi, functionName: 'ACCESS_CONTROLLED_REGISTRY', result: registry })
+        },
+      }),
+    })
+    expect(await accounts.issuer(client, nvda, [alice, bob])).toEqual({ paused: true, blocked: { [alice]: false, [bob]: true } })
+    expect(new Set(tags)).toEqual(new Set(['0xc']))
+  })
+})
+
+describe('permits', () => {
+  const owner = privateKeyToAccount('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d')
+  const token = nvda
+  const usdg = testnet.tokens.USDG as `0x${string}`
+  const domainOf = (address: `0x${string}`) =>
+    ({ name: address === token ? 'NVIDIA • Robinhood Token' : 'Global Dollar', version: '1', chainId: 46630, verifyingContract: address }) as const
+  const chain = (separator?: Hex) =>
+    createClient({
+      transport: custom({
+        async request({ method, params }) {
+          if (method === 'eth_chainId') return '0xb626'
+          const [{ to, data }] = params as [{ to: `0x${string}`; data: Hex }]
+          const selector = data.slice(0, 10)
+          if (selector === toFunctionSelector('nonces(address)'))
+            return encodeFunctionResult({ abi: usdgAbi, functionName: 'nonces', result: 4n })
+          if (selector === toFunctionSelector('eip712Domain()')) {
+            if (to !== token) return '0x'
+            const d = domainOf(to)
+            return encodeFunctionResult({
+              abi: stockTokenAbi,
+              functionName: 'eip712Domain',
+              result: ['0x0f', d.name, d.version, 46630n, to, padHex('0x', { size: 32 }), []],
+            })
+          }
+          if (selector === toFunctionSelector('name()'))
+            return encodeFunctionResult({ abi: erc20Abi, functionName: 'name', result: domainOf(to).name })
+          return encodeFunctionResult({
+            abi: usdgAbi,
+            functionName: 'DOMAIN_SEPARATOR',
+            result:
+              separator ??
+              hashDomain({
+                domain: { ...domainOf(to), chainId: 46630n },
+                types: {
+                  EIP712Domain: [
+                    { name: 'name', type: 'string' },
+                    { name: 'version', type: 'string' },
+                    { name: 'chainId', type: 'uint256' },
+                    { name: 'verifyingContract', type: 'address' },
+                  ],
+                },
+              }),
+          })
+        },
+      }),
+    })
+  const request = { owner: owner.address, account: bob, value: 5n, deadline: 99n } as const
+
+  test("a Stock Token's permit is signed in the domain its eip712Domain reads", async () => {
+    const typedData = await sponsorship.permit(chain(), { token, ...request })
+    expect(typedData.domain).toEqual(domainOf(token))
+    expect(typedData.message).toEqual({ owner: owner.address, spender: bob, value: 5n, nonce: 4n, deadline: 99n })
+    const signature = await owner.signTypedData(typedData)
+    expect(await recoverTypedDataAddress({ ...typedData, signature })).toBe(owner.address)
+  })
+
+  test("USDG's permit is signed in its name and version 1, checked against its domain separator", async () => {
+    expect((await sponsorship.permit(chain(), { token: usdg, ...request })).domain).toEqual(domainOf(usdg))
+    await expect(sponsorship.permit(chain(padHex('0x1', { size: 32 })), { token: usdg, ...request })).rejects.toThrow(
+      'permit domain does not match its DOMAIN_SEPARATOR on chain 46630.',
+    )
+  })
+
+  test("a Stock Token whose eip712Domain disagrees with its DOMAIN_SEPARATOR gets no permit", async () => {
+    await expect(sponsorship.permit(chain(padHex('0x2', { size: 32 })), { token, ...request })).rejects.toThrow(
+      'permit domain does not match its DOMAIN_SEPARATOR on chain 46630.',
+    )
+  })
+
+  test('the account pulls what the permit allows: the permit, then the transfer', async () => {
+    const typedData = await sponsorship.permit(chain(), { token, ...request })
+    const signature = await owner.signTypedData(typedData)
+    const [permit, transfer] = sponsorship.pull({ token, ...request, signature })
+    expect(permit.to).toBe(token)
+    expect(decodeFunctionData({ abi: usdgAbi, data: encodeFunctionData(permit) }).args?.slice(0, 4)).toEqual([
+      owner.address,
+      bob,
+      5n,
+      99n,
+    ])
+    expect(decodeFunctionData({ abi: erc20Abi, data: encodeFunctionData(transfer) }).args).toEqual([
+      owner.address,
+      bob,
+      5n,
+    ])
   })
 })

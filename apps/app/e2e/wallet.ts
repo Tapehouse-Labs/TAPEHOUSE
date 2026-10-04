@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import type { Page } from "@playwright/test";
-import type { Hex } from "viem";
+import { createWalletClient, type Hex, http, type TypedDataDefinition } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 export type TestWallet = {
@@ -24,14 +24,28 @@ export async function moveWallet(page: Page, chainId: number) {
 /**
  * Installs a browser wallet in the page before it loads: an EIP-1193 provider announced through EIP-6963, which
  * holds `account`, starts on `chainId`, switches to the chains it is asked for and forwards every other request to
- * `rpcUrl`. `window.testWallet.moveTo(chainId)` moves it to another chain, as its owner would. A test double: it
- * signs messages (`personal_sign`) with `key` when it is given one, and nothing else.
+ * `rpcUrl`. `window.testWallet.moveTo(chainId)` moves it to another chain, as its owner would. A test double: with
+ * `key` it signs messages (`personal_sign`) and typed data (`eth_signTypedData_v4`), and signs and sends transactions
+ * (`eth_sendTransaction`) through `rpcUrl`; without it, it signs nothing.
  */
 export async function installWallet(page: Page, wallet: TestWallet) {
   if (wallet.key) {
     const signer = privateKeyToAccount(wallet.key);
     if (signer.address.toLowerCase() !== wallet.account.toLowerCase()) throw new Error("The key does not hold account.");
     await page.exposeFunction("testWalletSign", (message: Hex) => signer.signMessage({ message: { raw: message } }));
+    await page.exposeFunction("testWalletSignTypedData", (json: string) =>
+      signer.signTypedData(JSON.parse(json) as TypedDataDefinition),
+    );
+    await page.exposeFunction("testWalletSend", async (json: string) => {
+      const tx = JSON.parse(json) as { to: Hex; data?: Hex; value?: Hex; gas?: Hex };
+      const chain = { id: wallet.chainId, name: "test", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [wallet.rpcUrl] } } };
+      return createWalletClient({ account: signer, chain, transport: http(wallet.rpcUrl) }).sendTransaction({
+        to: tx.to,
+        data: tx.data,
+        value: tx.value ? BigInt(tx.value) : undefined,
+        gas: tx.gas ? BigInt(tx.gas) : undefined,
+      });
+    });
   }
   await page.addInitScript((w: TestWallet) => {
     let chainId = w.chainId;
@@ -56,6 +70,17 @@ export async function installWallet(page: Page, wallet: TestWallet) {
             const sign = (window as unknown as { testWalletSign?: (message: string) => Promise<string> }).testWalletSign;
             if (!sign) throw Object.assign(new Error("The test wallet signs nothing."), { code: 4200 });
             return sign((params as [string, string])[0]);
+          }
+          case "eth_signTypedData_v4": {
+            const sign = (window as unknown as { testWalletSignTypedData?: (json: string) => Promise<string> })
+              .testWalletSignTypedData;
+            if (!sign) throw Object.assign(new Error("The test wallet signs nothing."), { code: 4200 });
+            return sign((params as [string, string])[1]);
+          }
+          case "eth_sendTransaction": {
+            const send = (window as unknown as { testWalletSend?: (json: string) => Promise<string> }).testWalletSend;
+            if (!send) throw Object.assign(new Error("The test wallet signs nothing."), { code: 4200 });
+            return send(JSON.stringify((params as [unknown])[0]));
           }
           case "wallet_requestPermissions":
             return [{ parentCapability: "eth_accounts" }];

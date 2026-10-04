@@ -5,6 +5,9 @@
 @import "@tapehouse/brand/base.css";
 
 @layer components {
+/* On phones the sections sit in a bar along the bottom; nothing scrolled into view hides under it. */
+@media (max-width: 767px) { html { scroll-padding-bottom: 5.5rem; } }
+
 .label {
   font-family: var(--font-mono);
   font-size: 10.5px;
@@ -145,8 +148,74 @@
 .notches[data-pending] i { background: var(--sunk); }
 @keyframes notch { from { transform: rotate(-8deg) scaleX(0); } }
 
+/* ── The week · the stem as the clock ───────────────────────────────────
+   Each mark sits on the stem; its bar is the requirement there against
+   the equity, its edge in navy, past the equity in liquidation red. */
+.mark { position: relative; display: grid; grid-template-columns: 7rem 1fr; gap: 0.75rem; align-items: center; min-height: 48px; }
+.mark::before {
+  content: ""; position: absolute; top: 50%; left: calc(var(--stem-gap) * -1 - 4px);
+  width: 10px; height: 10px; border-radius: 50%; transform: translateY(-50%);
+  background: var(--paper); box-shadow: inset 0 0 0 2px var(--accent);
+}
+.mark[data-now]::before { background: var(--accent); }
+.when { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em; line-height: 1.35; text-transform: uppercase; color: var(--text-muted); }
+.mark[data-now] .when { color: var(--text-strong); }
+.req { position: relative; height: 24px; border-radius: 2px; background: var(--sunk); overflow: hidden; }
+.req > i {
+  position: absolute; inset: 0;
+  background: var(--band-area); box-shadow: inset -2px 0 0 var(--accent);
+  transform: translateX(calc(var(--fill) - 100%));
+  clip-path: inset(0 0 0 calc(100% - var(--fill)));
+  transition: transform 0.35s var(--ease-out), clip-path 0.35s var(--ease-out);
+}
+.req[data-short] > i { box-shadow: inset -2px 0 0 var(--liquidation); }
+.req > span { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); border-radius: 2px; padding: 1px 5px; font-size: 13px; color: var(--text-strong); white-space: nowrap; background: var(--sunk); }
+.ramp { margin: 0 0 0 7.75rem; font-size: 13px; line-height: 1.4; color: var(--warning); }
+@media (max-width: 639px) {
+  .mark { grid-template-columns: 1fr; gap: 0.35rem; padding: 0.5rem 0; }
+  .mark::before { top: 0.95rem; transform: none; }
+  .req { height: 10px; overflow: visible; margin-bottom: 1.35rem; }
+  .req > span { top: 16px; right: 0; transform: none; padding: 0; background: none; }
+  .ramp { margin-left: 0; }
+}
+
+/* ── The composer · one line that reads as the action ───────────────── */
+.choice { display: inline-flex; flex-wrap: wrap; gap: 4px; border-radius: 999px; padding: 4px; background: var(--sunk); }
+.choice button { min-height: 36px; border-radius: 999px; padding: 0 0.95em; font-size: 14px; color: var(--text-muted); transition: background-color 0.2s ease, color 0.2s ease; }
+.choice button:hover { color: var(--text-strong); }
+.choice button[aria-pressed="true"] { color: var(--text-strong); background: var(--panel); box-shadow: inset 0 0 0 1px var(--rule); }
+.amount {
+  width: 7.5ch; min-width: 0; border: 0; border-bottom: 2px solid var(--accent); border-radius: 0;
+  padding: 0 0.1em; background: transparent; color: var(--text-strong);
+  font: 600 22px/1.3 var(--font-sans); font-variant-numeric: tabular-nums lining-nums; text-align: right;
+}
+.amount::placeholder { color: var(--text-faint); }
+.amount:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; border-radius: 2px; }
+.amount[aria-invalid="true"] { border-bottom-color: var(--liquidation); }
+.picker {
+  appearance: none; min-height: 36px; border: 0; border-radius: 999px; padding: 0 2em 0 0.95em;
+  font-size: 14px; color: var(--text-strong); background: var(--panel) no-repeat right 0.8em center / 0.65em;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(-45deg, transparent 50%, currentColor 50%);
+  background-size: 0.35em 0.35em, 0.35em 0.35em; background-position: right 1.05em center, right 0.75em center;
+  box-shadow: inset 0 0 0 1px var(--rule); cursor: pointer;
+}
+.notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; font-size: 13px; line-height: 1.45; color: var(--text-body); }
+.notes li[data-tone="warning"] { color: var(--warning); }
+.notes li[data-tone="loss"] { color: var(--liquidation); }
+
+/* ── Positions · rows off the stem that open in place ───────────────── */
+.position { position: relative; border-top: 1px solid var(--rule); }
+.position::before {
+  content: ""; position: absolute; top: 30px; left: calc(var(--stem-gap) * -1);
+  width: calc(var(--stem-gap) - 0.85rem); height: 1px; background: var(--rule);
+}
+.position[data-selected]::before { background: var(--accent); height: 2px; }
+.position > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 0.15rem 1rem; padding: 0.95rem 0; }
+.position > summary::-webkit-details-marker { display: none; }
+.position > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 @media (prefers-reduced-motion: reduce) {
   .stem, .bar, .swap, .skeleton, .notches i { animation: none; }
-  .band-span, .notches i { transition: none; }
+  .band-span, .notches i, .req > i { transition: none; }
 }
 }

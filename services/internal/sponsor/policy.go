@@ -26,7 +26,8 @@ var userFunctions = []struct {
 	functions []string
 }{
 	{tapehouse, "MarginAccounts", &marginaccounts.MarginAccountsMetaData, []string{"deposit", "depositWithPermit",
-		"withdraw", "borrow", "repay", "repayWithCollateral", "setAuthorization", "lend", "unlend", "unwrap"}},
+		"withdraw", "borrow", "repay", "repayWithCollateral", "setAuthorization", "lend", "unlend", "recall", "settle",
+		"unwrap"}},
 	{tapehouse, "SupplyVault", &supplyvault.SupplyVaultMetaData, []string{"deposit", "mint", "withdraw", "redeem"}},
 	{tapehouse, "ShortPositions", &shortpositions.ShortPositionsMetaData, []string{"sell", "cover", "deposit", "withdraw"}},
 	{tapehouse, "GapCover", &gapcover.GapCoverMetaData, []string{"buy", "claim", "deposit", "mint", "withdraw", "redeem"}},

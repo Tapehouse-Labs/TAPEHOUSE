@@ -40,7 +40,7 @@ export function Providers({
     return createConfig({
       chains: [chain],
       connectors: [injected()],
-      transports: { [chain.id]: http() },
+      transports: { [chain.id]: http(undefined, { batch: true }) },
       ssr: true,
     });
   });

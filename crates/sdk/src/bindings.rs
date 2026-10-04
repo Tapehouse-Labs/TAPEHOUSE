@@ -134,6 +134,13 @@ sol!(
 sol!(
     #[sol(rpc)]
     #[derive(Debug)]
+    StockTokenRegistry,
+    "abi/StockTokenRegistry.json"
+);
+
+sol!(
+    #[sol(rpc)]
+    #[derive(Debug)]
     SupplyVault,
     "abi/SupplyVault.json"
 );
@@ -143,4 +150,11 @@ sol!(
     #[derive(Debug)]
     Usdg,
     "abi/Usdg.json"
+);
+
+sol!(
+    #[sol(rpc)]
+    #[derive(Debug)]
+    Weth,
+    "abi/Weth.json"
 );

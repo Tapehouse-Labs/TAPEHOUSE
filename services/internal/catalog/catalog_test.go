@@ -79,6 +79,20 @@ func TestEveryContractOfTheRegistryIsListedWithItsBinding(t *testing.T) {
 	}
 }
 
+func TestTheSponsorPaymasterIsCatalogued(t *testing.T) {
+	c, err := catalog.New(devnode(t, `,"SponsorPaymaster":"`+address(30)+`"`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	paymaster, ok := c.Contract("tapehouse.SponsorPaymaster")
+	if !ok || paymaster.Binding != "SponsorPaymaster" || !paymaster.Tapehouse {
+		t.Fatalf("the sponsor paymaster: %+v", paymaster)
+	}
+	if _, ok := paymaster.Events[paymaster.ABI.Events["SignerSet"].ID]; !ok {
+		t.Error("the sponsor paymaster's SignerSet is not kept")
+	}
+}
+
 func TestAStockTokenKeepsItsHaltsAndMultiplierAndMorphoBlueNothing(t *testing.T) {
 	c, err := catalog.New(devnode(t, ""))
 	if err != nil {

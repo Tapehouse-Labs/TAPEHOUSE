@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-import { type Address, type Client, type Hex, hexToString } from 'viem'
+import { type Address, type Client, erc20Abi, type Hex, hexToString, parseSignature, zeroAddress } from 'viem'
 import { getBlockNumber, readContract } from 'viem/actions'
 import type { At } from './band.js'
-import { type Deployments, entry, toBytes32 } from './deployments.js'
-import { marginAccountsAbi } from './generated.js'
+import { CROSS, type Deployments, entry, toBytes32 } from './deployments.js'
+import { marginAccountsAbi, stockTokenAbi, stockTokenRegistryAbi, supplyVaultAbi, wethAbi } from './generated.js'
 
 /**
  * Lets `authorized` borrow and withdraw for the caller's account, deposit Stock Tokens and USDG into it, and act for
@@ -31,6 +31,45 @@ export function deposit(
     abi: marginAccountsAbi,
     functionName: 'deposit',
     args: [position, token, amount, account],
+  } as const
+}
+
+/**
+ * Deposits as `deposit` does, with the caller's EIP-2612 `signature` of a permit for the accounts to spend `amount`
+ * of `token` until `deadline`. A permit already used, as by a front-runner, does not stop the deposit if the
+ * allowance stands.
+ */
+export function depositWithPermit(
+  deployments: Deployments,
+  {
+    position,
+    token,
+    amount,
+    account,
+    deadline,
+    signature,
+  }: { position: Hex; token: Address; amount: bigint; account: Address; deadline: bigint; signature: Hex },
+) {
+  const { v, yParity, r, s } = parseSignature(signature)
+  return {
+    address: accounts(deployments),
+    abi: marginAccountsAbi,
+    functionName: 'depositWithPermit',
+    args: [position, token, amount, account, deadline, Number(v ?? BigInt(yParity) + 27n), r, s],
+  } as const
+}
+
+/**
+ * Wraps `value` of ether into the registry's WETH for `account`, which then deposits it: the accounts take ether as
+ * WETH.
+ */
+export function wrap(deployments: Deployments, { account, value }: { account: Address; value: bigint }) {
+  return {
+    address: entry(deployments.tokens, 'WETH', '.tokens'),
+    abi: wethAbi,
+    functionName: 'depositTo',
+    args: [account],
+    value,
   } as const
 }
 
@@ -95,6 +134,68 @@ export function unwrap(
     abi: marginAccountsAbi,
     functionName: 'unwrap',
     args: [account, entry(deployments.baskets, basket, '.tapehouse.Baskets'), shares],
+  } as const
+}
+
+/**
+ * Lends `amount` of `account`'s `position`'s holding of the Stock Token `token` through the asset's lending vault. The
+ * position keeps the vault's shares, which count for the asset at `RECALL_HAIRCUT` less in its equity; a position in
+ * debt must still meet its requirement.
+ */
+export function lend(
+  deployments: Deployments,
+  { position, token, amount, account }: { position: Hex; token: Address; amount: bigint; account: Address },
+) {
+  return {
+    address: accounts(deployments),
+    abi: marginAccountsAbi,
+    functionName: 'lend',
+    args: [position, token, amount, account],
+  } as const
+}
+
+/**
+ * Takes `amount` of what `account`'s `position` lent of `token` back into its holding, as far as the vault can return
+ * it now; past that it reverts with `OutOfReach(symbol, amount, reachable)`.
+ */
+export function unlend(
+  deployments: Deployments,
+  { position, token, amount, account }: { position: Hex; token: Address; amount: bigint; account: Address },
+) {
+  return {
+    address: accounts(deployments),
+    abi: marginAccountsAbi,
+    functionName: 'unlend',
+    args: [position, token, amount, account],
+  } as const
+}
+
+/**
+ * Recalls `amount` of what `account`'s `position` lent of `token`: what the vault holds free comes back at once, and
+ * the rest is a ticket at the end of the vault's queue, which the borrower returns within the vault's `NOTICE`.
+ */
+export function recall(
+  deployments: Deployments,
+  { position, token, amount, account }: { position: Hex; token: Address; amount: bigint; account: Address },
+) {
+  return {
+    address: accounts(deployments),
+    abi: marginAccountsAbi,
+    functionName: 'recall',
+    args: [position, token, amount, account],
+  } as const
+}
+
+/** Takes what the vault holds for `account`'s `position`'s recall of `token`, next in turn, into its holding. Anyone may. */
+export function settle(
+  deployments: Deployments,
+  { account, position, token }: { account: Address; position: Hex; token: Address },
+) {
+  return {
+    address: accounts(deployments),
+    abi: marginAccountsAbi,
+    functionName: 'settle',
+    args: [account, position, token],
   } as const
 }
 
@@ -226,6 +327,127 @@ export function liquidationPrice(
     args: [account, position, toBytes32(asset), borrowing],
     ...at,
   })
+}
+
+/** The assets, in the engine's order, and their Stock Tokens; an asset without a token takes no deposit. */
+export async function stocks(client: Client, deployments: Deployments, at: At = {}) {
+  const [symbols, tokens] = await readContract(client, {
+    address: accounts(deployments),
+    abi: marginAccountsAbi,
+    functionName: 'stocks',
+    ...at,
+  })
+  return symbols.map((symbol, i) => ({ asset: hexToString(symbol, { size: 32 }), token: tokens[i] ?? zeroAddress }))
+}
+
+/**
+ * Every position an account may hold: `CROSS`, then the isolated position of each asset with a Stock Token, in the
+ * engine's order.
+ */
+export async function positions(client: Client, deployments: Deployments, at: At = {}): Promise<Hex[]> {
+  const assets = await stocks(client, deployments, at)
+  return [CROSS, ...assets.filter(({ token }) => token !== zeroAddress).map(({ asset }) => toBytes32(asset))]
+}
+
+/**
+ * What `account`'s `position` has of the Stock Token `token` beyond what it holds, at one block: what it lent, its fee
+ * included; what the liquidator may take now, held and reachable together; what it recalled and has not taken back;
+ * and the vault's tickets of its open recalls, oldest first.
+ */
+export async function lending(
+  client: Client,
+  deployments: Deployments,
+  account: Address,
+  position: Hex,
+  token: Address,
+  at: At = {},
+) {
+  const blockNumber = at.blockNumber ?? (await getBlockNumber(client, { cacheTime: 0 }))
+  const read = {
+    address: accounts(deployments),
+    abi: marginAccountsAbi,
+    args: [account, position, token],
+    blockNumber,
+  } as const
+  const [lent, sellable, claim, recalls] = await Promise.all([
+    readContract(client, { ...read, functionName: 'lent' }),
+    readContract(client, { ...read, functionName: 'sellable' }),
+    readContract(client, { ...read, functionName: 'claim' }),
+    readContract(client, { ...read, functionName: 'recalls' }),
+  ])
+  return { lent, sellable, claim, recalls }
+}
+
+/**
+ * The accounts' holding of `asset`, at one block: the units its positions hold, each worth `scale` / 10^18 of a token,
+ * so `quantity` in raw units; its cap in raw units; and the Stock Tokens the accounts hold, below `quantity` while a
+ * write-down by the issuer is pending.
+ */
+export async function holding(client: Client, deployments: Deployments, asset: string, token: Address, at: At = {}) {
+  const address = accounts(deployments)
+  const blockNumber = at.blockNumber ?? (await getBlockNumber(client, { cacheTime: 0 }))
+  const [[units, scale, cap], balance] = await Promise.all([
+    readContract(client, {
+      address,
+      abi: marginAccountsAbi,
+      functionName: 'holding',
+      args: [toBytes32(asset)],
+      blockNumber,
+    }),
+    readContract(client, { address: token, abi: erc20Abi, functionName: 'balanceOf', args: [address], blockNumber }),
+  ])
+  return { units, scale, quantity: (units * scale) / 10n ** 18n, cap, balance }
+}
+
+/**
+ * The accounts' limits on borrowing, at one block: what the positions owe the vault together, the debt cap, the debt
+ * cap from the regular open on the last trading day before a closure, the weekend leverage cap in basis points,
+ * whether the guardian paused new borrowing, and the premium charged while the session is closed, in basis points a
+ * year.
+ */
+export async function limits(client: Client, deployments: Deployments, at: At = {}) {
+  const address = accounts(deployments)
+  const blockNumber = at.blockNumber ?? (await getBlockNumber(client, { cacheTime: 0 }))
+  const read = { address, abi: marginAccountsAbi, blockNumber } as const
+  const [debt, debtCap, weekendDebtCap, weekendLeverage, borrowingPaused, premiumRate] = await Promise.all([
+    readContract(client, {
+      address: entry(deployments.tapehouse, 'SupplyVault', '.tapehouse'),
+      abi: supplyVaultAbi,
+      functionName: 'debt',
+      blockNumber,
+    }),
+    readContract(client, { ...read, functionName: 'debtCap' }),
+    readContract(client, { ...read, functionName: 'weekendDebtCap' }),
+    readContract(client, { ...read, functionName: 'weekendLeverage' }),
+    readContract(client, { ...read, functionName: 'borrowingPaused' }),
+    readContract(client, { ...read, functionName: 'premiumRate' }),
+  ])
+  return { debt, debtCap, weekendDebtCap, weekendLeverage, borrowingPaused, premiumRate }
+}
+
+/**
+ * What stops the Stock Token `token` moving, at one block: the issuer's pause, and whether its registry blocks each of
+ * `holders`, by address. A pause or a block on the accounts or on the user stops its deposits and withdrawals.
+ */
+export async function issuer(client: Client, token: Address, holders: readonly Address[], at: At = {}) {
+  const blockNumber = at.blockNumber ?? (await getBlockNumber(client, { cacheTime: 0 }))
+  const read = { address: token, abi: stockTokenAbi, blockNumber } as const
+  const [paused, registry] = await Promise.all([
+    readContract(client, { ...read, functionName: 'paused' }),
+    readContract(client, { ...read, functionName: 'ACCESS_CONTROLLED_REGISTRY' }),
+  ])
+  const blocked = await Promise.all(
+    holders.map((holder) =>
+      readContract(client, {
+        address: registry,
+        abi: stockTokenRegistryAbi,
+        functionName: 'isBlocked',
+        args: [holder],
+        blockNumber,
+      }),
+    ),
+  )
+  return { paused, blocked: Object.fromEntries(holders.map((holder, i) => [holder, blocked[i] ?? false])) }
 }
 
 function accounts(deployments: Deployments) {

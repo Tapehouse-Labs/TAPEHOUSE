@@ -22,7 +22,9 @@ var (
 		{"type":"function","name":"execute","stateMutability":"nonpayable","inputs":[{"name":"dest","type":"address"},{"name":"value","type":"uint256"},{"name":"func","type":"bytes"}],"outputs":[]},
 		{"type":"function","name":"executeBatch","stateMutability":"nonpayable","inputs":[{"name":"dest","type":"address[]"},{"name":"value","type":"uint256[]"},{"name":"func","type":"bytes[]"}],"outputs":[]}]`)
 	erc20ABI = mustABI(`[
-		{"type":"function","name":"approve","stateMutability":"nonpayable","inputs":[{"name":"spender","type":"address"},{"name":"value","type":"uint256"}],"outputs":[{"name":"","type":"bool"}]}]`)
+		{"type":"function","name":"approve","stateMutability":"nonpayable","inputs":[{"name":"spender","type":"address"},{"name":"value","type":"uint256"}],"outputs":[{"name":"","type":"bool"}]},
+		{"type":"function","name":"transferFrom","stateMutability":"nonpayable","inputs":[{"name":"from","type":"address"},{"name":"to","type":"address"},{"name":"value","type":"uint256"}],"outputs":[{"name":"","type":"bool"}]},
+		{"type":"function","name":"permit","stateMutability":"nonpayable","inputs":[{"name":"owner","type":"address"},{"name":"spender","type":"address"},{"name":"value","type":"uint256"},{"name":"deadline","type":"uint256"},{"name":"v","type":"uint8"},{"name":"r","type":"bytes32"},{"name":"s","type":"bytes32"}],"outputs":[]}]`)
 	entryPointABI = mustABI(`[
 		{"type":"function","name":"handleOps","stateMutability":"nonpayable","inputs":[{"name":"ops","type":"tuple[]","components":[
 			{"name":"sender","type":"address"},{"name":"nonce","type":"uint256"},{"name":"initCode","type":"bytes"},
@@ -31,9 +33,12 @@ var (
 			{"name":"paymasterAndData","type":"bytes"},{"name":"signature","type":"bytes"}]},
 			{"name":"beneficiary","type":"address"}],"outputs":[]}]`)
 	nodeInterfaceABI = mustABI(`[
+		{"type":"function","name":"gasEstimateComponents","stateMutability":"payable","inputs":[{"name":"to","type":"address"},{"name":"contractCreation","type":"bool"},{"name":"data","type":"bytes"}],"outputs":[{"name":"gasEstimate","type":"uint64"},{"name":"gasEstimateForL1","type":"uint64"},{"name":"baseFee","type":"uint256"},{"name":"l1BaseFeeEstimate","type":"uint256"}]},
 		{"type":"function","name":"gasEstimateL1Component","stateMutability":"payable","inputs":[{"name":"to","type":"address"},{"name":"contractCreation","type":"bool"},{"name":"data","type":"bytes"}],"outputs":[{"name":"gasEstimateForL1","type":"uint64"},{"name":"baseFee","type":"uint256"},{"name":"l1BaseFeeEstimate","type":"uint256"}]}]`)
 
-	approveSelector = [4]byte(erc20ABI.Methods["approve"].ID)
+	approveSelector      = [4]byte(erc20ABI.Methods["approve"].ID)
+	transferFromSelector = [4]byte(erc20ABI.Methods["transferFrom"].ID)
+	permitSelector       = [4]byte(erc20ABI.Methods["permit"].ID)
 
 	// nodeInterface is Arbitrum's NodeInterface, which answers only eth_call.
 	nodeInterface = common.HexToAddress("0x00000000000000000000000000000000000000C8")
