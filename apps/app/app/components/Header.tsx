@@ -14,6 +14,7 @@ import { WalletControl } from "./WalletControl";
 export const SECTIONS = [
   { href: "/", label: "Account" },
   { href: "/earn", label: "Earn" },
+  { href: "/risk", label: "Risk" },
   { href: "/simulator", label: "Simulator" },
 ] as const;
 
