@@ -190,3 +190,13 @@ func (b *Band) Sealed(opts *bind.CallOpts, asset string, reopenMs uint64) (bandf
 func (b *Band) Seal(asset string) (Tx, error) {
 	return lookup(b.c.deployments.BandFeeds, asset, ".bandFeeds").tx(b.feed.TryPackSeal())
 }
+
+// SequencerSettled reports whether the L2 sequencer is up and has been for over an hour; true without a feed.
+func (b *Band) SequencerSettled(opts *bind.CallOpts) (bool, error) {
+	return read(b.c, opts, b.target, b.band.UnpackSequencerSettled)(b.band.TryPackSequencerSettled())
+}
+
+// Variance reads the EWMA variance of the 24/7 feed feedID, in centi-basis-points squared per minute.
+func (b *Band) Variance(opts *bind.CallOpts, feedID [32]byte) (*big.Int, error) {
+	return read(b.c, opts, b.target, b.band.UnpackVariance)(b.band.TryPackVariance(feedID))
+}

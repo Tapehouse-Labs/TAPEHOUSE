@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -20,6 +21,11 @@ import (
 type Index struct {
 	base   string
 	client *http.Client
+}
+
+// NewIndex returns the index API at base, such as the indexer's TAPEHOUSE_INDEXER_URL, read over client.
+func NewIndex(base string, client *http.Client) *Index {
+	return &Index{base: strings.TrimRight(base, "/"), client: client}
 }
 
 // Position is a margin position: its account and position, and its equity and requirement as the indexer last read

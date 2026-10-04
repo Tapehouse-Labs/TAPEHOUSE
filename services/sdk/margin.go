@@ -3,6 +3,8 @@
 package sdk
 
 import (
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/v2"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/margin"
@@ -81,4 +83,16 @@ func (m *Margin) Owner(opts *bind.CallOpts) (common.Address, error) {
 // correlations of the upper triangle row by row, and each asset's selling then buying depth.
 func (m *Margin) SetParameters(volatilities []uint32, correlations []uint16, gaps []uint32, depths []uint32) (Tx, error) {
 	return m.tx(m.engine.TryPackSetParameters(volatilities, correlations, gaps, depths))
+}
+
+// EthUsdFeed reads the Chainlink feed that prices WETH for the engine.
+func (m *Margin) EthUsdFeed(opts *bind.CallOpts) (common.Address, error) {
+	return read(m.c, opts, m.target, m.engine.UnpackEthUsdFeed)(m.engine.TryPackEthUsdFeed())
+}
+
+// CurrentRequirement reads the margin a portfolio needs now, in USD with 18 decimals, its missing bits and the regime
+// the band's session puts it in. quantities are signed token amounts with 18 decimals and prices USD with 8 decimals,
+// in the order of Assets.
+func (m *Margin) CurrentRequirement(opts *bind.CallOpts, quantities, prices []*big.Int) (margin.CurrentRequirementOutput, error) {
+	return read(m.c, opts, m.target, m.engine.UnpackCurrentRequirement)(m.engine.TryPackCurrentRequirement(quantities, prices))
 }

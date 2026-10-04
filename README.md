@@ -14,7 +14,7 @@ Portfolio margin for Stock Tokens on Robinhood Chain.
 - `deployments` — contract addresses per chain, one JSON file per chain ID
 - `packages/sdk` — the TypeScript SDK (viem)
 - `packages/mcp` — the MCP server for AI agents, on the TypeScript SDK
-- `services` — the Go module: the Go SDK in `services/sdk` (go-ethereum), the indexer and public API in `services/cmd/indexer`, the backtester in `services/cmd/backtest`, a reference bidder in `services/cmd/bidder`, the parameter calibrator in `services/cmd/calibrate` and the sponsor service in `services/cmd/sponsor`
+- `services` — the Go module: the Go SDK in `services/sdk` (go-ethereum), the indexer and public API in `services/cmd/indexer`, the backtester in `services/cmd/backtest`, a reference bidder in `services/cmd/bidder`, the liquidation-risk alerts in `services/cmd/alerts`, the parameter calibrator in `services/cmd/calibrate` and the sponsor service in `services/cmd/sponsor`
 - `crates` — Rust crates: the Rust SDK in `crates/sdk` (alloy)
 
 ## Requirements
@@ -110,6 +110,8 @@ make test
 | `make run-keeper CHAIN=<id> [REGISTRY=<file>]` | Runs the keepers on the chain's registry, with the chain's RPC URL from the table below and the keeper's key from its keystore and the file holding its password |
 | `make test-bidder-devnode` | Runs the reference bidder against that deployment: it buys a Stock Token from a liquidation auction it staged at no more than its own price, with the ask's cost as its limit, and acts on the reopening auction in whatever phase the dev node's session is in; prints each action's L2 gas |
 | `make run-bidder CHAIN=<id> [REGISTRY=<file>]` | Runs the reference bidder on the chain's registry, with the chain's RPC URL from the table below and its key in `PRIVATE_KEY` |
+| `make test-alerts-devnode` | Runs the alerts against that deployment, SPY's band written from RedStone's packages just before each read: a position near its limit, signed up for by email (an SMTP double with STARTTLS) and Telegram (a Bot API double), gets one threshold alert on each channel and none at the next tick; the Go valuation equals the liquidator's `shortfall` and the Go requirement the engine's `currentRequirement` at one block, the band rebuilt at its centre equals the chain's, and the weekend price is short at both edges with the next unit above it not |
+| `make run-alerts CHAIN=<id> [REGISTRY=<file>]` | Runs the alerts on the chain's registry, with the chain's RPC URL from the table below |
 
 ## Networks
 
@@ -728,6 +730,24 @@ make run-bidder CHAIN=42161
 - **Liquidation auctions.** Every 15 seconds the bot reads the auctions started in the last four hours from the indexer's public tier, keeps those the liquidator still shows live, and buys each Stock Token the position holds once the ask has fallen to its own price from the band now, for as much as the budget buys, with the ask's cost, rounded up, as its limit. It never buys WETH, whose price is Chainlink's and not the band's.
 - **Approvals.** Before each commit or purchase the bot approves exactly the deposit or the limit, never an unlimited allowance.
 - **Configuration from the environment.** `PRIVATE_KEY`, never an argument and never logged; `TAPEHOUSE_RPC_URL` and `TAPEHOUSE_DEPLOYMENTS`; `TAPEHOUSE_INDEXER_URL`, without which the liquidation auctions are not watched, and `TAPEHOUSE_INDEXER_KEY`; `TAPEHOUSE_BIDDER_STATE`, `bidder-<chainId>.json` unless set; `TAPEHOUSE_BIDDER_BUDGET`, in USDG raw units for each round and each purchase, 1,000 USDG unless set; `TAPEHOUSE_BIDDER_DISCOUNT_BPS`, 300; `TAPEHOUSE_BIDDER_COMMIT_LEAD`, 15 minutes; `TAPEHOUSE_BIDDER_ASSETS`, every asset of the accounts; `TAPEHOUSE_BIDDER_DRY_RUN=true` to simulate every transaction and send none. RPC URLs and the indexer key never appear in a log.
+
+## Alerts
+
+`services/cmd/alerts` warns the holder of a margin position before a weekend and before a liquidation, by email or Telegram as the holder chose. It sends a transaction never, and keeps nothing an alert does not need.
+
+```bash
+export TAPEHOUSE_INDEXER_URL=http://127.0.0.1:8080 TAPEHOUSE_ALERTS_URL=https://alerts.example TAPEHOUSE_ALERTS_SECRET=…
+export TAPEHOUSE_SMTP_URL=smtp://user:password@smtp.example:587 TAPEHOUSE_ALERTS_FROM=alerts@example.org TELEGRAM_BOT_TOKEN=…
+make run-alerts CHAIN=42161
+```
+
+- **Valuation.** Each position is read through the Go SDK at one block and valued as the liquidator values it: Stock Tokens at their band's low edge, a recalled loan less its haircut, USDG at par, WETH at 84% of Chainlink's price, and a position left unjudged while the sequencer is unsettled, an asset it holds is halted or has an unconfirmed multiplier step, or WETH has no price. The requirement is `internal/margin` over the engine's parameters and pools read at that block, and it must equal the engine's `currentRequirement` at the block's own prices, or the position is not evaluated and nothing is said of it.
+- **Prices.** For each Stock Token held, with every other asset at its band's centre, an integer bisection finds the weekend price, the highest centre at which the position falls short at both edges of a closed band, and the reopening price, the highest at which it falls short at its low edge against the open requirement, the price at which the reopening auction may enrol it. The accounts' own open-market `liquidationPrice` is shown beside them.
+- **Alerts.** Every minute, on the chain's clock: a threshold alert when equity over requirement falls under the subscriber's threshold, 1.25 unless set between 1.05 and 3, sent once and armed again after the ratio rises 5% above it; a weekend alert once for each closure, when the seven-hour ramp before a weekend or holiday close begins; a liquidation alert when the position falls short, once for each time and each auction; an unjudged notice once for each halt. Shorts get threshold and liquidation alerts, not a weekend price. A failed send is tried at the next two ticks and then dropped, logged by subscription ID and never by destination.
+- **Opt-in.** `POST /v1/subscriptions` takes `{account, channel, destination, threshold, issuedAt, signature}`, the signature an EIP-191 `personal_sign` of a fixed text naming the chain, the account, the channel and `issuedAt`, at most ten minutes old, from the account itself. An email is confirmed by the link it is sent (`GET /v1/confirm/<token>`, a day); a Telegram chat by the code the response returns, opened as `t.me/<bot>?start=<code>` (an hour). `GET /v1/unsubscribe/<token>`, the link at the foot of every email, `/stop` in Telegram and `DELETE /v1/subscriptions/<id>` with a fresh signature delete the subscription.
+- **What is kept.** One table of subscriptions, with the account, channel, destination, threshold, whether it is confirmed, the state of each position's alerts and the SHA-256 of the unsubscribe token, and one of the codes and tokens awaiting confirmation, as digests, deleted when used or expired; an unconfirmed subscription goes with its code. No name, address, message or position is kept.
+- **Channels.** Email over SMTP with STARTTLS, which a server must offer before the password is sent, and Telegram over the Bot API, both plain text.
+- **Configuration from the environment.** `TAPEHOUSE_DEPLOYMENTS`, `TAPEHOUSE_RPC_URL`, `TAPEHOUSE_INDEXER_URL`, `TAPEHOUSE_ALERTS_URL`, the address its links point to, and `TAPEHOUSE_ALERTS_SECRET`, at least 32 characters, from which each unsubscribe token is derived; `TAPEHOUSE_RPC_FALLBACK_URLS`, `TAPEHOUSE_RPC_RATE`, `TAPEHOUSE_ALERTS_DB` (`alerts.db`), `TAPEHOUSE_ALERTS_LISTEN` (`127.0.0.1:8090`), `TAPEHOUSE_ALERTS_INTERVAL` (`60s`), `TAPEHOUSE_SMTP_URL` with `TAPEHOUSE_ALERTS_FROM`, and `TELEGRAM_BOT_TOKEN` with `TELEGRAM_API_URL`. At least one channel is required. RPC URLs, the SMTP password, the bot token and the secret never appear in a log.
 
 ## Backtest
 
