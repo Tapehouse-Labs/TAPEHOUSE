@@ -604,6 +604,13 @@
       "description": "Popover list of browser wallets; the only element with a cast shadow.",
       "html": "<ul class=\"ds-menu\" aria-label=\"Wallets in this browser\"><li><button class=\"ds-opt\"><span class=\"ds-ico\" aria-hidden=\"true\"></span>Browser wallet</button></li><li><button class=\"ds-opt\"><span class=\"ds-ico\" aria-hidden=\"true\"></span>Second wallet</button></li></ul>",
       "css": ".ds-menu { list-style:none; margin:0; width:256px; border-radius:10px; padding:8px; background:var(--panel, #fff); box-shadow:0 18px 50px -12px rgb(0 0 0 / 0.35), 0 0 0 1px var(--rule, #dcd6ca); } .ds-opt { display:flex; width:100%; align-items:center; gap:12px; border:0; border-radius:6px; padding:10px 12px; background:transparent; text-align:left; font-family: var(--font-sans, 'Inter Tight', system-ui, sans-serif); font-size:14px; color:var(--text-strong, #1a1713); cursor:pointer; } .ds-opt:hover { background:var(--sunk, #ebe7de); } .ds-opt:focus-visible { outline:2px solid var(--accent, #16326b); outline-offset:3px; } .ds-ico { width:22px; height:22px; border-radius:5px; background:var(--sunk, #ebe7de); }"
+    },
+    {
+      "name": "Notches",
+      "kind": "signature",
+      "description": "The smart account's free actions: three 2px navy strokes crossing the stem at -8°, each going out to the rule colour as it is spent, beside the account's seal.",
+      "html": "<div class=\"ds-notched\"><span class=\"ds-stem\" aria-hidden=\"true\"></span><span class=\"ds-notches\" aria-hidden=\"true\"><i></i><i></i><i data-spent></i></span><span class=\"ds-seal\">[ 0x42CE…E870 ] <span class=\"ds-live\">· LIVE</span></span><p class=\"ds-line\">2 free actions left</p></div>",
+      "css": ".ds-notched { position:relative; padding:0.5rem 0 0.5rem 2.75rem; } .ds-stem { position:absolute; top:0; bottom:0; left:0.6rem; width:2px; background:var(--accent, #16326b); } .ds-notches { position:absolute; top:0.85rem; left:0; display:grid; gap:9px; } .ds-notches i { display:block; width:1.7rem; height:2px; background:var(--accent, #16326b); transform-origin:0.6rem 50%; transform:rotate(-8deg); } .ds-notches i[data-spent] { background:var(--rule, #dcd6ca); } .ds-seal { display:inline-flex; gap:0.6em; white-space:nowrap; border-radius:2px; padding:0.3em 0.75em; font-family: var(--font-mono, 'Spline Sans Mono', ui-monospace, monospace); font-size:11px; letter-spacing:0.09em; color:var(--text-strong, #1a1713); background:var(--panel, #fff); box-shadow:inset 0 0 0 1px var(--rule, #dcd6ca); } .ds-live { color:var(--gain, #1c6b4a); } .ds-line { margin:0.5rem 0 0; font-family: var(--font-sans, 'Inter Tight', system-ui, sans-serif); font-size:14px; color:var(--text-body, rgba(26,23,19,0.8)); }"
     }
   ],
   "narrative": {

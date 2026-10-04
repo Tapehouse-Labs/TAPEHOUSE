@@ -4,6 +4,7 @@ pragma solidity 0.8.37;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {AggregatorV3Interface, IMorpho, IUniswapV3Factory} from "./conformance/Interfaces.sol";
+import {SimpleAccountFactory} from "account-abstraction/samples/SimpleAccountFactory.sol";
 import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {BandFeed} from "../src/BandFeed.sol";
 import {IQuoterV2} from "../src/interfaces/IQuoterV2.sol";
@@ -21,6 +22,7 @@ contract RegistryForkTest is Test {
         vm.createSelectFork("robinhood", ROBINHOOD_BLOCK);
         assertEq(block.chainid, 4663);
         _assertTokens(json);
+        _assertErc4337(json);
 
         _assertFeeds(json);
 
@@ -62,6 +64,7 @@ contract RegistryForkTest is Test {
         vm.createSelectFork("robinhood-testnet", ROBINHOOD_TESTNET_BLOCK);
         assertEq(block.chainid, 46630);
         _assertTokens(json);
+        _assertErc4337(json);
         assertEq(bytes4(vm.parseJsonAddress(json, ".tapehouse.Band").code), STYLUS_ROOT_PREFIX, "tapehouse.Band");
         address band = vm.parseJsonAddress(json, ".tapehouse.Band");
         assertEq(
@@ -175,6 +178,13 @@ contract RegistryForkTest is Test {
             (, int256 answer,,,) = feed.latestRoundData();
             assertGt(answer, 0, feeds[i]);
         }
+    }
+
+    function _assertErc4337(string memory json) internal view {
+        address entryPoint = vm.parseJsonAddress(json, ".erc4337.EntryPoint");
+        SimpleAccountFactory factory = SimpleAccountFactory(vm.parseJsonAddress(json, ".erc4337.SimpleAccountFactory"));
+        assertGt(entryPoint.code.length, 0, "erc4337.EntryPoint");
+        assertEq(address(factory.accountImplementation().entryPoint()), entryPoint, "erc4337.SimpleAccountFactory");
     }
 
     function _assertTokens(string memory json) internal view {

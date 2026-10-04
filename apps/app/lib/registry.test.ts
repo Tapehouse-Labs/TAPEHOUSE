@@ -7,10 +7,12 @@ import { loadRegistry } from "./registry";
 
 describe("loadRegistry", () => {
   test("reads the testnet's registry by default", async () => {
-    const { deployments, rpcUrl } = await loadRegistry({});
+    const { deployments, rpcUrl, bundlerUrl, sponsorUrl } = await loadRegistry({});
     expect(deployments.chainId).toBe(46630);
     expect(deployments.tapehouse.Band).toBe("0xa70118d3324D90532E7D2854627b13CacE305641");
     expect(rpcUrl).toBeUndefined();
+    expect(bundlerUrl).toBeUndefined();
+    expect(sponsorUrl).toBeUndefined();
   });
 
   test("reads the chain named by TAPEHOUSE_CHAIN_ID, and its RPC URL", async () => {
@@ -20,6 +22,15 @@ describe("loadRegistry", () => {
     });
     expect(deployments.chainId).toBe(4663);
     expect(rpcUrl).toBe("https://rpc.example");
+  });
+
+  test("TAPEHOUSE_BUNDLER_URL and TAPEHOUSE_SPONSOR_URL name the bundler and the sponsor service", async () => {
+    const { bundlerUrl, sponsorUrl } = await loadRegistry({
+      TAPEHOUSE_BUNDLER_URL: "http://127.0.0.1:4337",
+      TAPEHOUSE_SPONSOR_URL: "http://127.0.0.1:4338",
+    });
+    expect(bundlerUrl).toBe("http://127.0.0.1:4337");
+    expect(sponsorUrl).toBe("http://127.0.0.1:4338");
   });
 
   test("TAPEHOUSE_REGISTRY names a registry file, such as the dev node's", async () => {

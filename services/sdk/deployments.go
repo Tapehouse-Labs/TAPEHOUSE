@@ -33,6 +33,7 @@ type Deployments struct {
 	Morpho             map[string]common.Address
 	MorphoMarkets      map[string]common.Hash
 	MorphoOracles      map[string]common.Address
+	ERC4337            map[string]common.Address
 }
 
 // TokenPriceFeed is a Chainlink feed that prices the Stock Token, as Robinhood Chain's do.
@@ -62,6 +63,7 @@ func ParseDeployments(data []byte) (*Deployments, error) {
 		UniswapV3     map[string]string          `json:"uniswapV3"`
 		Morpho        map[string]json.RawMessage `json:"morpho"`
 		MorphoOracles map[string]string          `json:"morphoOracles"`
+		ERC4337       map[string]string          `json:"erc4337"`
 	}
 	if err := json.Unmarshal(data, &registry); err != nil {
 		return nil, err
@@ -82,6 +84,7 @@ func ParseDeployments(data []byte) (*Deployments, error) {
 		{&d.BandFeeds, registry.BandFeeds, ".bandFeeds"},
 		{&d.UniswapV3, registry.UniswapV3, ".uniswapV3"},
 		{&d.MorphoOracles, registry.MorphoOracles, ".morphoOracles"},
+		{&d.ERC4337, registry.ERC4337, ".erc4337"},
 	} {
 		if *group.into, err = addresses(group.from, group.path); err != nil {
 			return nil, err

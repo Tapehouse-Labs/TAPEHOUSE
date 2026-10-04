@@ -102,6 +102,13 @@ sol!(
     "abi/ShortPositions.json"
 );
 
+sol!(
+    #[sol(rpc)]
+    #[derive(Debug)]
+    SponsorPaymaster,
+    "abi/SponsorPaymaster.json"
+);
+
 /// `StockLendingVault`'s ABI names `SupplyVault`'s `RateModel`, for which `sol!` declares a `SupplyVault` module of its
 /// own, so the binding is declared apart from `SupplyVault`'s.
 mod stock_lending_vault {

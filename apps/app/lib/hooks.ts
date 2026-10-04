@@ -8,7 +8,8 @@ import { type Connector, useClient, useConnect, useConnection, useConnectors, us
 import { useDeployments } from "@/app/providers";
 import { walletState } from "./wallet";
 
-const REFRESH_MS = 15_000;
+/** How often the app reads the chain again, in milliseconds. */
+export const REFRESH_MS = 15_000;
 
 const subscribeNever = () => () => {};
 

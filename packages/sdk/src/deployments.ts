@@ -26,6 +26,7 @@ export type Deployments = {
   morpho: Record<string, Address>
   morphoMarkets: Record<string, Hex>
   morphoOracles: Record<string, Address>
+  erc4337: Record<string, Address>
 }
 
 /** The chains whose Chainlink feeds price the share rather than the Stock Token. */
@@ -65,6 +66,7 @@ export function parseDeployments(json: unknown): Deployments {
     morpho: addresses(morpho, '.morpho'),
     morphoMarkets: ids(Markets, '.morpho.Markets'),
     morphoOracles: addresses(registry.morphoOracles, '.morphoOracles'),
+    erc4337: addresses(registry.erc4337, '.erc4337'),
   }
 }
 
