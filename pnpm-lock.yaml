@@ -175,8 +175,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/brand
       '@tapehouse/sdk':
-        specifier: workspace:*
-        version: link:../../packages/sdk
+        specifier: 0.1.0
+        version: 0.1.0(viem@2.57.2(typescript@5.9.3)(zod@4.6.5))
       next:
         specifier: 16.3.5
         version: 16.3.5(@babel/core@7.29.7(supports-color@7.2.0))(@playwright/test@1.63.0)(@types/node@20.19.43)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -1076,6 +1076,11 @@ packages:
     resolution: {integrity: sha512-Zz70EgjahNI7aCz8BZxM3vUGU44ycxEAzMuCUjLeA7SVhhOkg3ZgPjPJPvHjs6Rmky/dtmnu1WzjGHNHmhCoZQ==}
     peerDependencies:
       react: ^18 || ^19
+
+  '@tapehouse/sdk@0.1.0':
+    resolution: {integrity: sha512-15Gy2n7fgE8giMoztHFfuP0ahix8VLpPzuL4DIbpAut/NrsO7xcEfrpK1kr7apCWW/gWMnXjbb66S7Am7ieuNQ==}
+    peerDependencies:
+      viem: ^2.57.2
 
   '@tybys/wasm-util@0.10.4':
     resolution: {integrity: sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A==}
@@ -3700,6 +3705,10 @@ snapshots:
     dependencies:
       '@tanstack/query-core': 5.104.1
       react: 19.2.8
+
+  '@tapehouse/sdk@0.1.0(viem@2.57.2(typescript@5.9.3)(zod@4.6.5))':
+    dependencies:
+      viem: 2.57.2(typescript@5.9.3)(zod@4.6.5)
 
   '@tybys/wasm-util@0.10.4':
     dependencies:
