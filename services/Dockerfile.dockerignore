@@ -1,0 +1,8 @@
+*
+!services
+!deployments
+services/tapehouse-*.db*
+services/alerts.db*
+services/bidder-*.json
+services/backtest.json
+services/calibrate
