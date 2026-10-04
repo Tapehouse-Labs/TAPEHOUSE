@@ -19,7 +19,7 @@ import (
 
 // userFunctions are the functions a user calls, by contract: the service sponsors these, and approvals of their
 // contracts, and no keeper's, owner's or bidder's call. The backstop's premium claim, which anyone may make, pays its
-// depositors.
+// depositors; a cover's release, which anyone may make too, credits its holder.
 var userFunctions = []struct {
 	group     func(d *sdk.Deployments) map[string]common.Address
 	name      string
@@ -31,7 +31,8 @@ var userFunctions = []struct {
 		"unwrap"}},
 	{tapehouse, "SupplyVault", &supplyvault.SupplyVaultMetaData, []string{"deposit", "mint", "withdraw", "redeem"}},
 	{tapehouse, "ShortPositions", &shortpositions.ShortPositionsMetaData, []string{"sell", "cover", "deposit", "withdraw"}},
-	{tapehouse, "GapCover", &gapcover.GapCoverMetaData, []string{"buy", "claim", "deposit", "mint", "withdraw", "redeem"}},
+	{tapehouse, "GapCover", &gapcover.GapCoverMetaData, []string{"buy", "release", "claim", "deposit", "mint",
+		"withdraw", "redeem"}},
 	{tapehouse, "GapBackstop", &gapbackstop.GapBackstopMetaData, []string{"deposit", "mint", "startCooldown", "withdraw",
 		"redeem", "claimGains", "claim"}},
 	{stockLending, "", &stocklendingvault.StockLendingVaultMetaData, []string{"deposit", "mint", "withdraw", "redeem"}},

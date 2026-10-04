@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import { type Address, type Client, type Hex, zeroAddress } from 'viem'
-import { getBlockNumber, readContract } from 'viem/actions'
+import { getBlockNumber, getContractEvents, readContract } from 'viem/actions'
 import type { At } from './band.js'
 import { type Deployments, entry, toBytes32 } from './deployments.js'
 import { gapCoverAbi } from './generated.js'
@@ -260,6 +260,34 @@ export async function cover(client: Client, deployments: Deployments, id: bigint
     limitBps: BigInt(limitBps),
     premium,
   }
+}
+
+/**
+ * The covers `holder` bought and still holds, those released left out, oldest first: each cover's id with what `cover`
+ * reads, read at one block. It scans the cover's `Bought` events from `fromBlock`, by default the chain's first block;
+ * pass the cover's deployment block where the node bounds a log query's range.
+ */
+export async function holdings(
+  client: Client,
+  deployments: Deployments,
+  holder: Address,
+  { fromBlock = 0n, ...at }: At & { fromBlock?: bigint } = {},
+) {
+  const blockNumber = at.blockNumber ?? (await getBlockNumber(client, { cacheTime: 0 }))
+  const bought = await getContractEvents(client, {
+    address: gapCover(deployments),
+    abi: gapCoverAbi,
+    eventName: 'Bought',
+    args: { holder },
+    fromBlock,
+    toBlock: blockNumber,
+  })
+  const ids = bought.map((log) => log.args.id).filter((id): id is bigint => id !== undefined)
+  const covers = await Promise.all(ids.map((id) => cover(client, deployments, id, { blockNumber })))
+  return ids.flatMap((id, i) => {
+    const held = covers[i]
+    return held ? [{ id, ...held }] : []
+  })
 }
 
 /** The USDG credited to `holder` and not yet claimed. */

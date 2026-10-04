@@ -784,7 +784,7 @@ describe('sponsorship', () => {
 
   test('the paymaster is read from .tapehouse.SponsorPaymaster', () => {
     expect(sponsorship.paymaster(d)).toBe(bob)
-    expect(() => sponsorship.paymaster(testnet)).toThrow('The registry has no .tapehouse.SponsorPaymaster.')
+    expect(() => sponsorship.paymaster(robinhood)).toThrow('The registry has no .tapehouse.SponsorPaymaster.')
   })
 
   test('a transaction becomes a call of a user operation', () => {

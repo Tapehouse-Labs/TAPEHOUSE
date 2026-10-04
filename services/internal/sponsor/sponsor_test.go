@@ -39,6 +39,8 @@ var (
 	stranger       = common.HexToAddress("0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa")
 	liquidator     = common.HexToAddress("0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB")
 	backstop       = common.HexToAddress("0xcCCCcCCCcCCCCCCcCcccCcCcCcCcCcCcCCcCcCCc")
+	pair           = common.HexToAddress("0xdDdDddDdDdDdDDdDdDDDdDDDDdDdddDdDDdDdddd")
+	gapCover       = common.HexToAddress("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE")
 	proxyCode      = []byte{0x60, 0x80, 0x60, 0x40}
 	signerKey, _   = crypto.HexToECDSA("4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318")
 	now            = time.Unix(1_790_000_000, 0)
@@ -135,8 +137,8 @@ func registry(t *testing.T) *sdk.Deployments {
 	t.Helper()
 	d, err := sdk.ParseDeployments([]byte(`{"chainId":412346,
 		"tokens":{"USDG":"` + usdg.Hex() + `"},
-		"tapehouse":{"MarginAccounts":"` + accounts.Hex() + `","Liquidator":"` + liquidator.Hex() + `","GapBackstop":"` + backstop.Hex() + `","Owner":"` +
-		owner.Hex() + `","SponsorPaymaster":"` + paymaster.Hex() + `"},
+		"tapehouse":{"MarginAccounts":"` + accounts.Hex() + `","Liquidator":"` + liquidator.Hex() + `","GapBackstop":"` + backstop.Hex() + `","GapCover":"` + gapCover.Hex() + `","Owner":"` +
+		owner.Hex() + `","SponsorPaymaster":"` + paymaster.Hex() + `","Baskets":{"PAIR":"` + pair.Hex() + `"}},
 		"erc4337":{"EntryPoint":"` + entryPoint.Hex() + `","SimpleAccountFactory":"` + factory.Hex() + `"}}`))
 	if err != nil {
 		t.Fatal(err)
@@ -260,6 +262,27 @@ func TestCallsToTapehouseAndApprovalsOfItAreSponsored(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := s.Data(context.Background(), existing(chain, execute(accounts, 0, authorize))); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestABasketsSharesMayBeApprovedToTheAccounts(t *testing.T) {
+	chain := newChain()
+	s := service(t, chain)
+	deposit := slices.Concat(crypto.Keccak256([]byte("deposit(bytes32,address,uint256,address)"))[:4], make([]byte, 128))
+	batch, _ := accountABI.Pack("executeBatch", []common.Address{pair, accounts}, []*big.Int{},
+		[][]byte{approve(accounts), deposit})
+	if err := s.check(context.Background(), existing(chain, batch)); err != nil {
+		t.Fatal(err)
+	}
+	refused(t, s.check(context.Background(), existing(chain, execute(pair, 0, approve(stranger)))), "is not a user's call")
+}
+
+func TestAnyCoversReleaseIsSponsored(t *testing.T) {
+	chain := newChain()
+	s := service(t, chain)
+	release := slices.Concat(crypto.Keccak256([]byte("release(uint256)"))[:4], make([]byte, 32))
+	if err := s.check(context.Background(), existing(chain, execute(gapCover, 0, release))); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -567,12 +590,16 @@ func TestTheCallGasFollowsTheCalls(t *testing.T) {
 		t.Fatalf("a loan through the engine, as Alto estimates it: %v", err)
 	}
 	later := existing(chain, execute(accounts, 0, authorize))
-	later.CallGasLimit = big64(150_001)
+	later.CallGasLimit = big64(180_000)
+	if _, err := s.Data(ctx, later); err != nil {
+		t.Fatalf("a buy-back whose storage refunds hide a quarter of its peak: %v", err)
+	}
+	later.CallGasLimit = big64(180_001)
 	_, err = s.Data(ctx, later)
-	refused(t, err, "call gas limit is above 150000")
+	refused(t, err, "call gas limit is above 180000")
 	chain.l1Gas = 5_000_000
 	_, err = s.Data(ctx, later)
-	refused(t, err, "call gas limit is above 150000")
+	refused(t, err, "call gas limit is above 180000")
 	chain.l1Gas = 1_000_000
 	chain.estimate = 0
 	_, err = s.Data(ctx, existing(chain, execute(accounts, 0, authorize)))

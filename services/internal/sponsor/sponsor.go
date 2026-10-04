@@ -49,7 +49,7 @@ type Limits struct {
 	MaxVerificationGas uint64
 	// MaxCreationCallGas bounds the call gas limit of an operation that only creates its account, and MaxCallGas that of
 	// one that also creates it, whose calls cannot be estimated before. An existing account's call gas limit is bounded
-	// by 130% of its calls' estimate, plus EstimateMargin.
+	// by 160% of its calls' estimate, plus EstimateMargin.
 	MaxCreationCallGas, MaxCallGas, EstimateMargin uint64
 	// MaxPriorityFee bounds the priority fee, in wei per gas.
 	MaxPriorityFee *big.Int
@@ -158,6 +158,9 @@ func New(ctx context.Context, chain Chain, d *sdk.Deployments, key *ecdsa.Privat
 		return nil, err
 	}
 	for _, address := range d.Tokens {
+		s.tokens[address] = true
+	}
+	for _, address := range d.Baskets {
 		s.tokens[address] = true
 	}
 	s.backstop = d.Tapehouse["GapBackstop"]
@@ -456,9 +459,10 @@ func (s *Service) checkGas(ctx context.Context, op *UserOperation) error {
 	return nil
 }
 
-// callGasLimit is the most call gas the operation may ask for: for an existing account, 130% of its calls' L2 gas, sent
+// callGasLimit is the most call gas the operation may ask for: for an existing account, 160% of its calls' L2 gas, sent
 // by the EntryPoint as a transaction of their own, which Arbitrum's NodeInterface splits from the L1 gas the
-// pre-verification gas pays, plus EstimateMargin.
+// pre-verification gas pays, plus EstimateMargin. The estimate is net of storage refunds, which hide up to a quarter of
+// the gas a call that clears storage, such as a short's full buy-back, must hold at its peak.
 func (s *Service) callGasLimit(ctx context.Context, op *UserOperation) (uint64, error) {
 	switch {
 	case len(op.CallData) == 0:
@@ -479,7 +483,7 @@ func (s *Service) callGasLimit(ctx context.Context, op *UserOperation) (uint64, 
 		return 0, err
 	}
 	estimate := values[0].(uint64) - values[1].(uint64)
-	return min(estimate*13/10+s.limits.EstimateMargin, s.limits.MaxCallGas), nil
+	return min(estimate*8/5+s.limits.EstimateMargin, s.limits.MaxCallGas), nil
 }
 
 // l1Gas is the L1 gas of handleOps carrying the operation, signed by the account and the service, as Arbitrum's

@@ -16,6 +16,7 @@ export function useEarnState(account: Address | undefined) {
     queryKey: ["earn", deployments.chainId, account],
     queryFn: () => readEarn(client!, deployments, account),
     enabled: client !== undefined,
+    placeholderData: (previous) => previous,
     refetchInterval: REFRESH_MS,
   });
 }

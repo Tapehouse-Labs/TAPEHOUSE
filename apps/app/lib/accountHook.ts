@@ -1,7 +1,18 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 "use client";
 
-import { accounts, backstop, decodeRevertData, type Deployments, gapCover, sponsorship, supply } from "@tapehouse/sdk";
+import {
+  accounts,
+  backstop,
+  baskets,
+  CROSS,
+  decodeRevertData,
+  type Deployments,
+  gapCover,
+  shorts,
+  sponsorship,
+  supply,
+} from "@tapehouse/sdk";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
@@ -21,7 +32,7 @@ import { useDeployments } from "@/app/providers";
 import { readAccount } from "./accountRead";
 import { describeRevert } from "./errors";
 import { REFRESH_MS, useSettled } from "./hooks";
-import { asCall, type Call, direct, type Intent, smartAccountPlan, vaultAddress } from "./intent";
+import { asCall, type Call, direct, type Intent, shortfall, smartAccountPlan, vaultAddress } from "./intent";
 import { useSmartAccount } from "./smartAccountHook";
 
 /**
@@ -174,8 +185,13 @@ async function sendFromSmartAccount(s: Sender, intent: Intent) {
     await confirm(s, await s.wallet.writeContract(request));
   }
   const deadline = permitDeadline();
+  const held = await Promise.all(
+    plan.pulls.map(({ token }) =>
+      s.client.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [s.account] }),
+    ),
+  );
   const pulls = [];
-  for (const { token, amount } of plan.pulls) {
+  for (const { token, amount } of shortfall(plan.pulls, held)) {
     const allowed = await s.client.readContract({
       address: token,
       abi: erc20Abi,
@@ -215,9 +231,10 @@ async function sendFromSmartAccount(s: Sender, intent: Intent) {
 }
 
 /**
- * Sends `calls` from the smart account. Once the account exists, its call gas is a fifth over the calls' own cold L2
- * gas: a bundler that searches inside one simulation runs a Stylus program, such as the margin engine, warm after its
- * first pass, and underestimates it. Before, it is a quarter over the bundler's estimate. The sponsor service bounds the
+ * Sends `calls` from the smart account. Once the account exists, its call gas is half again the calls' own cold L2 gas:
+ * a bundler that searches inside one simulation runs a Stylus program, such as the margin engine, warm after its first
+ * pass, and underestimates it; and the cold figure is net of storage refunds, which hide up to a quarter of what a call
+ * that clears storage, such as a short's full buy-back, must hold at its peak. Before, it is a quarter over the bundler's estimate. The sponsor service bounds the
  * pre-verification gas by the L1 gas it estimates as it signs, which falls as the L2 base fee rises; an estimate that
  * went stale between the two is estimated again, once, before the wallet is asked.
  */
@@ -229,7 +246,7 @@ async function sendWithFreshGas(s: Sender, bundler: ReturnType<NonNullable<Sende
         const callData = await bundler.account.encodeCalls(
           (calls as readonly Call[]).map((c) => ({ to: c.to, data: encodeFunctionData(c as never), value: 0n })),
         );
-        callGasLimit = ((await sponsorship.callGas(s.client, s.deployments, s.account, callData)) * 6n) / 5n;
+        callGasLimit = ((await sponsorship.callGas(s.client, s.deployments, s.account, callData)) * 3n) / 2n;
       } else {
         callGasLimit = ((await bundler.estimateUserOperationGas({ calls })).callGasLimit * 5n) / 4n;
       }
@@ -263,8 +280,9 @@ async function confirm(s: Sender, hash: Hex) {
 
 /**
  * The transactions the wallet sends for `intent` when it is the margin account: a deposit with a permit `sign`
- * returns for `spender`, ether wrapped first, a supply with a USDG permit, a repayment or a deposit with the backstop
- * or the cover's writers after its approval, and anything else as it is.
+ * returns for `spender`, ether wrapped first, a supply with a USDG permit, a repayment, a short's margin or a deposit
+ * with the backstop or the cover's writers after its approval, a cover's premium approved exactly and taken back, a
+ * basket minted from approved tokens into the cross position or withdrawn and redeemed, and anything else as it is.
  */
 async function walletTransactions(
   deployments: Deployments,
@@ -298,12 +316,47 @@ async function walletTransactions(
     });
     return eth ? [accounts.wrap(deployments, { account: owner, value: intent.amount }), deposit] : [deposit];
   }
-  if (intent.kind === "repay") {
-    return [
-      { address: usdg, abi: erc20Abi, functionName: "approve", args: [spender, intent.amount] } as const,
-      accounts.repay(deployments, { position: intent.position, assets: intent.amount, account: owner }),
-    ];
+  const approve = (token: Address, to: Address, amount: bigint) =>
+    ({ address: token, abi: erc20Abi, functionName: "approve", args: [to, amount] }) as const;
+  switch (intent.kind) {
+    case "repay":
+      return [
+        approve(usdg, spender, intent.amount),
+        accounts.repay(deployments, { position: intent.position, assets: intent.amount, account: owner }),
+      ];
+    case "shortDeposit":
+      return [
+        approve(usdg, deployments.tapehouse.ShortPositions as Address, intent.amount),
+        shorts.deposit(deployments, { asset: intent.asset, amount: intent.amount, account: owner }),
+      ];
+    case "buyCover": {
+      const cover = deployments.tapehouse.GapCover as Address;
+      const { asset, notional, deductibleBps, limitBps, maxPremium } = intent;
+      return [
+        approve(usdg, cover, intent.maxPremium),
+        gapCover.buy(deployments, { asset, notional, deductibleBps, limitBps, maxPremium, holder: owner }),
+        approve(usdg, cover, 0n),
+      ];
+    }
+    case "basketMint": {
+      const basket = deployments.baskets[intent.basket] as Address;
+      return [
+        ...intent.tokens.map((token, i) => approve(token, basket, intent.maxAssets[i] ?? 0n)),
+        baskets.mint(deployments, { basket: intent.basket, shares: intent.shares, receiver: owner, maxAssets: intent.maxAssets }),
+        ...intent.tokens.map((token) => approve(token, basket, 0n)),
+        approve(basket, spender, intent.shares),
+        accounts.deposit(deployments, { position: CROSS, token: basket, amount: intent.shares, account: owner }),
+      ];
+    }
+    case "basketRedeem": {
+      const basket = deployments.baskets[intent.basket] as Address;
+      return [
+        accounts.withdraw(deployments, { position: CROSS, token: basket, amount: intent.shares, account: owner, receiver: owner }),
+        baskets.redeem(deployments, { basket: intent.basket, shares: intent.shares, receiver: owner, owner }),
+      ];
+    }
+    default:
+      return [direct(deployments, intent, owner, owner)];
   }
-  return [direct(deployments, intent, owner, owner)];
 }
 

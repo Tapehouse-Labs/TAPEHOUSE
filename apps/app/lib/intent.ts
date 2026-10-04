@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-import { accounts, backstop, type Deployments, gapCover, sponsorship, supply } from "@tapehouse/sdk";
+import { accounts, backstop, baskets, CROSS, type Deployments, gapCover, shorts, sponsorship, supply } from "@tapehouse/sdk";
 import { type Abi, type Address, erc20Abi, type Hex } from "viem";
 
 /** A vault that takes USDG for shares: the supply vault, the gap backstop and the gap cover's writers. */
@@ -17,7 +17,23 @@ export type Intent =
   | { kind: "vaultWithdraw"; vault: Vault; assets: bigint; shares?: bigint }
   | { kind: "cooldown" }
   | { kind: "claimPremium" }
-  | { kind: "claimGains"; token: Address; amount: bigint };
+  | { kind: "claimGains"; token: Address; amount: bigint }
+  | { kind: "shortDeposit"; asset: string; amount: bigint }
+  | { kind: "shortWithdraw"; asset: string; amount: bigint }
+  | { kind: "sell"; asset: string; amount: bigint; minProceeds: bigint }
+  | { kind: "buyBack"; asset: string; amount: bigint; maxCost: bigint }
+  | { kind: "buyCover"; asset: string; notional: bigint; deductibleBps: bigint; limitBps: bigint; maxPremium: bigint }
+  | { kind: "release"; id: bigint }
+  | { kind: "claimCover" }
+  | { kind: "basketMint"; basket: string; shares: bigint; tokens: readonly Address[]; maxAssets: readonly bigint[] }
+  | { kind: "basketRedeem"; basket: string; shares: bigint }
+  | { kind: "unwrap"; basket: string; shares: bigint };
+
+/** The intents that take tokens from the wallet first, or move them through the account; the rest are one call. */
+export type DirectIntent = Exclude<
+  Intent,
+  { kind: "deposit" | "repay" | "vaultDeposit" | "shortDeposit" | "buyCover" | "basketMint" | "basketRedeem" }
+>;
 
 /** The vault's address in the registry. */
 export function vaultAddress(deployments: Deployments, vault: Vault): Address {
@@ -43,8 +59,9 @@ export type Pull = { token: Address; amount: bigint };
 /**
  * The plan that carries out `intent` for the smart account `account` its wallet `owner` owns: the ether the wallet
  * wraps into WETH for the account first, the tokens the account takes from the wallet by permit, and the calls of one
- * user operation. Loans and withdrawals go to the wallet, and so do the Stock Tokens the backstop's gains pay out. A
- * repayment ends by taking back any allowance it left, as it pays only what is owed.
+ * user operation. Loans and withdrawals go to the wallet, and so do the Stock Tokens the backstop's gains pay out, the
+ * cover's payouts and a basket's redeemed tokens. A repayment, a cover's premium and a mint end by taking back any
+ * allowance they left, as each takes only what it costs.
  */
 export function smartAccountPlan(
   deployments: Deployments,
@@ -98,19 +115,88 @@ export function smartAccountPlan(
           asCall({ address: intent.token, abi: erc20Abi, functionName: "transfer", args: [owner, intent.amount] }),
         ],
       };
+    case "shortDeposit": {
+      const to = deployments.tapehouse.ShortPositions as Address;
+      return {
+        wrap: 0n,
+        pulls: [{ token: usdg, amount: intent.amount }],
+        calls: [
+          approve(usdg, intent.amount, to),
+          asCall(shorts.deposit(deployments, { asset: intent.asset, amount: intent.amount, account })),
+        ],
+      };
+    }
+    case "buyCover": {
+      const to = deployments.tapehouse.GapCover as Address;
+      const { asset, notional, deductibleBps, limitBps, maxPremium } = intent;
+      return {
+        wrap: 0n,
+        pulls: [{ token: usdg, amount: intent.maxPremium }],
+        calls: [
+          approve(usdg, intent.maxPremium, to),
+          asCall(gapCover.buy(deployments, { asset, notional, deductibleBps, limitBps, maxPremium, holder: account })),
+          approve(usdg, 0n, to),
+        ],
+      };
+    }
+    case "basketMint": {
+      const basket = deployments.baskets[intent.basket] as Address;
+      return {
+        wrap: 0n,
+        pulls: intent.tokens.map((token, i) => ({ token, amount: intent.maxAssets[i] ?? 0n })),
+        calls: [
+          ...intent.tokens.map((token, i) => approve(token, intent.maxAssets[i] ?? 0n, basket)),
+          asCall(baskets.mint(deployments, { basket: intent.basket, shares: intent.shares, receiver: account, maxAssets: intent.maxAssets })),
+          ...intent.tokens.map((token) => approve(token, 0n, basket)),
+          approve(basket, intent.shares),
+          asCall(accounts.deposit(deployments, { position: CROSS, token: basket, amount: intent.shares, account })),
+        ],
+      };
+    }
+    case "basketRedeem": {
+      const basket = deployments.baskets[intent.basket] as Address;
+      return {
+        wrap: 0n,
+        pulls: [],
+        calls: [
+          asCall(accounts.withdraw(deployments, { position: CROSS, token: basket, amount: intent.shares, account, receiver: account })),
+          asCall(baskets.redeem(deployments, { basket: intent.basket, shares: intent.shares, receiver: owner, owner: account })),
+        ],
+      };
+    }
     default:
       return { wrap: 0n, pulls: [], calls: [asCall(direct(deployments, intent, account, owner))] };
   }
 }
 
+/** What `pulls` still take from the wallet once the account spends what it `held` of each token first. */
+export function shortfall(pulls: readonly Pull[], held: readonly bigint[]): Pull[] {
+  return pulls.flatMap((pull, i) => {
+    const amount = pull.amount - (held[i] ?? 0n);
+    return amount > 0n ? [{ token: pull.token, amount }] : [];
+  });
+}
+
 /** The one transaction `intent` is when it takes nothing from the wallet, sent for `account`. */
 export function direct(
   deployments: Deployments,
-  intent: Exclude<Intent, { kind: "deposit" | "repay" | "vaultDeposit" }>,
+  intent: DirectIntent,
   account: Address,
   receiver: Address,
 ) {
   switch (intent.kind) {
+    case "sell":
+      return shorts.sell(deployments, { asset: intent.asset, amount: intent.amount, minProceeds: intent.minProceeds, account });
+    case "buyBack":
+      return shorts.cover(deployments, { asset: intent.asset, amount: intent.amount, maxCost: intent.maxCost, account });
+    case "shortWithdraw":
+      return shorts.withdraw(deployments, { asset: intent.asset, amount: intent.amount, account, receiver });
+    case "release":
+      return gapCover.release(deployments, intent.id);
+    case "claimCover":
+      return gapCover.claim(deployments, receiver);
+    case "unwrap":
+      return accounts.unwrap(deployments, { account, basket: intent.basket, shares: intent.shares });
     case "vaultWithdraw": {
       const { vault, assets, shares } = intent;
       return shares === undefined
@@ -129,7 +215,9 @@ export function direct(
       return accounts.borrow(deployments, { position: intent.position, assets: intent.amount, account, receiver });
     case "settle":
       return accounts.settle(deployments, { account, position: intent.position, token: intent.token });
-    default:
+    case "lend":
+    case "unlend":
+    case "recall":
       return accounts[intent.kind](deployments, {
         position: intent.position,
         token: intent.token,

@@ -1,8 +1,17 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-import { CROSS, gapBackstopAbi, marginAccountsAbi, parseDeployments, toBytes32 } from "@tapehouse/sdk";
+import {
+  basketAbi,
+  CROSS,
+  gapBackstopAbi,
+  gapCoverAbi,
+  marginAccountsAbi,
+  parseDeployments,
+  shortPositionsAbi,
+  toBytes32,
+} from "@tapehouse/sdk";
 import { decodeFunctionData, encodeFunctionData, erc20Abi, erc4626Abi } from "viem";
 import { describe, expect, test } from "vitest";
-import { smartAccountPlan } from "./intent";
+import { shortfall, smartAccountPlan } from "./intent";
 
 const deployments = parseDeployments({
   chainId: 412346,
@@ -16,6 +25,8 @@ const deployments = parseDeployments({
     SupplyVault: "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
     GapBackstop: "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
     GapCover: "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+    ShortPositions: "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
+    Baskets: { PAIR: "0x14dC79964da2C08b23698B3D3cc7Ca32193d9955" },
   },
 });
 const account = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
@@ -26,7 +37,10 @@ const decoded = (call: { abi: unknown; functionName: string; args: readonly unkn
   const data = encodeFunctionData(call as never);
   return {
     to: call.to,
-    ...decodeFunctionData({ abi: [...marginAccountsAbi, ...erc20Abi, ...erc4626Abi, ...gapBackstopAbi], data }),
+    ...decodeFunctionData({
+      abi: [...marginAccountsAbi, ...erc20Abi, ...erc4626Abi, ...gapBackstopAbi, ...shortPositionsAbi, ...gapCoverAbi, ...basketAbi],
+      data,
+    }),
   };
 };
 
@@ -116,5 +130,95 @@ describe("smartAccountPlan", () => {
       { to: GapBackstop, functionName: "claimGains", args: [NVDA] },
       { to: NVDA, functionName: "transfer", args: [owner, 2n] },
     ]);
+  });
+
+  const { ShortPositions, GapCover: cover } = deployments.tapehouse as Record<string, `0x${string}`>;
+  const PAIR = deployments.baskets.PAIR!;
+  const SPY = "0x85D9a8a4bd77b9b5559c1B7FCb8eC9635922Ed49";
+  const symbol = toBytes32("NVDA");
+
+  test("a short takes its margin from the wallet by permit, sells and buys back for the account, and pays out to the wallet", () => {
+    const margin = smartAccountPlan(deployments, { kind: "shortDeposit", asset: "NVDA", amount: 9n }, account, owner);
+    expect(margin.pulls).toEqual([{ token: USDG, amount: 9n }]);
+    expect(margin.calls.map(decoded)).toEqual([
+      { to: USDG, functionName: "approve", args: [ShortPositions, 9n] },
+      { to: ShortPositions, functionName: "deposit", args: [symbol, 9n, account] },
+    ]);
+    const plan = (intent: Parameters<typeof smartAccountPlan>[1]) => smartAccountPlan(deployments, intent, account, owner).calls.map(decoded);
+    expect(plan({ kind: "sell", asset: "NVDA", amount: 2n, minProceeds: 3n })).toEqual([
+      { to: ShortPositions, functionName: "sell", args: [symbol, 2n, 3n, account] },
+    ]);
+    expect(plan({ kind: "buyBack", asset: "NVDA", amount: 2n, maxCost: 4n })).toEqual([
+      { to: ShortPositions, functionName: "cover", args: [symbol, 2n, 4n, account] },
+    ]);
+    expect(plan({ kind: "shortWithdraw", asset: "NVDA", amount: 5n })).toEqual([
+      { to: ShortPositions, functionName: "withdraw", args: [symbol, 5n, account, owner] },
+    ]);
+  });
+
+  test("gap cover takes the premium by permit, approves exactly it and takes back what is left; payouts go to the wallet", () => {
+    const buy = smartAccountPlan(
+      deployments,
+      { kind: "buyCover", asset: "SPY", notional: 100n, deductibleBps: 300n, limitBps: 1_000n, maxPremium: 7n },
+      account,
+      owner,
+    );
+    expect(buy.pulls).toEqual([{ token: USDG, amount: 7n }]);
+    expect(buy.calls.map(decoded)).toEqual([
+      { to: USDG, functionName: "approve", args: [cover, 7n] },
+      { to: cover, functionName: "buy", args: [toBytes32("SPY"), 100n, 300n, 1_000n, 7n, account] },
+      { to: USDG, functionName: "approve", args: [cover, 0n] },
+    ]);
+    expect(smartAccountPlan(deployments, { kind: "release", id: 4n }, account, owner).calls.map(decoded)).toEqual([
+      { to: cover, functionName: "release", args: [4n] },
+    ]);
+    expect(smartAccountPlan(deployments, { kind: "claimCover" }, account, owner).calls.map(decoded)).toEqual([
+      { to: cover, functionName: "claim", args: [owner] },
+    ]);
+  });
+
+  test("a basket mints from the wallet's Stock Tokens into the cross position, and redeems back to the wallet", () => {
+    const mint = smartAccountPlan(
+      deployments,
+      { kind: "basketMint", basket: "PAIR", shares: 10n, tokens: [NVDA!, SPY], maxAssets: [5n, 2n] },
+      account,
+      owner,
+    );
+    expect(mint.pulls).toEqual([
+      { token: NVDA, amount: 5n },
+      { token: SPY, amount: 2n },
+    ]);
+    expect(mint.calls.map(decoded)).toEqual([
+      { to: NVDA, functionName: "approve", args: [PAIR, 5n] },
+      { to: SPY, functionName: "approve", args: [PAIR, 2n] },
+      { to: PAIR, functionName: "mint", args: [10n, account, [5n, 2n]] },
+      { to: NVDA, functionName: "approve", args: [PAIR, 0n] },
+      { to: SPY, functionName: "approve", args: [PAIR, 0n] },
+      { to: PAIR, functionName: "approve", args: [accounts, 10n] },
+      { to: accounts, functionName: "deposit", args: [CROSS, PAIR, 10n, account] },
+    ]);
+    const redeem = smartAccountPlan(deployments, { kind: "basketRedeem", basket: "PAIR", shares: 3n }, account, owner);
+    expect(redeem.calls.map(decoded)).toEqual([
+      { to: accounts, functionName: "withdraw", args: [CROSS, PAIR, 3n, account, account] },
+      { to: PAIR, functionName: "redeem", args: [3n, owner, account] },
+    ]);
+    expect(smartAccountPlan(deployments, { kind: "unwrap", basket: "PAIR", shares: 3n }, account, owner).calls.map(decoded)).toEqual([
+      { to: accounts, functionName: "unwrap", args: [account, PAIR, 3n] },
+    ]);
+  });
+});
+
+describe("shortfall", () => {
+  test("the wallet gives only what the account does not already hold", () => {
+    expect(
+      shortfall(
+        [
+          { token: USDG!, amount: 100n },
+          { token: WETH!, amount: 5n },
+          { token: NVDA!, amount: 3n },
+        ],
+        [30n, 5n, 9n],
+      ),
+    ).toEqual([{ token: USDG, amount: 70n }]);
   });
 });

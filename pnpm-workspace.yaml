@@ -8,4 +8,4 @@ allowBuilds:
   unrs-resolver: false
 
 minimumReleaseAgeExclude:
-  - '@tapehouse/sdk@0.1.0'
+  - '@tapehouse/sdk@0.1.0 || 0.1.1'
