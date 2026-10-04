@@ -21,7 +21,7 @@ ok() { echo "ok   $*"; }
 status=$(curl -fsS --max-time 15 "$base/v1/status") || { fail "the API does not answer at $base/v1/status"; exit 1; }
 ok "the API answers"
 
-head=$(printf '%s' "$status" | sed -n 's/.*"head":\([0-9][0-9]*\).*/\1/p')
+head=$(printf '%s' "$status" | sed -n 's/.*"head":{"number":\([0-9][0-9]*\).*/\1/p')
 [ -n "$head" ] || { fail "the status carries no head: $status"; exit 1; }
 
 reply=$(curl -fsS --max-time 15 -H 'Content-Type: application/json' \

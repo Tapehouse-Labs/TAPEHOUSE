@@ -17,7 +17,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/v1/status":
-            self.reply(200, b'{"chainId":46630,"start":1,"head":1000,"finalized":990}')
+            self.reply(200, b'{"chainId":46630,"start":1,"head":{"number":1000,"hash":"0x00"},"finalized":990}')
         elif self.path == "/down":
             self.reply(503)
         else:
