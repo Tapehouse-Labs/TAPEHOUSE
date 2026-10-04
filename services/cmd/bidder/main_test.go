@@ -6,9 +6,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 const testKey = "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
@@ -19,7 +24,7 @@ func env(values map[string]string) func(string) string {
 
 func TestTheKeyComesFromTheEnvironmentOnly(t *testing.T) {
 	var stderr bytes.Buffer
-	if code := run(context.Background(), env(nil), &stderr); code != 2 || !strings.Contains(stderr.String(), "set PRIVATE_KEY") {
+	if code := run(context.Background(), env(nil), &stderr); code != 2 || !strings.Contains(stderr.String(), "TAPEHOUSE_BIDDER_KEYSTORE or PRIVATE_KEY") {
 		t.Fatalf("%d: %s", code, stderr.String())
 	}
 	stderr.Reset()
@@ -31,6 +36,48 @@ func TestTheKeyComesFromTheEnvironmentOnly(t *testing.T) {
 	if code := run(context.Background(), env(map[string]string{"PRIVATE_KEY": "not a key"}), &stderr); code != 2 ||
 		strings.Contains(stderr.String(), "not a key") {
 		t.Fatalf("%d: %s", code, stderr.String())
+	}
+}
+
+func TestTheKeyIsAKeystoreOrHex(t *testing.T) {
+	want, _ := crypto.HexToECDSA(testKey)
+	dir := t.TempDir()
+	store := keystore.NewKeyStore(dir, keystore.LightScryptN, keystore.LightScryptP)
+	account, err := store.ImportECDSA(want, "secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, content string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	right, wrong := write("right", "secret\n"), write("wrong", "other\n")
+	for name, test := range map[string]struct {
+		values map[string]string
+		err    string
+	}{
+		"keystore and password file": {map[string]string{"TAPEHOUSE_BIDDER_KEYSTORE": account.URL.Path,
+			"TAPEHOUSE_BIDDER_PASSWORD_FILE": right}, ""},
+		"hex fallback": {map[string]string{"PRIVATE_KEY": "0x" + testKey}, ""},
+		"missing password file": {map[string]string{"TAPEHOUSE_BIDDER_KEYSTORE": account.URL.Path,
+			"TAPEHOUSE_BIDDER_PASSWORD_FILE": filepath.Join(dir, "missing")}, "TAPEHOUSE_BIDDER_PASSWORD_FILE could not be read"},
+		"password not given": {map[string]string{"TAPEHOUSE_BIDDER_KEYSTORE": account.URL.Path},
+			"TAPEHOUSE_BIDDER_PASSWORD_FILE is required with the keystore"},
+		"wrong password": {map[string]string{"TAPEHOUSE_BIDDER_KEYSTORE": account.URL.Path,
+			"TAPEHOUSE_BIDDER_PASSWORD_FILE": wrong}, "TAPEHOUSE_BIDDER_KEYSTORE: could not decrypt key with given password"},
+		"bad hex": {map[string]string{"PRIVATE_KEY": "nope"}, "PRIVATE_KEY is not a private key"},
+		"neither": {map[string]string{}, "the signer's key is required: TAPEHOUSE_BIDDER_KEYSTORE or PRIVATE_KEY"},
+	} {
+		key, err := loadKey(env(test.values))
+		switch {
+		case test.err == "" && (err != nil || !key.Equal(want)):
+			t.Errorf("%s: %v", name, err)
+		case test.err != "" && (err == nil || err.Error() != test.err):
+			t.Errorf("%s: got %v, want %q", name, err, test.err)
+		}
 	}
 }
 

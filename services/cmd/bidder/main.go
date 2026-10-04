@@ -14,11 +14,12 @@
 //   - In a liquidation auction it buys a Stock Token once the ask has fallen to its price, with the ask's cost as its
 //     limit. It approves exactly the deposit or the limit each time, never more.
 //
-// It reads its configuration from the environment: PRIVATE_KEY, TAPEHOUSE_RPC_URL and TAPEHOUSE_DEPLOYMENTS, and
-// optionally TAPEHOUSE_INDEXER_URL (without it the liquidation auctions are not watched), TAPEHOUSE_INDEXER_KEY,
+// It reads its configuration from the environment: its key as TAPEHOUSE_BIDDER_KEYSTORE and
+// TAPEHOUSE_BIDDER_PASSWORD_FILE or PRIVATE_KEY, TAPEHOUSE_RPC_URL and TAPEHOUSE_DEPLOYMENTS, and optionally TAPEHOUSE_INDEXER_URL (without it the liquidation auctions are not watched), TAPEHOUSE_INDEXER_KEY,
 // TAPEHOUSE_BIDDER_STATE (bidder-<chainId>.json), TAPEHOUSE_BIDDER_BUDGET (USDG in raw units for each round and each
 // purchase, 1000000000), TAPEHOUSE_BIDDER_DISCOUNT_BPS (300), TAPEHOUSE_BIDDER_COMMIT_LEAD (15m),
-// TAPEHOUSE_BIDDER_ASSETS (every asset of the accounts) and TAPEHOUSE_BIDDER_DRY_RUN.
+// TAPEHOUSE_BIDDER_ASSETS (every asset of the accounts) and TAPEHOUSE_BIDDER_DRY_RUN. A keystore's password is read
+// only from the file TAPEHOUSE_BIDDER_PASSWORD_FILE names; the hex key is for a dev node.
 package main
 
 import (
@@ -37,6 +38,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/v2"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/tapehouse/tapehouse/services/sdk"
@@ -109,6 +111,37 @@ func loadConfig(getenv func(string) string) (config, error) {
 	return cfg, nil
 }
 
+// loadKey reads the signer's key: a Web3 Secret Storage keystore with its password in a file, or a hex key.
+func loadKey(getenv func(string) string) (*ecdsa.PrivateKey, error) {
+	if path := getenv("TAPEHOUSE_BIDDER_KEYSTORE"); path != "" {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("TAPEHOUSE_BIDDER_KEYSTORE: %w", err)
+		}
+		passwordPath := getenv("TAPEHOUSE_BIDDER_PASSWORD_FILE")
+		if passwordPath == "" {
+			return nil, errors.New("TAPEHOUSE_BIDDER_PASSWORD_FILE is required with the keystore")
+		}
+		password, err := os.ReadFile(passwordPath)
+		if err != nil {
+			return nil, errors.New("TAPEHOUSE_BIDDER_PASSWORD_FILE could not be read")
+		}
+		key, err := keystore.DecryptKey(data, strings.TrimSuffix(strings.TrimSuffix(string(password), "\n"), "\r"))
+		if err != nil {
+			return nil, fmt.Errorf("TAPEHOUSE_BIDDER_KEYSTORE: %w", err)
+		}
+		return key.PrivateKey, nil
+	}
+	if hex := getenv("PRIVATE_KEY"); hex != "" {
+		key, err := crypto.HexToECDSA(strings.TrimPrefix(hex, "0x"))
+		if err != nil {
+			return nil, errors.New("PRIVATE_KEY is not a private key")
+		}
+		return key, nil
+	}
+	return nil, errors.New("the signer's key is required: TAPEHOUSE_BIDDER_KEYSTORE or PRIVATE_KEY")
+}
+
 // newLogger returns a JSON logger on w that replaces each secret, wherever it appears, with "redacted".
 func newLogger(w io.Writer, secrets ...string) *slog.Logger {
 	scrub := func(text string) string {
@@ -139,14 +172,9 @@ func main() {
 
 func run(ctx context.Context, getenv func(string) string, stderr io.Writer) int {
 	log := newLogger(stderr)
-	hex := getenv("PRIVATE_KEY")
-	if hex == "" {
-		log.Error("set PRIVATE_KEY")
-		return 2
-	}
-	key, err := crypto.HexToECDSA(strings.TrimPrefix(hex, "0x"))
+	key, err := loadKey(getenv)
 	if err != nil {
-		log.Error("PRIVATE_KEY is not a private key")
+		log.Error(err.Error())
 		return 2
 	}
 	cfg, err := loadConfig(getenv)
