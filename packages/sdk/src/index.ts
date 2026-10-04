@@ -16,6 +16,8 @@ export {
   type TokenPriceFeed,
   tokenPriceFeed,
 } from './deployments.js'
+export * as engine from './engine.js'
+export type { Portfolio } from './engine.js'
 export { decodeRevert, decodeRevertData, errorsAbi, type Revert } from './errors.js'
 export * as gapCover from './gapCover.js'
 export type { Layer, SeriesStatus, Settlement } from './gapCover.js'
@@ -24,3 +26,4 @@ export * as morpho from './morpho.js'
 export type { NoPrice, OraclePrice } from './morpho.js'
 export * as shorts from './shorts.js'
 export * as sponsorship from './sponsorship.js'
+export * as stockLending from './stockLending.js'

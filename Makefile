@@ -20,8 +20,9 @@ SDK_BINDINGS := Aggregator:AggregatorV3Interface.sol/AggregatorV3Interface Band:
 	MorphoBlue:Interfaces.sol/IMorpho QuoterV2:IQuoterV2.sol/IQuoterV2 ReopeningAuction:ReopeningAuction.sol/ReopeningAuction \
 	ShortPositions:ShortPositions.sol/ShortPositions SponsorPaymaster:SponsorPaymaster.sol/SponsorPaymaster \
 	StockLendingVault:StockLendingVault.sol/StockLendingVault \
-	StockToken:Interfaces.sol/IStockToken SupplyVault:SupplyVault.sol/SupplyVault \
-	UniswapV3Pool:IUniswapV3Pool.sol/IUniswapV3Pool Usdg:IUSDG.sol/IUSDG
+	StockToken:Interfaces.sol/IStockToken StockTokenRegistry:IStockToken.sol/IStockTokenRegistry \
+	SupplyVault:SupplyVault.sol/SupplyVault \
+	UniswapV3Pool:IUniswapV3Pool.sol/IUniswapV3Pool Usdg:IUSDG.sol/IUSDG Weth:IWETH.sol/IWETH
 SDK_GENERATED := crates/sdk/abi services/sdk/bindings packages/sdk/src/generated.ts
 SDK_PAYLOAD := stylus/contracts/band/testdata/nvda-24_7.hex
 BINARYEN_VERSION := $(shell awk '/^\[/ { table = $$0 } table == "[wasm-opt]" && $$1 == "version" { gsub(/"/, "", $$3); print $$3 }' stylus/Stylus.toml)
@@ -454,6 +455,7 @@ test-app-devnode: export TAPEHOUSE_REGISTRY := $(abspath stylus/target/devnode-r
 test-app-devnode: export TAPEHOUSE_RPC_URL := $(DEVNODE_RPC_URL)
 test-app-devnode: export TAPEHOUSE_BUNDLER_URL := $(BUNDLER_URL)
 test-app-devnode: export TAPEHOUSE_SPONSOR_URL := $(SPONSOR_URL)
+test-app-devnode: export PRIVATE_KEY := $(DEVNODE_KEY)
 test-app-devnode: check-node node_modules/.modules.yaml
 	pnpm --filter app... run build
 	pnpm --filter app exec playwright test
@@ -631,6 +633,7 @@ bundler-stop:
 sponsor: export TAPEHOUSE_RPC_URL := $(DEVNODE_RPC_URL)
 sponsor: export TAPEHOUSE_DEPLOYMENTS := $(abspath stylus/target/devnode-registry.json)
 sponsor: export TAPEHOUSE_SPONSOR_KEY := $(SPONSOR_KEY)
+sponsor: export TAPEHOUSE_SPONSOR_DAILY := 1000
 sponsor: check-go
 	@test ! -f stylus/target/sponsor.pid || kill $$(cat stylus/target/sponsor.pid) 2>/dev/null || true
 	cd services && go build -o ../stylus/target/sponsor ./cmd/sponsor

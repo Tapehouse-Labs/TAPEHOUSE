@@ -259,7 +259,7 @@ Confident and few: one filled pill per view.
 - **Icon pill:** the theme toggle, 10px padding around a 16px half-filled circle.
 
 ### Navigation
-Section tabs centred in the header from 768px: 14px muted ink pills (8px by 14px padding). Hover lifts to strong ink; the current page takes the panel fill and hairline ring and is marked with `aria-current="page"`.
+Section tabs centred in the header from 768px: 14px muted ink pills (8px by 14px padding). Hover lifts to strong ink; the current page takes the panel fill and hairline ring and is marked with `aria-current="page"`. Below 768px the same tabs sit in a bar fixed along the bottom, outside the header, and nothing scrolled into view hides under it. Section links do not prefetch.
 
 ### The Seal (signature)
 The session's state in brackets: `[ CLOSED ] · OPENS 26H`. Mono 11px at 0.09em, panel fill, hairline ring, 2px corners, tabular figures, never wraps. While the session loads it shows `[ ······ ]`. An UNKNOWN session turns the seal amber. It carries `role="status"` with a full spoken label; the bracketed text is hidden from assistive technology.
@@ -284,6 +284,21 @@ The smart account's free actions, drawn into the mark. Three 2px navy strokes, 1
 - **Line:** one 14px body sentence: "Creating it costs you nothing, and so do your first 3 actions.", then "2 free actions left", then "Free actions used. You pay gas from here."
 - **Action:** "Create account" as the view's one filled button, only while the account does not exist; it reads "Waiting for your wallet…" while the owner signs and "Creating your account…" while the bundler lands it.
 - The block loads only once a wallet connects, so it costs the first load nothing.
+
+### The Figure (signature)
+The governing asset's liquidation price under the bar, in liquidation red at display size: `LIQUIDATION PRICE · NVDA, CROSS`, or `LIQUIDATION PRICE WITH THIS LOAN` while a loan is typed, when it previews the price the accounts compute with the loan counted in. `None` means no price leaves the position short. In an unknown session the label reads `BORROWING STOPS AT`. Beneath, a muted 14px tabular line: the price without the loan, the band's low edge, how far below it the figure sits, and the regime in faint ink; then `READ AT BLOCK n` in label type. A new value re-renders with the 0.35s swap rise.
+
+### The Composer
+One line that reads as the action. A segmented choice on sunk linen (Deposit, Borrow, Repay, Withdraw), the current one a panel pill with a hairline ring; then the verb, an amount set in 22px tabular strong ink over a 2px navy rule (liquidation red when the amount is invalid), the token and the position as pill pickers, and the view's one filled button at the line's end: `Borrow, free` while the paymaster pays, its label naming each step as it happens ("Sign the permit in your wallet…", "Checking it against the chain…", "Waiting for your wallet…", "Sending…"). Under it a 13px muted link fills the amount: `Max 20` or `Up to 2,641.15 USDG you can borrow now`. A revert or refusal is one sentence in the error colour, in words; success is one ledger-green line.
+
+### The Week (signature)
+The stem as the clock. Each mark is a 10px ring on the stem (filled for now), a mono 10.5px time (`NOW`, `IN 4H`, `WEEKEND`, `AFTER`) over what happens there (`RAMP STARTS`, `CLOSED`, `24/5 REOPENS`, `REGULAR OPEN`), and a 24px requirement bar on sunk linen: the requirement as the navy band-area tint against the equity as the full width, its edge 2px navy, the figure in 13px tabular on a sunk chip at the right. Past the equity the bar fills and its edge and figure turn liquidation red: `$993.94 · short $1,324.15`. Under a mark, one short 13px phrase; amber only for the ramp. The fill moves by transform and clip-path over 0.35s. Below 640px the time stacks above a 10px bar whose figure sits beneath it.
+
+### Position Rows
+Rows hanging off the stem by a rule, which turns 2px navy for the position the composer acts on. The summary: name (`Cross`, or the asset and `isolated`), what it holds in 12.5px muted tabular, and at the right its equity in strong 600 with the requirement and what it owes beneath. It opens in place on a facts grid (debt, premium, leverage, requirement as label-type terms over strong figures) and one block per Stock Token: liquidation price in red beside the band's low edge, held, lent, sellable now and in baskets or recalled, then a second segmented choice (Lend, Take back, Recall) with its own amount and a quiet button, the vault's recall tickets in 13px tabular, and the notes that apply.
+
+### Notes
+`Before you sign`: a 13px body list under the week, at most 62ch, what the action costs first (premium over a 48-hour closure, caps, permit, cap use, write-downs, the issuer's pause or blocks), then what the position's market says (halts, missing pools, the 5× plan before a close, the weekend liquidation rules). Warnings in amber; no icons.
 
 ### Menus
 Native popovers anchored below the header at the right: 256px wide, panel fill, 10px corners, popover lift. The wallet list shows each connector with its 22px icon; options are 14px strong ink, 6px corners, sunk-linen on hover. The account menu shows a label, the full address in 12.5px mono, and a full-width quiet Disconnect button.

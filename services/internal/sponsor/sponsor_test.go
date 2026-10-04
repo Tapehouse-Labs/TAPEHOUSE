@@ -82,16 +82,6 @@ func (c *fakeChain) HeaderByNumber(context.Context, *big.Int) (*types.Header, er
 	return &types.Header{BaseFee: c.baseFee}, nil
 }
 
-func (c *fakeChain) EstimateGas(_ context.Context, msg ethereum.CallMsg) (uint64, error) {
-	if msg.From != entryPoint {
-		return 0, errors.New("not from the EntryPoint")
-	}
-	if c.estimate == 0 {
-		return 0, errors.New("execution reverted")
-	}
-	return c.estimate, nil
-}
-
 func (c *fakeChain) CallContract(_ context.Context, msg ethereum.CallMsg, _ *big.Int) ([]byte, error) {
 	paymasterABI := sponsorpaymaster.NewSponsorPaymaster()
 	if msg.To == nil {
@@ -119,6 +109,15 @@ func (c *fakeChain) CallContract(_ context.Context, msg ethereum.CallMsg, _ *big
 			return word(big.NewInt(c.used[sender])), nil
 		}
 	case nodeInterface:
+		if method, _ := nodeInterfaceABI.MethodById(msg.Data[:4]); method.Name == "gasEstimateComponents" {
+			if msg.From != entryPoint {
+				return nil, errors.New("not from the EntryPoint")
+			}
+			if c.estimate == 0 {
+				return nil, errors.New("execution reverted")
+			}
+			return method.Outputs.Pack(c.estimate+c.l1Gas, c.l1Gas, c.baseFee, big.NewInt(1))
+		}
 		args, _ := nodeInterfaceABI.Methods["gasEstimateL1Component"].Inputs.Unpack(msg.Data[4:])
 		l1 := c.l1Gas + uint64(len(args[2].([]byte)))*16
 		return nodeInterfaceABI.Methods["gasEstimateL1Component"].Outputs.Pack(l1, c.baseFee, big.NewInt(1))
@@ -242,7 +241,10 @@ func TestCallsToTapehouseAndApprovalsOfItAreSponsored(t *testing.T) {
 	s := service(t, chain)
 	batch, _ := accountABI.Pack("executeBatch", []common.Address{usdg, accounts}, []*big.Int{},
 		[][]byte{approve(accounts), authorize})
-	for _, callData := range [][]byte{execute(accounts, 0, authorize), batch} {
+	recall := slices.Concat(crypto.Keccak256([]byte("recall(bytes32,address,uint256,address)"))[:4], make([]byte, 128))
+	settle := slices.Concat(crypto.Keccak256([]byte("settle(address,bytes32,address)"))[:4], make([]byte, 96))
+	for _, callData := range [][]byte{execute(accounts, 0, authorize), batch, execute(accounts, 0, recall),
+		execute(accounts, 0, settle)} {
 		if _, err := s.StubData(context.Background(), existing(chain, callData)); err != nil {
 			t.Fatal(err)
 		}
@@ -254,6 +256,30 @@ func TestCallsToTapehouseAndApprovalsOfItAreSponsored(t *testing.T) {
 	if _, err := s.Data(context.Background(), existing(chain, execute(accounts, 0, authorize))); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestTheAccountMayPullARegistryTokenFromAPermit(t *testing.T) {
+	chain := newChain()
+	s := service(t, chain)
+	op := existing(chain, nil)
+	permit, _ := erc20ABI.Pack("permit", owner, op.Sender, big.NewInt(1), big.NewInt(2), uint8(27), [32]byte{}, [32]byte{})
+	pull, _ := erc20ABI.Pack("transferFrom", owner, op.Sender, big.NewInt(1))
+	deposit := slices.Concat(crypto.Keccak256([]byte("deposit(bytes32,address,uint256,address)"))[:4], make([]byte, 128))
+	op.CallData, _ = accountABI.Pack("executeBatch", []common.Address{usdg, usdg, usdg, accounts}, []*big.Int{},
+		[][]byte{permit, pull, approve(accounts), deposit})
+	if err := s.check(context.Background(), op); err != nil {
+		t.Fatal(err)
+	}
+	toStranger, _ := erc20ABI.Pack("permit", owner, stranger, big.NewInt(1), big.NewInt(2), uint8(27), [32]byte{},
+		[32]byte{})
+	pullToStranger, _ := erc20ABI.Pack("transferFrom", owner, stranger, big.NewInt(1))
+	notToken, _ := erc20ABI.Pack("transferFrom", owner, op.Sender, big.NewInt(1))
+	for _, callData := range [][]byte{execute(usdg, 0, toStranger), execute(usdg, 0, pullToStranger),
+		execute(stranger, 0, notToken), execute(usdg, 0, pull[:68])} {
+		refused(t, s.check(context.Background(), existing(chain, callData)), "is not a user's call")
+	}
+	alone, _ := accountABI.Pack("executeBatch", []common.Address{usdg, usdg}, []*big.Int{}, [][]byte{permit, pull})
+	refused(t, s.check(context.Background(), existing(chain, alone)), "takes tokens without a call to Tapehouse")
 }
 
 func TestEverythingElseIsRefused(t *testing.T) {
@@ -474,13 +500,22 @@ func TestTheCallGasFollowsTheCalls(t *testing.T) {
 	_, err := s.Data(ctx, alone)
 	refused(t, err, "call gas limit is above 50000")
 	created := creation(execute(accounts, 0, authorize))
-	created.CallGasLimit = big64(1_000_001)
+	created.CallGasLimit = big64(2_000_001)
 	_, err = s.Data(ctx, created)
-	refused(t, err, "call gas limit is above 1000000")
+	refused(t, err, "call gas limit is above 2000000")
+	loan := creation(execute(accounts, 0, authorize))
+	loan.CallGasLimit = big64(1_102_000)
+	if _, err := s.Data(ctx, loan); err != nil {
+		t.Fatalf("a loan through the engine, as Alto estimates it: %v", err)
+	}
 	later := existing(chain, execute(accounts, 0, authorize))
 	later.CallGasLimit = big64(150_001)
 	_, err = s.Data(ctx, later)
 	refused(t, err, "call gas limit is above 150000")
+	chain.l1Gas = 5_000_000
+	_, err = s.Data(ctx, later)
+	refused(t, err, "call gas limit is above 150000")
+	chain.l1Gas = 1_000_000
 	chain.estimate = 0
 	_, err = s.Data(ctx, existing(chain, execute(accounts, 0, authorize)))
 	refused(t, err, "the calls fail")

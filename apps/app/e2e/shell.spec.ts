@@ -43,7 +43,7 @@ test("a wallet connects on the app's chain", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Connect wallet" }).first().click();
   await expect(page.getByRole("button", { name: shortAddress(account) })).toBeVisible();
-  await expect(page.getByText("appears here the moment you deposit")).toBeVisible();
+  await expect(page.getByText("your liquidation price appears here before you borrow")).toBeVisible();
 });
 
 test("a wallet with no ether creates its smart account for free", async ({ page }) => {
@@ -66,19 +66,19 @@ test("a wallet on another chain is moved to the app's chain as it connects", asy
   await installWallet(page, { account, chainId: 1, rpcUrl });
   await page.goto("/");
   await page.getByRole("button", { name: "Connect wallet" }).first().click();
-  await expect(page.getByText("appears here the moment you deposit")).toBeVisible();
+  await expect(page.getByText("your liquidation price appears here before you borrow")).toBeVisible();
 });
 
 test("a wallet that moves to another chain is asked to switch back, and switches", async ({ page }) => {
   await installWallet(page, { account, chainId: deployments.chainId, rpcUrl });
   await page.goto("/");
   await page.getByRole("button", { name: "Connect wallet" }).first().click();
-  await expect(page.getByText("appears here the moment you deposit")).toBeVisible();
+  await expect(page.getByText("your liquidation price appears here before you borrow")).toBeVisible();
   await moveWallet(page, 1);
   const switchBack = page.getByRole("button", { name: /^Switch to / });
   await expect(page.getByText("Your wallet is on another network.")).toBeVisible();
   await switchBack.click();
-  await expect(page.getByText("appears here the moment you deposit")).toBeVisible();
+  await expect(page.getByText("your liquidation price appears here before you borrow")).toBeVisible();
 });
 
 test("a declined connection is explained", async ({ page }) => {

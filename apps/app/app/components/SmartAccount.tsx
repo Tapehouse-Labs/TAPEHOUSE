@@ -16,7 +16,7 @@ export function SmartAccount() {
   const { address, standing } = smart;
   const left = standing?.left ?? 0n;
   return (
-    <section aria-label="Smart account" className="relative mt-8">
+    <section aria-label="Smart account" className="relative mt-6">
       <span className="notches" data-pending={standing ? undefined : ""} aria-hidden="true">
         {notches(left).map((lit, i) => (
           <i key={i} data-spent={lit ? undefined : ""} />

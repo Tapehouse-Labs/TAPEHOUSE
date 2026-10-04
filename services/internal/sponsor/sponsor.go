@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 // Package sponsor is Tapehouse's sponsor service. It decides which ERC-4337 user operations the sponsor paymaster pays
-// for and signs each one it sponsors, serving ERC-7677's pm_getPaymasterStubData and pm_getPaymasterData over
-// JSON-RPC. It sponsors an operation of a SimpleAccount v0.7 made by the registry's factory when it only creates the
-// account, or when every call is a user's call to a Tapehouse contract of the registry, or approves one to spend a token
-// of the registry, and sends no value; while the account has free operations left on the paymaster; at gas limits, fees
-// and a pre-verification gas close to what the operation costs; and within a daily number of signatures for each client
-// and for all of them.
+// for and signs each one it sponsors, serving ERC-7677's pm_getPaymasterStubData and pm_getPaymasterData over JSON-RPC.
+// It sponsors an operation of a SimpleAccount v0.7 made by the registry's factory when it only creates the account, or
+// when every call is a user's call to a Tapehouse contract of the registry, approves one to spend a token of the
+// registry, or permits or transfers a token of the registry to the account beside such a call, and sends no value;
+// while the account has free operations left on the paymaster; at gas limits, fees and a pre-verification gas close to
+// what the operation costs; and within a daily number of signatures for each client and for all of them.
 package sponsor
 
 import (
@@ -66,7 +66,7 @@ type Limits struct {
 }
 
 // DefaultLimits are the service's limits unless configured otherwise.
-var DefaultLimits = Limits{MaxVerificationGas: 1_000_000, MaxCreationCallGas: 50_000, MaxCallGas: 1_000_000,
+var DefaultLimits = Limits{MaxVerificationGas: 1_000_000, MaxCreationCallGas: 50_000, MaxCallGas: 2_000_000,
 	EstimateMargin: 20_000, MaxPriorityFee: new(big.Int), FeeMultiple: 3, StaticPreVerificationGas: 60_000,
 	Validity: 10 * time.Minute, Daily: 30, GlobalDaily: 5_000}
 
@@ -74,7 +74,6 @@ var DefaultLimits = Limits{MaxVerificationGas: 1_000_000, MaxCreationCallGas: 50
 type Chain interface {
 	CodeAt(ctx context.Context, account common.Address, block *big.Int) ([]byte, error)
 	CallContract(ctx context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error)
-	EstimateGas(ctx context.Context, call ethereum.CallMsg) (uint64, error)
 	StorageAt(ctx context.Context, account common.Address, key common.Hash, block *big.Int) ([]byte, error)
 	HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error)
 }
@@ -251,10 +250,19 @@ func (s *Service) check(ctx context.Context, op *UserOperation) error {
 	if err != nil {
 		return err
 	}
+	takes, tapehouse := false, false
 	for _, c := range calls {
-		if err := s.checkCall(c); err != nil {
+		if err := s.checkCall(op.Sender, c); err != nil {
 			return err
 		}
+		if len(c.data) >= 4 {
+			selector := [4]byte(c.data[:4])
+			takes = takes || (s.tokens[c.to] && (selector == permitSelector || selector == transferFromSelector))
+			tapehouse = tapehouse || s.targets[c.to][selector]
+		}
+	}
+	if takes && !tapehouse {
+		return refuse("the operation takes tokens without a call to Tapehouse")
 	}
 	used, err := s.call(ctx, s.paymaster, sponsorpaymaster.NewSponsorPaymaster().PackOperations(op.Sender))
 	if err != nil {
@@ -299,9 +307,9 @@ func (s *Service) checkAccount(ctx context.Context, op *UserOperation) error {
 	return nil
 }
 
-// checkCall refuses a call that is not a user's call to a Tapehouse contract, nor an approval of one to spend a
-// registry token.
-func (s *Service) checkCall(c call) error {
+// checkCall refuses a call of sender that is not a user's call to a Tapehouse contract, an approval of one to spend a
+// registry token, nor a permit or a transfer of a registry token to sender, by which it takes what its owner holds.
+func (s *Service) checkCall(sender common.Address, c call) error {
 	if c.value.Sign() != 0 {
 		return refuse("the call to %s sends value", c.to.Hex())
 	}
@@ -310,9 +318,20 @@ func (s *Service) checkCall(c call) error {
 		if s.targets[c.to][selector] {
 			return nil
 		}
-		if s.tokens[c.to] && selector == approveSelector {
-			if args, err := unpack(erc20ABI, "approve", c.data); err == nil && s.targets[args[0].(common.Address)] != nil {
-				return nil
+		if s.tokens[c.to] {
+			switch selector {
+			case approveSelector:
+				if args, err := unpack(erc20ABI, "approve", c.data); err == nil && s.targets[args[0].(common.Address)] != nil {
+					return nil
+				}
+			case permitSelector:
+				if args, err := unpack(erc20ABI, "permit", c.data); err == nil && args[1].(common.Address) == sender {
+					return nil
+				}
+			case transferFromSelector:
+				if args, err := unpack(erc20ABI, "transferFrom", c.data); err == nil && args[1].(common.Address) == sender {
+					return nil
+				}
 			}
 		}
 	}
@@ -386,7 +405,9 @@ func (s *Service) checkGas(ctx context.Context, op *UserOperation) error {
 	return nil
 }
 
-// callGasLimit is the most call gas the operation may ask for.
+// callGasLimit is the most call gas the operation may ask for: for an existing account, 130% of its calls' L2 gas, sent
+// by the EntryPoint as a transaction of their own, which Arbitrum's NodeInterface splits from the L1 gas the
+// pre-verification gas pays, plus EstimateMargin.
 func (s *Service) callGasLimit(ctx context.Context, op *UserOperation) (uint64, error) {
 	switch {
 	case len(op.CallData) == 0:
@@ -394,10 +415,19 @@ func (s *Service) callGasLimit(ctx context.Context, op *UserOperation) (uint64, 
 	case op.Factory != nil:
 		return s.limits.MaxCallGas, nil
 	}
-	estimate, err := s.chain.EstimateGas(ctx, ethereum.CallMsg{From: s.entryPoint, To: &op.Sender, Data: op.CallData})
+	data, err := nodeInterfaceABI.Pack("gasEstimateComponents", op.Sender, false, []byte(op.CallData))
+	if err != nil {
+		return 0, err
+	}
+	out, err := s.chain.CallContract(ctx, ethereum.CallMsg{From: s.entryPoint, To: &nodeInterface, Data: data}, nil)
 	if err != nil {
 		return 0, refuse("the calls fail: %v", err)
 	}
+	values, err := nodeInterfaceABI.Unpack("gasEstimateComponents", out)
+	if err != nil {
+		return 0, err
+	}
+	estimate := values[0].(uint64) - values[1].(uint64)
 	return min(estimate*13/10+s.limits.EstimateMargin, s.limits.MaxCallGas), nil
 }
 

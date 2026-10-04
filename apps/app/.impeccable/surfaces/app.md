@@ -15,7 +15,7 @@ Constraints: the landing's world (bone, warm ink, registry navy, Archivo / Inter
 
 Smart account: once connected, the visitor's SimpleAccount v0.7, owned by their wallet, sits under the sentence: its address in a seal, whether it exists, and the free actions Tapehouse's paymaster pays for, drawn as three notches across the stem at the bar's angle (direction C of three previews, chosen by the user). Creating it is free and needs no ether.
 
-Unresolved: account figures arrive with the account surface; the shell holds their place.
+Account figures: the account surface, `.impeccable/surfaces/account.md`, fills the figure, adds the composer, the week and the positions, and the simulator at `/simulator`.
 
 ## Direction contract
 

@@ -27,6 +27,7 @@ import (
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/morphoblue"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/reopeningauction"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/shortpositions"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/sponsorpaymaster"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocklendingvault"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocktoken"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/supplyvault"
@@ -66,6 +67,7 @@ var tapehouse = map[string]*bind.MetaData{
 	"ReopeningAuction": &reopeningauction.ReopeningAuctionMetaData,
 	"ShortPositions":   &shortpositions.ShortPositionsMetaData,
 	"GapCover":         &gapcover.GapCoverMetaData,
+	"SponsorPaymaster": &sponsorpaymaster.SponsorPaymasterMetaData,
 }
 
 var bindingNames = map[*bind.MetaData]string{
@@ -78,6 +80,7 @@ var bindingNames = map[*bind.MetaData]string{
 	&reopeningauction.ReopeningAuctionMetaData:   "ReopeningAuction",
 	&shortpositions.ShortPositionsMetaData:       "ShortPositions",
 	&gapcover.GapCoverMetaData:                   "GapCover",
+	&sponsorpaymaster.SponsorPaymasterMetaData:   "SponsorPaymaster",
 	&stocklendingvault.StockLendingVaultMetaData: "StockLendingVault",
 	&basket.BasketMetaData:                       "Basket",
 	&bandfeed.BandFeedMetaData:                   "BandFeed",
