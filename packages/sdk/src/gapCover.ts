@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import { type Address, type Client, type Hex, zeroAddress } from 'viem'
-import { readContract } from 'viem/actions'
+import { getBlockNumber, readContract } from 'viem/actions'
 import type { At } from './band.js'
 import { type Deployments, entry, toBytes32 } from './deployments.js'
 import { gapCoverAbi } from './generated.js'
+import { holder } from './vault.js'
 
 const BPS = 10_000n
 
@@ -39,6 +40,19 @@ export function deposit(deployments: Deployments, { assets, receiver }: { assets
     abi: gapCoverAbi,
     functionName: 'deposit',
     args: [assets, receiver],
+  } as const
+}
+
+/** Sends `assets` of `owner`'s USDG with the writers to `receiver`, once no cover is outstanding. */
+export function withdraw(
+  deployments: Deployments,
+  { assets, receiver, owner }: { assets: bigint; receiver: Address; owner: Address },
+) {
+  return {
+    address: gapCover(deployments),
+    abi: gapCoverAbi,
+    functionName: 'withdraw',
+    args: [assets, receiver, owner],
   } as const
 }
 
@@ -270,6 +284,47 @@ export function payout(layer: Layer, { referencePrice, price }: Settlement): big
   const deductible = referencePrice * layer.deductibleBps
   if (fall <= deductible) return 0n
   return (layer.notional * (fall - deductible)) / (referencePrice * BPS)
+}
+
+/**
+ * The writers at one block: the USDG they hold and their shares; what the outstanding covers reserve and what is left
+ * for new ones; the premiums of the covers not yet released, which join their USDG only at release, less what each
+ * pays; the payouts and refunds owed to holders; how many covers are not released, any of which stops redemptions; and
+ * the closure on sale, undefined while none is.
+ */
+export async function writers(client: Client, deployments: Deployments, at: At = {}) {
+  const blockNumber = at.blockNumber ?? (await getBlockNumber(client, { cacheTime: 0 }))
+  const read = { address: gapCover(deployments), abi: gapCoverAbi, blockNumber } as const
+  const [held, shares, reserved, capacity, premiums, owed, outstanding, [closesMs, endsMs]] = await Promise.all([
+    readContract(client, { ...read, functionName: 'totalAssets' }),
+    readContract(client, { ...read, functionName: 'totalSupply' }),
+    readContract(client, { ...read, functionName: 'reserved' }),
+    readContract(client, { ...read, functionName: 'capacity' }),
+    readContract(client, { ...read, functionName: 'premiums' }),
+    readContract(client, { ...read, functionName: 'owed' }),
+    readContract(client, { ...read, functionName: 'outstanding' }),
+    readContract(client, { ...read, functionName: 'sales' }),
+  ])
+  return {
+    held,
+    shares,
+    reserved,
+    capacity,
+    premiums,
+    owed,
+    outstanding,
+    sales: endsMs === 0n ? undefined : { closesMs, endsMs },
+  }
+}
+
+/**
+ * What `owner` holds with the writers, at one block: its shares, with 12 decimals, the USDG they are worth, and what
+ * it may withdraw, redeem and deposit now. While covers are out, deposits stay open only for the coming closure's, while
+ * the session is open and before its sales end; redemptions open once every cover is released.
+ */
+export async function writer(client: Client, deployments: Deployments, owner: Address, at: At = {}) {
+  const blockNumber = at.blockNumber ?? (await getBlockNumber(client, { cacheTime: 0 }))
+  return holder(client, gapCover(deployments), owner, blockNumber)
 }
 
 function gapCover(deployments: Deployments) {

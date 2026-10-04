@@ -31,3 +31,10 @@ export function parseAmount(typed: string, decimals: number): bigint | undefined
   const value = BigInt(`${match[1] || "0"}${(match[2] ?? "").padEnd(decimals, "0")}`);
   return value > 0n ? value : undefined;
 }
+
+/** An amount at `decimals` as it would be typed: every significant decimal, no separators. */
+export function unparse(value: bigint, decimals: number): string {
+  const unit = 10n ** BigInt(decimals);
+  const fraction = (value % unit).toString().padStart(decimals, "0").replace(/0+$/, "");
+  return `${value / unit}${fraction ? `.${fraction}` : ""}`;
+}

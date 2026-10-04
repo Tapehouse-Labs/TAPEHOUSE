@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 export * as accounts from './accounts.js'
+export * as backstop from './backstop.js'
 export * as band from './band.js'
 export type { At, PackageSource } from './band.js'
 export * as baskets from './baskets.js'
@@ -27,3 +28,4 @@ export type { NoPrice, OraclePrice } from './morpho.js'
 export * as shorts from './shorts.js'
 export * as sponsorship from './sponsorship.js'
 export * as stockLending from './stockLending.js'
+export * as supply from './supply.js'

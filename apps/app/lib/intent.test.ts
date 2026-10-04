@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-import { CROSS, marginAccountsAbi, parseDeployments, toBytes32 } from "@tapehouse/sdk";
-import { decodeFunctionData, encodeFunctionData, erc20Abi } from "viem";
+import { CROSS, gapBackstopAbi, marginAccountsAbi, parseDeployments, toBytes32 } from "@tapehouse/sdk";
+import { decodeFunctionData, encodeFunctionData, erc20Abi, erc4626Abi } from "viem";
 import { describe, expect, test } from "vitest";
 import { smartAccountPlan } from "./intent";
 
@@ -11,7 +11,12 @@ const deployments = parseDeployments({
     WETH: "0x4Af567288e68caD4aA93A272fe6139Ca53859C70",
     NVDA: "0x525c2aBA45F66987217323E8a05EA400C65D06DC",
   },
-  tapehouse: { MarginAccounts: "0xE85035F1145aC49333d105632a0d254E479a75bE" },
+  tapehouse: {
+    MarginAccounts: "0xE85035F1145aC49333d105632a0d254E479a75bE",
+    SupplyVault: "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+    GapBackstop: "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+    GapCover: "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+  },
 });
 const account = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 const owner = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
@@ -19,7 +24,10 @@ const { USDG, WETH, NVDA } = deployments.tokens as Record<string, `0x${string}`>
 const accounts = deployments.tapehouse.MarginAccounts!;
 const decoded = (call: { abi: unknown; functionName: string; args: readonly unknown[]; to: string }) => {
   const data = encodeFunctionData(call as never);
-  return { to: call.to, ...decodeFunctionData({ abi: [...marginAccountsAbi, ...erc20Abi], data }) };
+  return {
+    to: call.to,
+    ...decodeFunctionData({ abi: [...marginAccountsAbi, ...erc20Abi, ...erc4626Abi, ...gapBackstopAbi], data }),
+  };
 };
 
 describe("smartAccountPlan", () => {
@@ -69,5 +77,44 @@ describe("smartAccountPlan", () => {
     }
     const settle = smartAccountPlan(deployments, { kind: "settle", position: CROSS, token: NVDA! }, account, owner);
     expect(settle.calls.map(decoded)[0]?.args).toEqual([account, CROSS, NVDA]);
+  });
+
+  const { SupplyVault, GapBackstop, GapCover } = deployments.tapehouse as Record<string, `0x${string}`>;
+
+  test("a deposit with a vault takes the wallet's USDG by permit, approves the vault and deposits for the account", () => {
+    for (const [vault, address] of [
+      ["supply", SupplyVault],
+      ["backstop", GapBackstop],
+      ["cover", GapCover],
+    ] as const) {
+      const plan = smartAccountPlan(deployments, { kind: "vaultDeposit", vault, amount: 5n }, account, owner);
+      expect(plan.pulls).toEqual([{ token: USDG, amount: 5n }]);
+      expect(plan.calls.map(decoded)).toEqual([
+        { to: USDG, functionName: "approve", args: [address, 5n] },
+        { to: address, functionName: "deposit", args: [5n, account] },
+      ]);
+    }
+  });
+
+  test("a withdrawal from a vault pays the wallet, and redeeming every share avoids dust", () => {
+    const withdraw = smartAccountPlan(deployments, { kind: "vaultWithdraw", vault: "supply", assets: 3n }, account, owner);
+    expect(withdraw.calls.map(decoded)).toEqual([{ to: SupplyVault, functionName: "withdraw", args: [3n, owner, account] }]);
+    const all = smartAccountPlan(deployments, { kind: "vaultWithdraw", vault: "backstop", assets: 3n, shares: 3_000_000n }, account, owner);
+    expect(all.calls.map(decoded)).toEqual([{ to: GapBackstop, functionName: "redeem", args: [3_000_000n, owner, account] }]);
+  });
+
+  test("the backstop's cooldown and premium are one call each, and claimed Stock Tokens go on to the wallet", () => {
+    expect(smartAccountPlan(deployments, { kind: "cooldown" }, account, owner).calls.map(decoded)).toEqual([
+      { to: GapBackstop, functionName: "startCooldown", args: undefined },
+    ]);
+    expect(smartAccountPlan(deployments, { kind: "claimPremium" }, account, owner).calls.map(decoded)).toEqual([
+      { to: GapBackstop, functionName: "claim", args: undefined },
+    ]);
+    const gains = smartAccountPlan(deployments, { kind: "claimGains", token: NVDA!, amount: 2n }, account, owner);
+    expect(gains.pulls).toEqual([]);
+    expect(gains.calls.map(decoded)).toEqual([
+      { to: GapBackstop, functionName: "claimGains", args: [NVDA] },
+      { to: NVDA, functionName: "transfer", args: [owner, 2n] },
+    ]);
   });
 });

@@ -6,8 +6,8 @@ import { useMemo, useState } from "react";
 import { type Address, type Hex, zeroAddress } from "viem";
 import { useDeployments } from "@/app/providers";
 import { type AccountState, leadAsset, type Position, positionName } from "@/lib/accountRead";
-import { useAccountState, useLiquidationPreview, useMarginAccount, useSend, useWalletBalances } from "@/lib/accountHook";
-import { parseAmount, tokens, usdg } from "@/lib/amounts";
+import { PHASE, useAccountState, useLiquidationPreview, useMarginAccount, useSend, useWalletBalances } from "@/lib/accountHook";
+import { parseAmount, tokens, unparse, usdg } from "@/lib/amounts";
 import { explain } from "@/lib/errors";
 import { price } from "@/lib/format";
 import { useMinute } from "@/lib/hooks";
@@ -21,13 +21,6 @@ import { Week } from "./Week";
 type Action = "deposit" | "borrow" | "repay" | "withdraw";
 const ACTIONS: readonly Action[] = ["deposit", "borrow", "repay", "withdraw"];
 const VERB: Record<Action, string> = { deposit: "Deposit", borrow: "Borrow", repay: "Repay", withdraw: "Withdraw" };
-const PHASE = {
-  wrapping: "Wrapping your ether…",
-  permit: "Sign the permit in your wallet…",
-  checking: "Checking it against the chain…",
-  signing: "Waiting for your wallet…",
-  sending: "Sending…",
-} as const;
 
 /** The connected account: its liquidation price at the crossing, the composer, its week down the stem, its positions. */
 export function Desk() {
@@ -357,10 +350,4 @@ function dropBelow(price: bigint, low: bigint): string {
   if (low === 0n || price >= low) return "0.0%";
   const tenths = ((low - price) * 1_000n) / low;
   return `${tenths / 10n}.${tenths % 10n}%`;
-}
-
-function unparse(value: bigint, decimals: number): string {
-  const unit = 10n ** BigInt(decimals);
-  const fraction = (value % unit).toString().padStart(decimals, "0").replace(/0+$/, "");
-  return `${value / unit}${fraction ? `.${fraction}` : ""}`;
 }

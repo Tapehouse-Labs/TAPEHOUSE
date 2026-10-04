@@ -20,9 +20,11 @@ var (
 		{"type":"function","name":"accountImplementation","stateMutability":"view","inputs":[],"outputs":[{"name":"","type":"address"}]}]`)
 	accountABI = mustABI(`[
 		{"type":"function","name":"execute","stateMutability":"nonpayable","inputs":[{"name":"dest","type":"address"},{"name":"value","type":"uint256"},{"name":"func","type":"bytes"}],"outputs":[]},
-		{"type":"function","name":"executeBatch","stateMutability":"nonpayable","inputs":[{"name":"dest","type":"address[]"},{"name":"value","type":"uint256[]"},{"name":"func","type":"bytes[]"}],"outputs":[]}]`)
+		{"type":"function","name":"executeBatch","stateMutability":"nonpayable","inputs":[{"name":"dest","type":"address[]"},{"name":"value","type":"uint256[]"},{"name":"func","type":"bytes[]"}],"outputs":[]},
+		{"type":"function","name":"owner","stateMutability":"view","inputs":[],"outputs":[{"name":"","type":"address"}]}]`)
 	erc20ABI = mustABI(`[
 		{"type":"function","name":"approve","stateMutability":"nonpayable","inputs":[{"name":"spender","type":"address"},{"name":"value","type":"uint256"}],"outputs":[{"name":"","type":"bool"}]},
+		{"type":"function","name":"transfer","stateMutability":"nonpayable","inputs":[{"name":"to","type":"address"},{"name":"value","type":"uint256"}],"outputs":[{"name":"","type":"bool"}]},
 		{"type":"function","name":"transferFrom","stateMutability":"nonpayable","inputs":[{"name":"from","type":"address"},{"name":"to","type":"address"},{"name":"value","type":"uint256"}],"outputs":[{"name":"","type":"bool"}]},
 		{"type":"function","name":"permit","stateMutability":"nonpayable","inputs":[{"name":"owner","type":"address"},{"name":"spender","type":"address"},{"name":"value","type":"uint256"},{"name":"deadline","type":"uint256"},{"name":"v","type":"uint8"},{"name":"r","type":"bytes32"},{"name":"s","type":"bytes32"}],"outputs":[]}]`)
 	entryPointABI = mustABI(`[
@@ -32,13 +34,17 @@ var (
 			{"name":"preVerificationGas","type":"uint256"},{"name":"gasFees","type":"bytes32"},
 			{"name":"paymasterAndData","type":"bytes"},{"name":"signature","type":"bytes"}]},
 			{"name":"beneficiary","type":"address"}],"outputs":[]}]`)
+	backstopABI = mustABI(`[
+		{"type":"function","name":"claimGains","stateMutability":"nonpayable","inputs":[{"name":"token","type":"address"}],"outputs":[{"name":"amount","type":"uint256"}]}]`)
 	nodeInterfaceABI = mustABI(`[
 		{"type":"function","name":"gasEstimateComponents","stateMutability":"payable","inputs":[{"name":"to","type":"address"},{"name":"contractCreation","type":"bool"},{"name":"data","type":"bytes"}],"outputs":[{"name":"gasEstimate","type":"uint64"},{"name":"gasEstimateForL1","type":"uint64"},{"name":"baseFee","type":"uint256"},{"name":"l1BaseFeeEstimate","type":"uint256"}]},
 		{"type":"function","name":"gasEstimateL1Component","stateMutability":"payable","inputs":[{"name":"to","type":"address"},{"name":"contractCreation","type":"bool"},{"name":"data","type":"bytes"}],"outputs":[{"name":"gasEstimateForL1","type":"uint64"},{"name":"baseFee","type":"uint256"},{"name":"l1BaseFeeEstimate","type":"uint256"}]}]`)
 
 	approveSelector      = [4]byte(erc20ABI.Methods["approve"].ID)
+	transferSelector     = [4]byte(erc20ABI.Methods["transfer"].ID)
 	transferFromSelector = [4]byte(erc20ABI.Methods["transferFrom"].ID)
 	permitSelector       = [4]byte(erc20ABI.Methods["permit"].ID)
+	claimGainsSelector   = [4]byte(backstopABI.Methods["claimGains"].ID)
 
 	// nodeInterface is Arbitrum's NodeInterface, which answers only eth_call.
 	nodeInterface = common.HexToAddress("0x00000000000000000000000000000000000000C8")

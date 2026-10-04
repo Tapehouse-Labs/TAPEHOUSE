@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import { describe, expect, test } from "vitest";
-import { parseAmount, tokens, usd, usdg } from "./amounts";
+import { parseAmount, tokens, unparse, usd, usdg } from "./amounts";
 
 describe("usd", () => {
   test("renders 18-decimal USD as dollars and cents, rounded half up", () => {
@@ -44,5 +44,13 @@ describe("parseAmount", () => {
     for (const typed of ["", "0", "0.00", "-1", "1e3", "abc", "1.2.3", "0.0000001"]) {
       expect(parseAmount(typed, 6)).toBeUndefined();
     }
+  });
+});
+
+describe("unparse", () => {
+  test("writes an amount back as it would be typed", () => {
+    expect(unparse(1_204_100_000n, 6)).toBe("1204.1");
+    expect(unparse(2n * 10n ** 18n, 18)).toBe("2");
+    expect(parseAmount(unparse(123_456_789n, 6), 6)).toBe(123_456_789n);
   });
 });

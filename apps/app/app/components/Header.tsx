@@ -12,6 +12,7 @@ import { WalletControl } from "./WalletControl";
 /** The app's sections. Each surface adds itself here as it ships. */
 export const SECTIONS = [
   { href: "/", label: "Account" },
+  { href: "/earn", label: "Earn" },
   { href: "/simulator", label: "Simulator" },
 ] as const;
 
