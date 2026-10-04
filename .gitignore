@@ -8,3 +8,4 @@ __pycache__/
 services/tapehouse-*.db*
 services/backtest.json
 services/bidder-*.json
+services/calibrate/

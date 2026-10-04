@@ -247,6 +247,34 @@
   },
   {
     "type": "function",
+    "name": "setParameters",
+    "inputs": [
+      {
+        "name": "volatilities",
+        "type": "uint32[]",
+        "internalType": "uint32[]"
+      },
+      {
+        "name": "correlations",
+        "type": "uint16[]",
+        "internalType": "uint16[]"
+      },
+      {
+        "name": "gaps",
+        "type": "uint32[]",
+        "internalType": "uint32[]"
+      },
+      {
+        "name": "depths",
+        "type": "uint32[]",
+        "internalType": "uint32[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "volatility",
     "inputs": [
       {
@@ -431,5 +459,226 @@
       }
     ],
     "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "CorrelationStepTooLarge",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "other",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "previous",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "value",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "DepthStepTooLarge",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "previous",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "value",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "GapStepTooLarge",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "previous",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "value",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidCorrelation",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "other",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "value",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "floor",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidDepth",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "value",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "ceiling",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidGap",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "value",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "floor",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidVolatility",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "value",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "floor",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LengthMismatch",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotPositiveDefinite",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OwnableUnauthorizedAccount",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "UnknownAsset",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "UpdateTooSoon",
+    "inputs": [
+      {
+        "name": "nextUpdateAt",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "VolatilityStepTooLarge",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "previous",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "value",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
   }
 ]

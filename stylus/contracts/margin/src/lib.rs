@@ -819,7 +819,8 @@ mod tests {
     use proptest::prelude::*;
     use stylus_sdk::alloy_primitives::keccak256;
     use stylus_sdk::alloy_primitives::{U256, address, b256, hex};
-    use stylus_sdk::alloy_sol_types::{SolEvent, SolValue, TopicList};
+    use stylus_sdk::alloy_sol_types::{SolError, SolEvent, SolValue, TopicList};
+    use stylus_sdk::function_selector;
     use stylus_sdk::testing::*;
 
     const OWNER: Address = address!("0x8A2631c8226D7EA5612798e6E8C34F4DC703d0ac");
@@ -1899,5 +1900,62 @@ mod tests {
             declared_events(include_str!("../../../../crates/sdk/abi/Margin.json")),
             events
         );
+    }
+
+    /// Each function's signature, as the Solidity interface the SDKs are generated from declares it.
+    fn declared_functions(abi: &str) -> Vec<String> {
+        declared(abi, "function")
+    }
+
+    /// Each error's signature, as the Solidity interface the SDKs are generated from declares it.
+    fn declared_errors(abi: &str) -> Vec<String> {
+        declared(abi, "error")
+    }
+
+    fn declared(abi: &str, kind: &str) -> Vec<String> {
+        let abi: serde_json::Value = serde_json::from_str(abi).unwrap();
+        abi.as_array()
+            .unwrap()
+            .iter()
+            .filter(|item| item["type"] == kind)
+            .map(|item| {
+                let types: Vec<&str> = item["inputs"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|input| input["type"].as_str().unwrap())
+                    .collect();
+                format!("{}({})", item["name"].as_str().unwrap(), types.join(","))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_sdks_interface_declares_set_parameters_and_its_errors() {
+        let abi = include_str!("../../../../crates/sdk/abi/Margin.json");
+        let signature = "setParameters(uint32[],uint16[],uint32[],uint32[])";
+        assert!(declared_functions(abi).contains(&signature.to_string()));
+        assert_eq!(
+            keccak256(signature)[..4],
+            function_selector!("setParameters", Vec<u32>, Vec<u16>, Vec<u32>, Vec<u32>)
+        );
+        let errors = declared_errors(abi);
+        for signature in [
+            InvalidVolatility::SIGNATURE,
+            InvalidCorrelation::SIGNATURE,
+            InvalidGap::SIGNATURE,
+            InvalidDepth::SIGNATURE,
+            VolatilityStepTooLarge::SIGNATURE,
+            CorrelationStepTooLarge::SIGNATURE,
+            GapStepTooLarge::SIGNATURE,
+            DepthStepTooLarge::SIGNATURE,
+            NotPositiveDefinite::SIGNATURE,
+            UpdateTooSoon::SIGNATURE,
+            LengthMismatch::SIGNATURE,
+            UnknownAsset::SIGNATURE,
+            OwnableUnauthorizedAccount::SIGNATURE,
+        ] {
+            assert!(errors.contains(&signature.to_string()), "{signature}");
+        }
     }
 }

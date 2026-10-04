@@ -57,6 +57,7 @@ path = [
     "packages/mcp/tsconfig.build.json",
     "packages/mcp/examples/devnode.py.lock",
     "services/go.sum",
+    "services/internal/calibrate/testdata/*.json",
     "crates/Cargo.lock",
     "crates/sdk/README.md",
 ]
