@@ -11,7 +11,7 @@ export function LanguageSwitch({ className = "", onDark = false }: { className?:
   const current = useLocale();
   const pathname = usePathname();
   return (
-    <nav aria-label={t("aria")} className={`flex items-center gap-3 text-[13px] ${className}`}>
+    <nav aria-label={t("aria")} className={`flex items-center gap-1 text-[13px] ${className}`}>
       {LOCALES.map((locale) => (
         <Link
           key={locale}
@@ -21,7 +21,7 @@ export function LanguageSwitch({ className = "", onDark = false }: { className?:
           hrefLang={locale}
           title={LANGUAGE_NAMES[locale]}
           aria-current={locale === current ? "true" : undefined}
-          className={
+          className={`inline-flex min-h-6 min-w-6 items-center justify-center px-1.5 ${
             onDark
               ? locale === current
                 ? "text-[rgb(245_242_236)] underline underline-offset-4"
@@ -29,7 +29,7 @@ export function LanguageSwitch({ className = "", onDark = false }: { className?:
               : locale === current
                 ? "text-strong underline underline-offset-4"
                 : "text-muted hover:text-strong"
-          }
+          }`}
         >
           {locale.toUpperCase()}
         </Link>
