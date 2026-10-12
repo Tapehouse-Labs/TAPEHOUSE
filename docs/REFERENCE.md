@@ -470,7 +470,7 @@ Reads: `debt()`, `idle()`, `utilization()`, `borrowRate()`, `supplyRate()`, `bor
 
 ### Uniswap v3 on a testnet
 
-`contracts/uniswap-testnet` is a Foundry project of its own, compiled as Uniswap v3-core is, with `UniswapV3Seeder`: Uniswap v3 takes liquidity through a callback an account cannot answer, so the seeder mints for the caller, who pays from an allowance. Its tests run against the factory and pools compiled from `lib/v3-core`. `make deploy-uniswap-pools` deploys the factory and the pools from it.
+`contracts/uniswap-testnet` is a Foundry project of its own, compiled as Uniswap v3-core is, with `UniswapV3Seeder`: Uniswap v3 takes liquidity through a callback an account cannot answer, so the seeder mints for the caller, who pays from an allowance. `UniswapV3Router` and `UniswapV3Quoter` are the single-pool swaps of SwapRouter02 and the single-pool quotes of QuoterV2 over that factory, which the short positions and the SDK use; a quote equals what its swap pays. Their tests run against the factory and pools compiled from `lib/v3-core`. `make deploy-uniswap-pools` deploys the factory, the router, the quoter and the pools.
 
 ## The margin accounts
 

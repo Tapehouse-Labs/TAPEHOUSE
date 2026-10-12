@@ -126,7 +126,8 @@ fn the_baskets_are_read_from_tapehouse_baskets() {
     .unwrap();
     assert_eq!(deployments.baskets["PAIR"], BOB);
     assert_eq!(deployments.tapehouse.len(), 1);
-    assert!(registry(46630).baskets.is_empty());
+    assert_eq!(registry(46630).baskets.len(), 1);
+    assert!(registry(4663).baskets.is_empty());
     assert_eq!(
         Deployments::parse(r#"{"chainId":1,"tapehouse":{"Baskets":{"PAIR":1}}}"#)
             .unwrap_err()

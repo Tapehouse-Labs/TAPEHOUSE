@@ -125,7 +125,7 @@ func TestTheBasketsAreReadFromTapehouseBaskets(t *testing.T) {
 	if err != nil || d.Baskets["PAIR"] != bob || len(d.Tapehouse) != 1 || d.Tapehouse["MarginAccounts"] != alice {
 		t.Fatalf("baskets: %+v, %v", d, err)
 	}
-	if testnet := registry(t, "46630"); len(testnet.Baskets) != 0 {
+	if testnet := registry(t, "46630"); len(testnet.Baskets) != 1 || registry(t, "4663").Baskets != nil && len(registry(t, "4663").Baskets) != 0 {
 		t.Fatalf("46630 baskets: %v", testnet.Baskets)
 	}
 	if _, err := sdk.ParseDeployments([]byte(`{"chainId":1,"tapehouse":{"Baskets":{"PAIR":1}}}`)); err == nil {

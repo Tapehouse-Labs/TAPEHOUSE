@@ -144,10 +144,16 @@ Robinhood Chain testnet (46630). Each address links to its page on the [explorer
 | Liquidator | [`0x34fe0a8039c74a30B69e13bd030F6807c854Ee66`](https://explorer.testnet.chain.robinhood.com/address/0x34fe0a8039c74a30B69e13bd030F6807c854Ee66) |
 | Gap backstop | [`0x36AbD9b8ca78A5Cc90DCA0805CcD752532cf20B3`](https://explorer.testnet.chain.robinhood.com/address/0x36AbD9b8ca78A5Cc90DCA0805CcD752532cf20B3) |
 | Reopening auction | [`0x34cCd0E78384b50f03d5551aF8f7eb095Bf77B5C`](https://explorer.testnet.chain.robinhood.com/address/0x34cCd0E78384b50f03d5551aF8f7eb095Bf77B5C) |
+| Stock lending, TSLA | [`0x6f08967dce2434979e22003e5EFf4311f3978Bd1`](https://explorer.testnet.chain.robinhood.com/address/0x6f08967dce2434979e22003e5EFf4311f3978Bd1) |
+| Stock lending, AMZN | [`0xAC0c666928bEC48B2B4D256a0C79DA5C50277b6F`](https://explorer.testnet.chain.robinhood.com/address/0xAC0c666928bEC48B2B4D256a0C79DA5C50277b6F) |
+| Short positions | [`0x1577125897F2B94b4cf5C720aB66EF8767230028`](https://explorer.testnet.chain.robinhood.com/address/0x1577125897F2B94b4cf5C720aB66EF8767230028) |
+| Basket `thPAIR` (TSLA and AMZN) | [`0x9e6675e957d8b533F2BF216B25Aea838c5c51Fa9`](https://explorer.testnet.chain.robinhood.com/address/0x9e6675e957d8b533F2BF216B25Aea838c5c51Fa9) |
 | Sponsor paymaster | [`0x3721b8136593BCC78787943664cF9404d12Ecbd2`](https://explorer.testnet.chain.robinhood.com/address/0x3721b8136593BCC78787943664cF9404d12Ecbd2) |
 | Wrapped TSLA (`wTSLA`) | [`0x588ecCac8c70cdE770b57BA9A192CfF8D636534e`](https://explorer.testnet.chain.robinhood.com/address/0x588ecCac8c70cdE770b57BA9A192CfF8D636534e) |
 | Wrapped AMZN (`wAMZN`) | [`0x04D3d2Bb86BbeE4b4AeD29474fB30D7b639Aa381`](https://explorer.testnet.chain.robinhood.com/address/0x04D3d2Bb86BbeE4b4AeD29474fB30D7b639Aa381) |
 | Uniswap v3 factory | [`0x843788502e38cD2BeCf3B1A09f8CF30353f3a983`](https://explorer.testnet.chain.robinhood.com/address/0x843788502e38cD2BeCf3B1A09f8CF30353f3a983) |
+| Uniswap v3 swap router | [`0x0A8c14340c3f59aF1B1e2C834135e1477bae2C64`](https://explorer.testnet.chain.robinhood.com/address/0x0A8c14340c3f59aF1B1e2C834135e1477bae2C64) |
+| Uniswap v3 quoter | [`0x905a4ca58Fed98Bc21639DC651db2271F7E3B9e0`](https://explorer.testnet.chain.robinhood.com/address/0x905a4ca58Fed98Bc21639DC651db2271F7E3B9e0) |
 | wTSLA / USDG pool | [`0xF572Fa3cC8d71d9cd5c78FBCDB9B2Acd92d234Db`](https://explorer.testnet.chain.robinhood.com/address/0xF572Fa3cC8d71d9cd5c78FBCDB9B2Acd92d234Db) |
 | wAMZN / USDG pool | [`0xBC338DDbc6FD55da21c29ed8165DFaB9E3bB6c8A`](https://explorer.testnet.chain.robinhood.com/address/0xBC338DDbc6FD55da21c29ed8165DFaB9E3bB6c8A) |
 
@@ -157,11 +163,11 @@ Robinhood Chain testnet (46630). Each address links to its page on the [explorer
 
 The testnet's Stock Tokens predate the `oraclePaused` view the band reads from a Stock Token, so the testnet's collateral is the wrapped token: `wTSLA` and `wAMZN` wrap Robinhood's testnet TSLA and AMZN one to one, forward their multiplier, pause and issuer registry, and add `oraclePaused`. The app wraps a deposit's Stock Token first, from the wallet. On Robinhood Chain the Stock Tokens are deposited as they are.
 
-The testnet has no Uniswap v3, so the repository deploys Uniswap's factory and a pool for each asset against USDG, seeded with the USDG the team holds. The margin engine reads each pool's depth, which is small, so the testnet's loans are small.
+The testnet has no Uniswap v3, so the repository deploys Uniswap's factory, a single-pool swap router and quoter, and a pool for each asset against USDG, seeded with the USDG the team holds. The margin engine reads each pool's depth, which is small, so the testnet's loans are small.
 
 The band and the margin engine on the testnet are second instances of the programs already active on the chain, deployed with `make clone-stylus`. Arbitrum paused new Stylus activations on 2 October 2026, so the programs the repository now holds, which read `tokenPaused` when a token has no `oraclePaused`, wait for activations to reopen; the wrapper makes the testnet run without them.
 
-Stock lending, short positions, index baskets and gap cover are built and tested on the dev node, but they are not deployed on the testnet, so the app does not offer them. Restricted-jurisdiction and sanctions screening are not implemented. The mainnet deployment follows the testnet's.
+Stock lending, short positions and the basket are deployed on the testnet and work on chain, at the small scale the pools' depth allows. The app offers deposits, loans and the supply vault; it does not offer them yet. Gap cover is not deployed: it prices a weekend's gap against a Chainlink feed, and the testnet has none. Nothing arbitrages the testnet's pools, so their price drifts from the band's, and a short sells only within the band's low edge. Restricted-jurisdiction and sanctions screening are not implemented. The mainnet deployment follows the testnet's.
 
 ---
 

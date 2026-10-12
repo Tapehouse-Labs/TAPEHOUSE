@@ -139,7 +139,7 @@ func TestAContractWithoutABindingIsRefusedAndTheFingerprintFollowsTheRegistry(t 
 }
 
 func TestTheRegistriesInTheRepositoryAreCatalogued(t *testing.T) {
-	for chain, contracts := range map[string]int{"4663": 7, "46630": 12, "42161": 7} {
+	for chain, contracts := range map[string]int{"4663": 7, "46630": 16, "42161": 7} {
 		d, err := sdk.LoadDeployments("../../../deployments/" + chain + ".json")
 		if err != nil {
 			t.Fatal(err)

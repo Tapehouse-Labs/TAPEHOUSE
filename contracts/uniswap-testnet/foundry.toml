@@ -13,3 +13,6 @@ evm_version = "london"
 optimizer = true
 optimizer_runs = 800
 bytecode_hash = "none"
+
+[lint]
+lint_on_build = false

@@ -12,7 +12,7 @@ import {IV3SwapRouter} from "../src/interfaces/IUniswapV3.sol";
 
 contract RegistryForkTest is Test {
     uint256 internal constant ROBINHOOD_BLOCK = 69_922_505;
-    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 133_685_757;
+    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 133_702_742;
     uint256 internal constant ARBITRUM_BLOCK = 509_636_514;
     bytes32 internal constant BEACON_SLOT = 0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50;
     bytes4 internal constant STYLUS_ROOT_PREFIX = 0xeff00200;
@@ -134,6 +134,19 @@ contract RegistryForkTest is Test {
         );
         _assertBandFeeds(json);
         _assertDeployedPools(json);
+        address shorts = vm.parseJsonAddress(json, ".tapehouse.ShortPositions");
+        assertEq(
+            _readAddress(shorts, "accounts()", ROBINHOOD_TESTNET_BLOCK), accounts, "tapehouse.ShortPositions accounts"
+        );
+        assertEq(
+            _readAddress(shorts, "router()", ROBINHOOD_TESTNET_BLOCK),
+            vm.parseJsonAddress(json, ".uniswapV3.SwapRouter02"),
+            "tapehouse.ShortPositions router"
+        );
+        assertGt(vm.parseJsonAddress(json, ".tapehouse.Baskets.PAIR").code.length, 0, "tapehouse.Baskets.PAIR");
+        assertGt(
+            vm.parseJsonAddress(json, ".tapehouse.StockLending.TSLA").code.length, 0, "tapehouse.StockLending.TSLA"
+        );
     }
 
     function test_ArbitrumEntriesAreTheContractsTheyClaimToBe() public {
@@ -194,9 +207,9 @@ contract RegistryForkTest is Test {
         string[] memory names = vm.parseJsonKeys(json, ".uniswapV3");
         for (uint256 i; i < names.length; ++i) {
             bytes memory name = bytes(names[i]);
-            if (keccak256(name) == keccak256("Factory")) continue;
             uint256 end;
-            while (name[end] != "_") ++end;
+            while (end < name.length && name[end] != "_") ++end;
+            if (end == name.length) continue;
             bytes memory symbol = new bytes(end);
             for (uint256 j; j < end; ++j) {
                 symbol[j] = name[j];

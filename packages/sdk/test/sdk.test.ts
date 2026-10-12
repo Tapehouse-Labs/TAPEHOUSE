@@ -159,7 +159,8 @@ describe('deployments', () => {
     })
     expect(d.tapehouse).toEqual({ MarginAccounts: alice })
     expect(d.baskets).toEqual({ PAIR: bob })
-    expect(testnet.baskets).toEqual({})
+    expect(robinhood.baskets).toEqual({})
+    expect(testnet.baskets).toEqual({ PAIR: '0x9e6675e957d8b533F2BF216B25Aea838c5c51Fa9' })
     expect(() => parseDeployments({ chainId: 1, tapehouse: { Baskets: { PAIR: 1 } } })).toThrow(
       '.tapehouse.Baskets.PAIR is not an address.',
     )
@@ -228,7 +229,7 @@ describe('transactions', () => {
     const data = encodeFunctionData(unwrap)
     expect(data.slice(0, 10)).toBe(toFunctionSelector('unwrap(address,address,uint256)'))
     expect(decodeFunctionData({ abi: marginAccountsAbi, data }).args).toEqual([alice, bob, 5n])
-    expect(() => baskets.redeem(testnet, { basket: 'PAIR', shares: 1n, receiver: bob, owner: alice })).toThrow(
+    expect(() => baskets.redeem(robinhood, { basket: 'PAIR', shares: 1n, receiver: bob, owner: alice })).toThrow(
       'The registry has no .tapehouse.Baskets.PAIR.',
     )
   })

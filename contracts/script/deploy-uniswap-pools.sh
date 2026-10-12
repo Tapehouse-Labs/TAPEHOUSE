@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT OR Apache-2.0
 # Usage: POOL_USDG=<USDG units> [BAND_ASSETS="TSLA AMZN"] deploy-uniswap-pools.sh RPC_URL DEPLOYMENTS_JSON SIGNER...
-# For a chain without Uniswap v3, such as Robinhood Chain's testnet: deploys Uniswap v3's factory, records it under
-# .uniswapV3.Factory, and for each asset the registry's band gives a Stock Token, creates and seeds its pool against
+# For a chain without Uniswap v3, such as Robinhood Chain's testnet: deploys Uniswap v3's factory, a single-pool swap
+# router and a quoter over it, records them under .uniswapV3.Factory, .SwapRouter02 and .QuoterV2, and for each asset the registry's band gives a Stock Token, creates and seeds its pool against
 # USDG at 0.3%, at the price of the asset's band feed, and records it under .uniswapV3.<ASSET>_USDG_3000. A pool holds
 # POOL_USDG USDG units from the signer, in the ticks 11% either side of its price, which is where the margin engine reads
 # its depth, with the Stock Token those ticks take. The signer wraps the Stock Token it holds into the registry's wrapper
@@ -34,7 +34,9 @@ trap 'rm -rf "$out"' EXIT
 forge build --root "$project" --skip test --out "$out" > /dev/null
 artifact() { jq -er .bytecode.object "$out/$1.sol/$1.json"; }
 create() {
-  cast send --rpc-url "$rpc" "${signer_flags[@]}" --json --create "$(artifact "$1")" | jq -er 'select(.status == "0x1") | .contractAddress'
+  local code
+  code=$(artifact "$1")${2:+$(cast abi-encode "constructor(address)" "$2" | cut -c3-)}
+  cast send --rpc-url "$rpc" "${signer_flags[@]}" --json --create "$code" | jq -er 'select(.status == "0x1") | .contractAddress'
 }
 
 factory=$(jq -r '.uniswapV3.Factory // empty' "$registry")
@@ -43,6 +45,13 @@ if [ -z "$factory" ]; then
   record .uniswapV3.Factory "$factory"
   echo "Factory $factory"
 fi
+for entry in "SwapRouter02 UniswapV3Router" "QuoterV2 UniswapV3Quoter"; do
+  read -r key contract <<<"$entry"
+  [ -z "$(jq -r --arg key "$key" '.uniswapV3[$key] // empty' "$registry")" ] || continue
+  address=$(cast to-check-sum-address "$(create "$contract" "$factory")")
+  record ".uniswapV3.$key" "$address"
+  echo "$key $address"
+done
 seeder=$(cast to-check-sum-address "$(create UniswapV3Seeder)")
 
 for asset in ${BAND_ASSETS:-TSLA AMZN}; do
