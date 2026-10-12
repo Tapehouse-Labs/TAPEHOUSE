@@ -24,6 +24,10 @@
     "SPY": {
       "floor": 11335,
       "initial": 11335
+    },
+    "AMZN": {
+      "floor": 20817,
+      "initial": 21295
     }
   },
   "correlation": {
@@ -86,6 +90,10 @@
     "GOOGL/SPY": {
       "floor": 7679,
       "initial": 7679
+    },
+    "TSLA/AMZN": {
+      "floor": 4258,
+      "initial": 4258
     }
   },
   "weekendGap": {
@@ -112,6 +120,10 @@
     "SPY": {
       "floor": 54840,
       "initial": 54840
+    },
+    "AMZN": {
+      "floor": 70449,
+      "initial": 70449
     }
   },
   "pool": {
@@ -120,7 +132,8 @@
     "AAPL": "AAPL_USDG_500",
     "MSFT": "MSFT_USDG_3000",
     "GOOGL": "GOOGL_USDG_500",
-    "SPY": "SPY_WETH_500"
+    "SPY": "SPY_WETH_500",
+    "AMZN": "AMZN_USDG_3000"
   },
   "depth": {
     "NVDA": {
@@ -157,6 +170,12 @@
       "initial": [
         320861,
         877772
+      ]
+    },
+    "AMZN": {
+      "initial": [
+        136784,
+        136784
       ]
     }
   }
