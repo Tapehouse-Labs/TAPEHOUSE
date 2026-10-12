@@ -136,11 +136,11 @@ export function Hero() {
             <span className="font-display text-[15px] font-semibold tracking-[0.18em]">TAPEHOUSE</span>
           </Link>
           <div className="flex items-center gap-3 sm:gap-4">
-            <LanguageSwitch />
+            <LanguageSwitch onDark />
             <span className="hidden sm:inline-flex">
               <Seal />
             </span>
-            <a href={APP_URL} className="btn-ghost !py-[0.55em] text-[14px]">
+            <a href={APP_URL} className="btn-ghost !py-[0.55em] whitespace-nowrap text-[14px]">
               {t("openApp")}
             </a>
           </div>
