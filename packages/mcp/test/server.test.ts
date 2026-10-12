@@ -704,6 +704,15 @@ describe('baskets', () => {
     const { tools } = await mcp.listTools()
     expect(tools.find((tool) => tool.name === 'registry')?.outputSchema?.properties).toHaveProperty('baskets')
   })
+
+  test('the registry declares every field the SDK parses', async () => {
+    const mcp = await legacy(chain({}).client)
+    const { structured } = await call(mcp, 'registry', {})
+    const { tools } = await mcp.listTools()
+    const declared = Object.keys(tools.find((tool) => tool.name === 'registry')?.outputSchema?.properties ?? {})
+    expect(declared.sort()).toEqual(Object.keys(robinhood).sort())
+    expect(Object.keys(structured).sort()).toEqual(declared)
+  })
 })
 
 const usdg = robinhood.tokens.USDG as Address

@@ -111,6 +111,7 @@ export function registerReads(server: McpServer, context: Context) {
       input: z.strictObject({}),
       output: z.object({
         chainId: z.number().int(),
+        chainlinkRegularHours: z.boolean(),
         tokens: z.record(z.string(), z.string()),
         chainlink: z.record(z.string(), z.object({ address: z.string(), kind: z.enum(['token', 'share']) })),
         bandFeeds: z.record(z.string(), z.string()),
@@ -121,6 +122,7 @@ export function registerReads(server: McpServer, context: Context) {
         morpho: z.record(z.string(), z.string()),
         morphoMarkets: z.record(z.string(), z.string()),
         morphoOracles: z.record(z.string(), z.string()),
+        erc4337: z.record(z.string(), z.string()),
       }),
       openWorld: false,
     },

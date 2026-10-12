@@ -231,6 +231,7 @@ func TestTheBidderBuysAndBidsOnTheDevNode(t *testing.T) {
 		before, _ := direct.BalanceOf(&bind.CallOpts{}, usdg, bot)
 		deadline := time.Now().Add(15 * time.Minute)
 		for time.Now().Before(deadline) {
+			mineBlock(t, client, key, chainID)
 			head, err := client.HeaderByNumber(ctx, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -300,6 +301,18 @@ func TestTheBidderBuysAndBidsOnTheDevNode(t *testing.T) {
 // fund sends to an ETH for its gas.
 func fund(t *testing.T, client *ethclient.Client, from *ecdsa.PrivateKey, chainID *big.Int, to common.Address) {
 	t.Helper()
+	transfer(t, client, from, chainID, to, big.NewInt(1e18))
+}
+
+// mineBlock mines a block: a dev node makes them only for transactions, so until one comes its clock stands still, and an
+// auction whose price falls with time does not fall.
+func mineBlock(t *testing.T, client *ethclient.Client, from *ecdsa.PrivateKey, chainID *big.Int) {
+	t.Helper()
+	transfer(t, client, from, chainID, crypto.PubkeyToAddress(from.PublicKey), big.NewInt(0))
+}
+
+func transfer(t *testing.T, client *ethclient.Client, from *ecdsa.PrivateKey, chainID *big.Int, to common.Address, value *big.Int) {
+	t.Helper()
 	ctx := context.Background()
 	nonce, err := client.PendingNonceAt(ctx, crypto.PubkeyToAddress(from.PublicKey))
 	if err != nil {
@@ -309,13 +322,13 @@ func fund(t *testing.T, client *ethclient.Client, from *ecdsa.PrivateKey, chainI
 	if err != nil {
 		t.Fatal(err)
 	}
-	gas, err := client.EstimateGas(ctx, ethereum.CallMsg{From: crypto.PubkeyToAddress(from.PublicKey), To: &to, Value: big.NewInt(1e18)})
+	gas, err := client.EstimateGas(ctx, ethereum.CallMsg{From: crypto.PubkeyToAddress(from.PublicKey), To: &to, Value: value})
 	if err != nil {
 		t.Fatal(err)
 	}
 	tx, err := types.SignNewTx(from, types.LatestSignerForChainID(chainID), &types.DynamicFeeTx{ChainID: chainID,
 		Nonce: nonce, GasTipCap: big.NewInt(0), GasFeeCap: new(big.Int).Mul(head.BaseFee, big.NewInt(2)), Gas: gas,
-		To: &to, Value: big.NewInt(1e18)})
+		To: &to, Value: value})
 	if err != nil {
 		t.Fatal(err)
 	}

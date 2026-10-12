@@ -270,13 +270,27 @@ func TestTheIndexerServesTheDevNodesEventsAndViews(t *testing.T) {
 	for _, name := range names {
 		fmt.Printf("  %s %d\n", name, counts[name])
 	}
-	for _, name := range []string{
+	required := []string{
 		"tapehouse.Band PriceWritten", "tapehouse.Band Anchored", "tapehouse.Band HaltWritten",
 		"tapehouse.Margin VolatilitySet", "tapehouse.Margin CorrelationSet", "tapehouse.MarginAccounts Borrow",
-		"tapehouse.MarginAccounts ClosureSet", "tapehouse.Liquidator AuctionStarted", "tapehouse.GapBackstop Covered",
+		"tapehouse.Liquidator AuctionStarted", "tapehouse.GapBackstop Covered",
 		"tapehouse.Band MultiplierRecorded", "tapehouse.ShortPositions Sell", "tapehouse.StockLending.SPY Borrow",
-		"tapehouse.Baskets.PAIR Deposit", "tapehouse.GapCover Bought", "morphoOracles.NVDA OwnershipTransferred",
-	} {
+		"tapehouse.Baskets.PAIR Deposit", "morphoOracles.NVDA OwnershipTransferred",
+	}
+	// A closure is recorded, and a cover sold, only where the market's calendar has one to record or to sell: the dev
+	// node reads the live NYSE calendar. The events are required where the chain's state says they happened.
+	calendar := sdk.NewClient(client, deployments)
+	if closure, err := calendar.Accounts().Closure(&bind.CallOpts{}); err != nil {
+		t.Fatal(err)
+	} else if closure.ClosesMs != 0 {
+		required = append(required, "tapehouse.MarginAccounts ClosureSet")
+	}
+	if _, onSale, err := calendar.GapCover().Sales(&bind.CallOpts{}); err != nil {
+		t.Fatal(err)
+	} else if onSale {
+		required = append(required, "tapehouse.GapCover Bought")
+	}
+	for _, name := range required {
 		if counts[name] == 0 {
 			t.Errorf("no %s indexed", name)
 		}
