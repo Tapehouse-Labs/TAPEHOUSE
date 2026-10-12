@@ -320,6 +320,105 @@ contract MarginAccountsTest is Test {
         _borrow(bob, CROSS, 100 * USDG);
     }
 
+    function test_AnAssetStaysClosedToNewRiskForThirtyMinutesAfterItsBandWasLastSeenHalted() public {
+        _deposit(alice, CROSS, address(nvda), 10 * SHARE);
+        _borrow(alice, CROSS, 1_000 * USDG);
+        _quote(NVDA, 0, 0);
+        vm.expectEmit(address(accounts));
+        emit MarginAccounts.AssetUnusable(NVDA, uint64(vm.getBlockTimestamp()));
+        vm.prank(bob);
+        accounts.observe(NVDA);
+        uint64 until = uint64(vm.getBlockTimestamp() + accounts.RECOVERY());
+        assertEq(accounts.unusableAt(NVDA), vm.getBlockTimestamp());
+        _quote(NVDA, 3, 200e8);
+        vm.expectRevert(abi.encodeWithSelector(MarginAccounts.AssetRecovering.selector, NVDA, until));
+        _borrow(alice, CROSS, 1);
+        vm.expectRevert(abi.encodeWithSelector(MarginAccounts.AssetRecovering.selector, NVDA, until));
+        _withdraw(alice, CROSS, address(nvda), 1);
+        _deposit(alice, CROSS, address(nvda), 1 * SHARE);
+        _repay(alice, CROSS, 100 * USDG);
+        (int256 equity,,,) = accounts.health(alice, CROSS);
+        assertGt(equity, 0);
+        vm.warp(until - 1);
+        vm.expectRevert(abi.encodeWithSelector(MarginAccounts.AssetRecovering.selector, NVDA, until));
+        _borrow(alice, CROSS, 1);
+        vm.warp(until);
+        _borrow(alice, CROSS, 1 * USDG);
+    }
+
+    function test_EachObservationOfAnUnusableAssetMovesTheEndOfItsRecovery() public {
+        _deposit(alice, CROSS, address(nvda), 10 * SHARE);
+        _quote(NVDA, 0, 0);
+        accounts.observe(NVDA);
+        vm.warp(vm.getBlockTimestamp() + 20 minutes);
+        accounts.observe(NVDA);
+        _quote(NVDA, 3, 200e8);
+        vm.warp(vm.getBlockTimestamp() + 29 minutes);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                MarginAccounts.AssetRecovering.selector, NVDA, uint64(vm.getBlockTimestamp() + 1 minutes)
+            )
+        );
+        _borrow(alice, CROSS, 1);
+        vm.warp(vm.getBlockTimestamp() + 1 minutes);
+        _borrow(alice, CROSS, 1 * USDG);
+    }
+
+    function test_AMultiplierChangePendingIsObservedAsUnusableToo() public {
+        _deposit(alice, CROSS, address(nvda), 10 * SHARE);
+        band.setCorporateAction(
+            NVDA, BandDouble.CorporateAction(1, uint64(vm.getBlockTimestamp() + 10 minutes), 1e18, 2e18)
+        );
+        accounts.observe(NVDA);
+        band.setCorporateAction(NVDA, BandDouble.CorporateAction(0, 0, 0, 0));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                MarginAccounts.AssetRecovering.selector, NVDA, uint64(vm.getBlockTimestamp() + accounts.RECOVERY())
+            )
+        );
+        _borrow(alice, CROSS, 1 * USDG);
+        vm.warp(vm.getBlockTimestamp() + accounts.RECOVERY());
+        _borrow(alice, CROSS, 1 * USDG);
+    }
+
+    function test_ObservingAUsableAssetRecordsNothingAndOnlyKnownAssetsAreObserved() public {
+        accounts.observe(NVDA);
+        assertEq(accounts.unusableAt(NVDA), 0);
+        vm.recordLogs();
+        accounts.observe(NVDA);
+        assertEq(vm.getRecordedLogs().length, 0);
+        vm.expectRevert(abi.encodeWithSelector(MarginAccounts.UnknownAsset.selector, bytes32("FAKE")));
+        accounts.observe(bytes32("FAKE"));
+    }
+
+    function test_ARecoveringAssetClosesOnlyThePositionsThatHoldIt() public {
+        _deposit(alice, CROSS, address(nvda), 10 * SHARE);
+        _deposit(bob, CROSS, address(spy), 1 * SHARE);
+        _quote(NVDA, 0, 0);
+        accounts.observe(NVDA);
+        _quote(NVDA, 3, 200e8);
+        _borrow(bob, CROSS, 100 * USDG);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                MarginAccounts.AssetRecovering.selector, NVDA, uint64(vm.getBlockTimestamp() + accounts.RECOVERY())
+            )
+        );
+        _borrow(alice, CROSS, 1 * USDG);
+    }
+
+    function test_ANewEpisodeIsAnnouncedOnceNotOnEveryObservation() public {
+        _quote(NVDA, 0, 0);
+        accounts.observe(NVDA);
+        vm.warp(vm.getBlockTimestamp() + 1 minutes);
+        vm.recordLogs();
+        accounts.observe(NVDA);
+        assertEq(vm.getRecordedLogs().length, 0);
+        vm.warp(vm.getBlockTimestamp() + accounts.RECOVERY());
+        vm.recordLogs();
+        accounts.observe(NVDA);
+        assertEq(vm.getRecordedLogs().length, 1);
+    }
+
     function test_APositionRepaysWithItsUsdgWhileAnAssetIsHalted() public {
         _deposit(alice, CROSS, address(nvda), 10 * SHARE);
         _borrow(alice, CROSS, 1_000 * USDG);

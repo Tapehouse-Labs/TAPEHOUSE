@@ -8133,6 +8133,19 @@ export const marginAccountsAbi = [
   },
   {
     "type": "function",
+    "name": "RECOVERY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "WETH_COLLATERAL_BPS",
     "inputs": [],
     "outputs": [
@@ -8854,6 +8867,19 @@ export const marginAccountsAbi = [
   },
   {
     "type": "function",
+    "name": "observe",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "owner",
     "inputs": [],
     "outputs": [
@@ -9349,6 +9375,25 @@ export const marginAccountsAbi = [
   },
   {
     "type": "function",
+    "name": "unusableAt",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "unwrap",
     "inputs": [
       {
@@ -9515,6 +9560,25 @@ export const marginAccountsAbi = [
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "AssetUnusable",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "at",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      }
+    ],
+    "anonymous": false
   },
   {
     "type": "event",
@@ -10284,6 +10348,22 @@ export const marginAccountsAbi = [
         "name": "position",
         "type": "bytes32",
         "internalType": "bytes32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "AssetRecovering",
+    "inputs": [
+      {
+        "name": "symbol",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "until",
+        "type": "uint64",
+        "internalType": "uint64"
       }
     ]
   },

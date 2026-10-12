@@ -199,6 +199,20 @@ export function settle(
   } as const
 }
 
+/**
+ * Records the moment the band reports `asset` halted or with a multiplier change pending, which opens the window in
+ * which a position holding it cannot borrow or withdraw against it. Anyone may; it does nothing while the band is
+ * sound or the window is already open.
+ */
+export function observe(deployments: Deployments, { asset }: { asset: string }) {
+  return {
+    address: accounts(deployments),
+    abi: marginAccountsAbi,
+    functionName: 'observe',
+    args: [toBytes32(asset)],
+  } as const
+}
+
 /** Whether `authorized` may act for `account`. */
 export function isAuthorized(
   client: Client,
@@ -376,6 +390,22 @@ export async function lending(
     readContract(client, { ...read, functionName: 'recalls' }),
   ])
   return { lent, sellable, claim, recalls }
+}
+
+/**
+ * When the accounts last observed `asset` unusable and when borrowing and withdrawing against it reopen, in seconds,
+ * at one block. `until` is `unusableAt` plus the recovery window even when the asset was never observed, and is then
+ * in the past.
+ */
+export async function recovery(client: Client, deployments: Deployments, asset: string, at: At = {}) {
+  const address = accounts(deployments)
+  const blockNumber = at.blockNumber ?? (await getBlockNumber(client, { cacheTime: 0 }))
+  const read = { address, abi: marginAccountsAbi, blockNumber } as const
+  const [unusableAt, window] = await Promise.all([
+    readContract(client, { ...read, functionName: 'unusableAt', args: [toBytes32(asset)] }),
+    readContract(client, { ...read, functionName: 'RECOVERY' }),
+  ])
+  return { unusableAt: BigInt(unusableAt), until: BigInt(unusableAt) + window }
 }
 
 /**

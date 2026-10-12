@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 // Command keeper runs Tapehouse's keepers on the chain of a registry: RedStone's prices, multiplier syncs, signed
-// halts, seals, the premium's closures, the shorts' marks, burns and dust, liquidations, the backstop, the reopening
+// halts, seals, the premium's closures, the observation of assets that become unusable as collateral, the shorts' marks, burns and dust, liquidations, the backstop, the reopening
 // auction, recalls and buy-ins, short liquidations, basket rebalances, the gap cover's settlement, the rounds of the band's RedStone round feeds and, where asked, the
 // pools' trades back to their bands. It reads its configuration from the environment: TAPEHOUSE_DEPLOYMENTS,
 // TAPEHOUSE_RPC_URL, its key as TAPEHOUSE_KEEPER_KEYSTORE and TAPEHOUSE_KEEPER_PASSWORD_FILE or TAPEHOUSE_KEEPER_KEY,

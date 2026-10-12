@@ -270,6 +270,7 @@ func TestTheRevertsOfTapehouseTheBandTheIssuerAndTheRouterAreDecoded(t *testing.
 		{&band.BandMetaData, "TimestampIsTooOld", []any{big.NewInt(1790119750), big.NewInt(1790300000)}, "TimestampIsTooOld(1790119750, 1790300000)"},
 		{&marginaccounts.MarginAccountsMetaData, "DebtCapExceeded", []any{big.NewInt(2), big.NewInt(1)}, "DebtCapExceeded(2, 1)"},
 		{&marginaccounts.MarginAccountsMetaData, "BasketFrozen", []any{bob}, "BasketFrozen(" + bob.Hex() + ")"},
+		{&marginaccounts.MarginAccountsMetaData, "AssetRecovering", []any{bytes32(t, "SPY"), uint64(1790776800)}, "AssetRecovering(0x5350590000000000000000000000000000000000000000000000000000000000, 1790776800)"},
 		{&basket.BasketMetaData, "PastTarget", []any{bytes32(t, "SPY")}, "PastTarget(0x5350590000000000000000000000000000000000000000000000000000000000)"},
 		{&liquidator.LiquidatorMetaData, "NotLiquidatable", []any{bob, sdk.Cross}, "NotLiquidatable(" + bob.Hex() + ", 0x0000000000000000000000000000000000000000000000000000000000000000)"},
 		{&stocklendingvault.StockLendingVaultMetaData, "InsufficientLiquidity", []any{big.NewInt(2), big.NewInt(1)}, "InsufficientLiquidity(2, 1)"},
@@ -939,6 +940,7 @@ func TestTheKeepersCallsGoToTheRegistrysContracts(t *testing.T) {
 		{func() (sdk.Tx, error) { return client.ReopeningAuction().Forfeit("SPY", 1790775000000, spy) }, d.Tapehouse["ReopeningAuction"], &reopeningauction.ReopeningAuctionMetaData, "forfeit", []any{spy, uint64(1790775000000), spy}},
 		{func() (sdk.Tx, error) { return client.Accounts().AccruePremium() }, d.Tapehouse["MarginAccounts"], &marginaccounts.MarginAccountsMetaData, "accruePremium", []any{}},
 		{func() (sdk.Tx, error) { return client.Accounts().Sync("SPY") }, d.Tapehouse["MarginAccounts"], &marginaccounts.MarginAccountsMetaData, "sync", []any{spy}},
+		{func() (sdk.Tx, error) { return client.Accounts().Observe("SPY") }, d.Tapehouse["MarginAccounts"], &marginaccounts.MarginAccountsMetaData, "observe", []any{spy}},
 		{func() (sdk.Tx, error) { return client.Accounts().Clear(alice, sdk.Cross, "SPY") }, d.Tapehouse["MarginAccounts"], &marginaccounts.MarginAccountsMetaData, "clear", []any{alice, sdk.Cross, spy}},
 		{func() (sdk.Tx, error) { return client.Accounts().Settle(alice, sdk.Cross, bob) }, d.Tapehouse["MarginAccounts"], &marginaccounts.MarginAccountsMetaData, "settle", []any{alice, sdk.Cross, bob}},
 		{func() (sdk.Tx, error) { return client.LendingVault("SPY").BuyIn(3) }, bob, &stocklendingvault.StockLendingVaultMetaData, "buyIn", []any{big.NewInt(3)}},
@@ -1231,5 +1233,55 @@ func TestTheRegistrySaysWhetherItsChainlinkFeedsFollowTheRegularHours(t *testing
 	off, err := sdk.ParseDeployments([]byte(`{"chainId":46630}`))
 	if err != nil || off.ChainlinkRegularHours {
 		t.Fatalf("a registry that does not: %+v, %v", off, err)
+	}
+}
+
+type recoveryBackend struct {
+	bind.ContractBackend
+	t        *testing.T
+	unusable uint64
+	blocks   []*big.Int
+}
+
+func (r *recoveryBackend) HeaderByNumber(context.Context, *big.Int) (*types.Header, error) {
+	return &types.Header{Number: big.NewInt(7)}, nil
+}
+
+func (r *recoveryBackend) CallContract(_ context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error) {
+	r.blocks = append(r.blocks, block)
+	parsed, _ := marginaccounts.MarginAccountsMetaData.ParseABI()
+	method, err := parsed.MethodById(call.Data)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	switch method.Name {
+	case "unusableAt":
+		return method.Outputs.Pack(r.unusable)
+	case "RECOVERY":
+		return method.Outputs.Pack(big.NewInt(1800))
+	}
+	r.t.Fatalf("unexpected %s", method.Name)
+	return nil, nil
+}
+
+func TestAnAssetsRecoveryEndsARecoveryWindowAfterItWentUnusable(t *testing.T) {
+	backend := &recoveryBackend{t: t, unusable: 1_790_775_000}
+	accounts := sdk.NewClient(backend, registry(t, "46630")).Accounts()
+	recovery, err := accounts.Recovery(&bind.CallOpts{}, "SPY")
+	if err != nil || recovery.UnusableAt != 1_790_775_000 || recovery.Until != 1_790_776_800 {
+		t.Fatalf("recovery %+v, %v", recovery, err)
+	}
+	if len(backend.blocks) != 2 || backend.blocks[0].Int64() != 7 || backend.blocks[1].Int64() != 7 {
+		t.Fatalf("read at %v", backend.blocks)
+	}
+	if !recovery.Recovering(1_790_776_799) || recovery.Recovering(1_790_776_800) {
+		t.Fatal("the window is not [UnusableAt, Until)")
+	}
+	backend.unusable = 0
+	if recovery, err = accounts.Recovery(&bind.CallOpts{}, "SPY"); err != nil || recovery.Recovering(1) {
+		t.Fatalf("an asset never unusable is recovering: %+v, %v", recovery, err)
+	}
+	if _, err := accounts.Recovery(&bind.CallOpts{}, strings.Repeat("X", 33)); err == nil {
+		t.Fatal("an asset name too long was read")
 	}
 }

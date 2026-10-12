@@ -135,7 +135,7 @@ func TestTheKeepersRunAreThoseWhoseContractsTheRegistryNames(t *testing.T) {
 		t.Fatalf("index keepers without the index: %v, %v", k, err)
 	}
 	if k = w.keeper(Config{}); !slices.Equal(k.Keepers(), []string{"prices", "multiplier", "halt", "seal", "premium",
-		"mark", "sync", "liquidation", "backstop", "reopening", "recall", "shorts", "gapcover"}) {
+		"observe", "mark", "sync", "liquidation", "backstop", "reopening", "recall", "shorts", "gapcover"}) {
 		t.Fatalf("every keeper: %v", k.Keepers())
 	}
 	w.deployments.ChainlinkRegularHours = true

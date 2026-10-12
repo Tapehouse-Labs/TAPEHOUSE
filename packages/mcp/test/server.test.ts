@@ -163,6 +163,7 @@ describe('tools', () => {
       'accounts_leverage',
       'accounts_liquidation_price',
       'accounts_repayment',
+      'accounts_recovery',
       'accounts_is_authorized',
       'shorts_position',
       'shorts_health',
@@ -296,6 +297,14 @@ describe('reads', () => {
       regime: 1,
     })
     expect(calls[0]?.args).toEqual([alice, toBytes32('NVDA')])
+  })
+
+  test("an asset's recovery is read at one block, by asset", async () => {
+    const { client, calls } = chain({ unusableAt: 1_790_000_000n, RECOVERY: 1_800n })
+    const { structured } = await call(await legacy(client), 'accounts_recovery', { asset: 'NVDA' })
+    expect(structured).toEqual({ blockNumber: '7', unusableAt: '1790000000', until: '1790001800' })
+    expect(calls[0]?.args).toEqual([toBytes32('NVDA')])
+    expect(new Set(calls.map((c) => c.block))).toEqual(new Set(['0x7']))
   })
 
   test("Chainlink's token and share prices are kept apart", async () => {

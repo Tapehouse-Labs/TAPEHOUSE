@@ -50,6 +50,7 @@ Every tool is read-only: the reads take the chain's state at one block and name 
 | `accounts_health`, `accounts_in_baskets` | A margin position's equity, requirement and surplus over it, and what it holds of each Stock Token through its baskets, the tokens the engine margins their shares as |
 | `accounts_collateral`, `accounts_leverage` | What a margin position holds of a token or of a basket's shares, and its leverage |
 | `accounts_liquidation_price`, `accounts_repayment`, `accounts_is_authorized` | The price at which a position falls short once it borrows more, what repays it, and whether an address may act for an account |
+| `accounts_recovery` | When the accounts last recorded an asset halted or with a multiplier change pending, and until when a position holding it cannot borrow or withdraw against it |
 | `shorts_position`, `shorts_health`, `shorts_restriction` | A short, its health at the band's high edge, and the short-sale restriction after a 10% fall |
 | `gap_cover_sales`, `gap_cover_quote` | Whether gap cover is on sale, for which closure and until when; and a cover's premium with the writers' USDG it reserves, its smallest deductible, and the weekend gap it prices at, which follows the week's realised move, with that move |
 | `gap_cover_series`, `gap_cover_position`, `gap_cover_vault` | A series as open, settled with its reference and reopening prices, or void; a cover with what its release credits and the holder's unclaimed USDG; and the writers' vault, with a writer's shares and what it may deposit and redeem now |

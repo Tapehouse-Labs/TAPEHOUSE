@@ -199,6 +199,7 @@ var jobs = []job{
 	{"halt", 30 * time.Second, "Band", false, (*Keeper).writeHalts},
 	{"seal", 15 * time.Second, "Band", false, (*Keeper).seal},
 	{"premium", 60 * time.Second, "MarginAccounts", false, (*Keeper).accruePremium},
+	{"observe", 30 * time.Second, "MarginAccounts", false, (*Keeper).observe},
 	{"mark", 30 * time.Second, "ShortPositions", false, (*Keeper).mark},
 	{"sync", 60 * time.Second, "MarginAccounts", true, (*Keeper).syncHoldings},
 	{"liquidation", 15 * time.Second, "Liquidator", true, (*Keeper).liquidate},

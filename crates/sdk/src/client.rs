@@ -144,6 +144,23 @@ pub enum SeriesStatus {
     Void,
 }
 
+/// When an asset last became unusable as collateral, and until when borrowing and withdrawing against it stay closed,
+/// both in seconds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Recovery {
+    /// When the asset last became unusable; zero if it never has.
+    pub unusable_at: u64,
+    /// When its recovery ends.
+    pub until: u64,
+}
+
+impl Recovery {
+    /// Whether the asset is still recovering at `now`, in seconds.
+    pub fn recovering(&self, now: u64) -> bool {
+        self.unusable_at != 0 && now < self.until
+    }
+}
+
 /// An asset's gap cover series over one closure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Series {
@@ -510,6 +527,34 @@ impl<P: Provider + Clone> Tapehouse<P> {
             .band()?
             .writePrices(ids, payload)
             .with_cloned_provider())
+    }
+
+    /// The margin accounts' `observe` of `asset`, which records the moment it becomes unusable if the band reports it
+    /// halted or with a multiplier change pending, and otherwise does nothing. Anyone may send it.
+    pub fn observe(&self, asset: &str) -> Result<SolCallBuilder<P, MarginAccounts::observeCall>> {
+        Ok(self
+            .accounts()?
+            .observe(to_bytes32(asset)?)
+            .with_cloned_provider())
+    }
+
+    /// When `asset` last became unusable and until when positions holding it cannot borrow or withdraw, both read at
+    /// the latest block.
+    pub async fn recovery(&self, asset: &str) -> Result<Recovery> {
+        let accounts = self.accounts()?;
+        let symbol = to_bytes32(asset)?;
+        let block = BlockId::number(
+            self.provider
+                .get_block_number()
+                .await
+                .map_err(alloy::contract::Error::from)?,
+        );
+        let unusable_at = accounts.unusableAt(symbol).block(block).call().await?;
+        let window = accounts.RECOVERY().block(block).call().await?;
+        Ok(Recovery {
+            unusable_at,
+            until: unusable_at.saturating_add(window.saturating_to::<u64>()),
+        })
     }
 
     /// What repays all `account`'s `position` owes now: its debt and its premium, both read at the latest block.

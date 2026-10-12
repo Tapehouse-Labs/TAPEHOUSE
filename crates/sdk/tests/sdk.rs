@@ -309,6 +309,14 @@ fn the_reverts_of_tapehouse_the_band_the_issuer_and_the_router_are_decoded() {
             "DebtCapExceeded(2, 1)".into(),
         ),
         (
+            MarginAccounts::AssetRecovering {
+                symbol: b32("SPY"),
+                until: 1790776800,
+            }
+            .abi_encode(),
+            format!("AssetRecovering({}, 1790776800)", b32("SPY")),
+        ),
+        (
             MarginAccounts::BasketFrozen { basket: BOB }.abi_encode(),
             format!("BasketFrozen({BOB})"),
         ),
@@ -480,6 +488,40 @@ async fn a_repayment_reads_the_debt_and_the_premium_at_one_block() {
         (U256::from(100), U256::from(3), U256::from(103))
     );
     assert!(asserter.read_q().is_empty());
+}
+
+#[tokio::test]
+async fn an_observation_is_packed_for_the_margin_accounts() {
+    let tapehouse = offline(registry(46630));
+    let call = tapehouse.observe("SPY").unwrap();
+    assert_eq!(call.calldata()[..4], MarginAccounts::observeCall::SELECTOR);
+    let decoded = MarginAccounts::observeCall::abi_decode(call.calldata()).unwrap();
+    assert_eq!(decoded.symbol, b32("SPY"));
+    assert!(tapehouse.observe(&"X".repeat(33)).is_err());
+}
+
+#[tokio::test]
+async fn an_assets_recovery_ends_a_recovery_window_after_it_went_unusable() {
+    let asserter = Asserter::new();
+    let tapehouse = Tapehouse::new(
+        ProviderBuilder::new().connect_mocked_client(asserter.clone()),
+        registry(46630),
+    );
+    asserter.push_success(&U64::from(7));
+    asserter.push_success(&Bytes::from(U256::from(1_790_775_000u64).abi_encode()));
+    asserter.push_success(&Bytes::from(U256::from(1800).abi_encode()));
+    let recovery = tapehouse.recovery("SPY").await.unwrap();
+    assert_eq!(
+        (recovery.unusable_at, recovery.until),
+        (1_790_775_000, 1_790_776_800)
+    );
+    assert!(recovery.recovering(1_790_776_799));
+    assert!(!recovery.recovering(1_790_776_800));
+    assert!(asserter.read_q().is_empty());
+    asserter.push_success(&U64::from(8));
+    asserter.push_success(&Bytes::from(U256::ZERO.abi_encode()));
+    asserter.push_success(&Bytes::from(U256::from(1800).abi_encode()));
+    assert!(!tapehouse.recovery("SPY").await.unwrap().recovering(1));
 }
 
 #[tokio::test]

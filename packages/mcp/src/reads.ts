@@ -610,6 +610,24 @@ export function registerReads(server: McpServer, context: Context) {
   tool(
     server,
     context,
+    'accounts_recovery',
+    {
+      title: "An asset's recovery",
+      description:
+        "When the margin accounts last recorded an asset halted or with a multiplier change pending (unusableAt), and until when, in Unix seconds, a position holding it cannot borrow or withdraw against it (until, 30 minutes later). Repayments and deposits stay open. An asset never recorded reads unusableAt 0 and an until long past. Anyone may record one with accounts.observe.",
+      input: z.strictObject({ asset }),
+      output: z.object({ ...block, unusableAt: uint, until: uint }),
+      openWorld: true,
+    },
+    async (args) => {
+      const read = await at(context)
+      return { ...read, ...(await accounts.recovery(client, d, args.asset, read)) }
+    },
+  )
+
+  tool(
+    server,
+    context,
     'accounts_is_authorized',
     {
       title: 'An authorization',

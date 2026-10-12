@@ -1,8 +1,8 @@
 {
-  "accruePremium": "37778",
-  "borrow": "235343",
+  "accruePremium": "37865",
+  "borrow": "237779",
   "deposit": "138755",
-  "repay": "115201",
-  "repayWithPremium": "113710",
-  "withdraw": "178984"
+  "repay": "115223",
+  "repayWithPremium": "113728",
+  "withdraw": "181420"
 }

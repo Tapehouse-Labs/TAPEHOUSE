@@ -373,6 +373,23 @@ describe('quotes', () => {
 })
 
 describe('account reads', () => {
+  test('anyone records an asset unusable, and a position recovering from it is told by name and arguments', () => {
+    const call = accounts.observe(testnet, { asset: 'NVDA' })
+    const data = encodeFunctionData(call)
+    expect(call.address).toBe(testnet.tapehouse.MarginAccounts)
+    expect(data.slice(0, 10)).toBe(toFunctionSelector('observe(bytes32)'))
+    expect(decodeFunctionData({ abi: marginAccountsAbi, data }).args).toEqual([toBytes32('NVDA')])
+    const recovering = encodeErrorResult({
+      abi: marginAccountsAbi,
+      errorName: 'AssetRecovering',
+      args: [toBytes32('NVDA'), 1_790_001_800n],
+    })
+    expect(decodeRevertData(recovering)).toEqual({
+      errorName: 'AssetRecovering',
+      args: [toBytes32('NVDA'), 1_790_001_800n],
+    })
+  })
+
   const blockTags: string[] = []
   const client = createClient({
     transport: custom({
@@ -961,6 +978,8 @@ describe('borrowing', () => {
           claim: 1n,
           recalls: [6n],
           holding: [16n * 10n ** 18n, 9n * 10n ** 17n, 100n * 10n ** 18n],
+          unusableAt: 1_790_000_000n,
+          RECOVERY: 1_800n,
           debtCap: 1_000n,
           weekendDebtCap: 500n,
           weekendLeverage: 50_000,
@@ -1008,6 +1027,14 @@ describe('borrowing', () => {
       balance: 14n * 10n ** 18n,
     })
     expect(new Set(blockTags.splice(0))).toEqual(new Set(['0xb']))
+  })
+
+  test("an asset's recovery is read at one block", async () => {
+    expect(await accounts.recovery(client, testnet, 'NVDA')).toEqual({
+      unusableAt: 1_790_000_000n,
+      until: 1_790_001_800n,
+    })
+    expect(new Set(blockTags.splice(0))).toHaveLength(1)
   })
 
   test("the accounts' limits on borrowing are read at one block", async () => {

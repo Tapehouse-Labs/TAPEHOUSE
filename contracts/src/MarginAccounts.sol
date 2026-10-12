@@ -96,6 +96,9 @@ contract MarginAccounts is Ownable2Step {
     uint256 public constant MIN_RECALL = 1e16;
     /// @notice The most baskets the accounts take.
     uint256 public constant MAX_BASKETS = 8;
+    /// @notice How long an asset stays closed to new risk after its band was last seen halted or with a multiplier
+    /// change pending, in seconds.
+    uint256 public constant RECOVERY = 30 minutes;
     uint256 private constant BPS = 10_000;
     uint256 private constant PRICE_UNIT = 1e8;
     uint256 private constant USDG_TO_USD = 1e12;
@@ -153,6 +156,8 @@ contract MarginAccounts is Ownable2Step {
     bytes32[] private _symbols;
     address[] private _tokens;
     mapping(bytes32 symbol => uint256) private _indexOfSymbol;
+    /// @notice When `symbol`'s band was last seen halted or with a multiplier change pending, by `observe`; zero if never.
+    mapping(bytes32 symbol => uint64) public unusableAt;
     mapping(address token => uint256) private _indexOfToken;
     uint256[] private _caps;
     Book[] private _books;
@@ -247,6 +252,9 @@ contract MarginAccounts is Ownable2Step {
     /// @notice The accounts held `balance` of `symbol`, less than the `counted` their positions held, and every
     /// position's holding of it fell in proportion.
     event AssetWrittenDown(bytes32 indexed symbol, uint256 counted, uint256 balance);
+    /// @notice `symbol`'s band was seen halted, or with a multiplier change pending, at `at`, when it had not been in
+    /// the last `RECOVERY`: its recovery began.
+    event AssetUnusable(bytes32 indexed symbol, uint64 at);
     /// @notice The cross position takes `basket`'s shares as collateral.
     event BasketAdded(address indexed basket);
     /// @notice `caller` redeemed `shares` of `basket` in `account`'s cross position for `assets` of its Stock Tokens, in
@@ -278,6 +286,9 @@ contract MarginAccounts is Ownable2Step {
     error AssetHalted(bytes32 symbol);
     /// @notice `symbol`'s Stock Token has a multiplier change pending.
     error CorporateActionPending(bytes32 symbol);
+    /// @notice `symbol`'s band was seen halted, or with a multiplier change pending, less than `RECOVERY` ago: no new
+    /// risk against it until `until`.
+    error AssetRecovering(bytes32 symbol, uint64 until);
     /// @notice An amount of zero.
     error ZeroAmount();
     /// @notice The engine could not read `symbol`'s liquidity.
@@ -419,6 +430,27 @@ contract MarginAccounts is Ownable2Step {
         }
         usdg.forceApprove(address(vault_), type(uint256).max);
         emit PremiumRateSet(premiumRate_);
+    }
+
+    /// @notice Records that `symbol`'s band is halted, or has a multiplier change pending, now, if it is: new borrowing
+    /// and withdrawals against the asset then stay closed until `RECOVERY` after the last time anyone saw it so. Anyone
+    /// may call it, and the keepers do every minute; an asset no one observed while it was unusable is open again the
+    /// moment its band is.
+    function observe(bytes32 symbol) external {
+        if (_indexOfSymbol[symbol] == 0) revert UnknownAsset(symbol);
+        // slither-disable-next-line unused-return
+        (uint8 state,,,,,) = band.quote(symbol); // forge-lint: disable-line(unused-return)
+        // slither-disable-next-line unused-return
+        (uint8 status,,,) = band.corporateAction(symbol); // forge-lint: disable-line(unused-return)
+        if (state != 0 && status == 0) return;
+        uint64 last = unusableAt[symbol];
+        unusableAt[symbol] = SafeCast.toUint64(block.timestamp);
+        // slither-disable-start incorrect-equality,timestamp
+        // forge-lint: disable-next-line(block-timestamp)
+        if (last == 0 || block.timestamp >= last + RECOVERY) {
+            emit AssetUnusable(symbol, SafeCast.toUint64(block.timestamp));
+        }
+        // slither-disable-end incorrect-equality,timestamp
     }
 
     /// @notice The assets, in the engine's order, and their Stock Tokens; a zero token takes no deposit.
@@ -1509,6 +1541,10 @@ contract MarginAccounts is Ownable2Step {
                 (uint8 status,,,) = band.corporateAction(symbol); // forge-lint: disable-line(calls-loop, unused-return)
                 // forge-lint: disable-next-line(require-revert-in-loop)
                 if (status != 0) revert CorporateActionPending(symbol);
+                uint64 last = unusableAt[symbol];
+                uint64 until = last + SafeCast.toUint64(RECOVERY);
+                // forge-lint: disable-next-line(block-timestamp, require-revert-in-loop)
+                if (last != 0 && block.timestamp < until) revert AssetRecovering(symbol, until);
             }
             v.quantities[i] = SafeCast.toInt256(quantity);
             v.prices[i] = low;

@@ -3,6 +3,7 @@
 package sdk
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -23,6 +24,18 @@ type Repayment struct {
 	Debt    *big.Int
 	Premium *big.Int
 	Assets  *big.Int
+}
+
+// Recovery is when an asset last became unusable as collateral, and until when borrowing and withdrawing against it
+// stay closed, both in seconds.
+type Recovery struct {
+	UnusableAt uint64
+	Until      uint64
+}
+
+// Recovering reports whether the asset is still recovering at now, in seconds.
+func (r Recovery) Recovering(now uint64) bool {
+	return r.UnusableAt != 0 && now < r.Until
 }
 
 // Accounts returns the margin accounts of the registry's .tapehouse.MarginAccounts.
@@ -238,4 +251,33 @@ func (a *Accounts) Clear(account common.Address, position [32]byte, asset string
 // up its recalls once nothing it lent is worth anything. Anyone may.
 func (a *Accounts) Settle(account common.Address, position [32]byte, token common.Address) (Tx, error) {
 	return a.tx(a.accounts.TryPackSettle(account, position, token))
+}
+
+// Observe records the moment asset becomes unusable if the band reports it halted or with a multiplier change pending;
+// otherwise it does nothing. Anyone may.
+func (a *Accounts) Observe(asset string) (Tx, error) {
+	symbol, err := ToBytes32(asset)
+	return a.with(err).tx(a.accounts.TryPackObserve(symbol))
+}
+
+// Recovery reads when asset last became unusable and until when positions holding it cannot borrow or withdraw, both
+// at opts' block, or at the latest block where opts names none.
+func (a *Accounts) Recovery(opts *bind.CallOpts, asset string) (Recovery, error) {
+	symbol, err := ToBytes32(asset)
+	if err != nil || a.err != nil {
+		return Recovery{}, errors.Join(err, a.err)
+	}
+	pinned, err := a.c.pin(opts)
+	if err != nil {
+		return Recovery{}, err
+	}
+	at, err := read(a.c, pinned, a.target, a.accounts.UnpackUnusableAt)(a.accounts.TryPackUnusableAt(symbol))
+	if err != nil {
+		return Recovery{}, err
+	}
+	window, err := read(a.c, pinned, a.target, a.accounts.UnpackRECOVERY)(a.accounts.TryPackRECOVERY())
+	if err != nil {
+		return Recovery{}, err
+	}
+	return Recovery{UnusableAt: at, Until: at + window.Uint64()}, nil
 }
