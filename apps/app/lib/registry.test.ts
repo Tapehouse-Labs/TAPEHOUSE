@@ -9,7 +9,7 @@ describe("loadRegistry", () => {
   test("reads the testnet's registry by default", async () => {
     const { deployments, rpcUrl, bundlerUrl, sponsorUrl } = await loadRegistry({});
     expect(deployments.chainId).toBe(46630);
-    expect(deployments.tapehouse.Band).toBe("0xa70118d3324D90532E7D2854627b13CacE305641");
+    expect(deployments.tapehouse.Band).toBe("0x01DA82A9c906d019514620A12ECa626cA5a71eDC");
     expect(rpcUrl).toBeUndefined();
     expect(bundlerUrl).toBeUndefined();
     expect(sponsorUrl).toBeUndefined();

@@ -12,7 +12,7 @@ import {IV3SwapRouter} from "../src/interfaces/IUniswapV3.sol";
 
 contract RegistryForkTest is Test {
     uint256 internal constant ROBINHOOD_BLOCK = 69_922_505;
-    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 127_372_363;
+    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 133_594_790;
     uint256 internal constant ARBITRUM_BLOCK = 509_636_514;
     bytes32 internal constant BEACON_SLOT = 0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50;
     bytes4 internal constant STYLUS_ROOT_PREFIX = 0xeff00200;
@@ -194,7 +194,14 @@ contract RegistryForkTest is Test {
             assertGt(token.code.length, 0, symbols[i]);
             (bool ok, bytes memory symbol) = token.staticcall(abi.encodeCall(IERC20.symbol, ()));
             assertTrue(ok, symbols[i]);
-            assertEq(abi.decode(symbol, (string)), symbols[i], symbols[i]);
+            (bool wraps, bytes memory underlying) = token.staticcall(abi.encodeWithSignature("underlying()"));
+            if (!wraps) {
+                assertEq(abi.decode(symbol, (string)), symbols[i], symbols[i]);
+                continue;
+            }
+            assertEq(abi.decode(symbol, (string)), string.concat("w", symbols[i]), symbols[i]);
+            (, bytes memory stock) = abi.decode(underlying, (address)).staticcall(abi.encodeCall(IERC20.symbol, ()));
+            assertEq(abi.decode(stock, (string)), symbols[i], symbols[i]);
         }
     }
 

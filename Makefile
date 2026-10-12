@@ -70,7 +70,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	build-apps test-apps lint-apps build-services test-services lint-services build-crates test-crates lint-crates \
 	bindings check-bindings test-sdks-devnode test-mcp-devnode test-app-devnode test-indexer-devnode run-indexer backtest test-backtest-devnode test-keeper-devnode run-keeper test-bidder-devnode run-bidder test-alerts-devnode run-alerts calibrate calibrate-snapshot test-calibrate-devnode \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
-	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus verify-stylus \
+	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus clone-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
 	deploy-band-feeds verify-band-feeds simulate-supply-vault deploy-supply-vault verify-supply-vault \
 	deploy-margin-accounts verify-margin-accounts deploy-liquidator verify-liquidator deploy-gap-backstop verify-gap-backstop deploy-reopening-auction verify-reopening-auction deploy-stock-lending verify-stock-lending deploy-short-positions verify-short-positions deploy-morpho-oracles verify-morpho-oracles deploy-basket verify-baskets deploy-gap-cover verify-gap-cover deploy-sponsor-paymaster verify-sponsor-paymaster deploy-contracts-devnode test-contracts-devnode \
@@ -311,6 +311,12 @@ deploy-stylus: check-docker check-foundry
 	@set -f; args=$$(stylus/scripts/$(CONTRACT)-args.sh $(or $(REGISTRY),deployments/$(CHAIN).json)) && \
 		CARGO_STYLUS_VERSION=$(CARGO_STYLUS_VERSION) stylus/scripts/reproducible.sh deploy $(RPC_URL_$(CHAIN)) $(CONTRACT) \
 		$(SIGNER) -- $$args
+
+clone-stylus: check-foundry
+	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" && test -n "$(SOURCE)" && test -x stylus/scripts/$(CONTRACT)-args.sh || \
+		{ echo "Usage: make clone-stylus CHAIN=<4663|46630|42161|412346> SOURCE=<deployed instance> SIGNER='--account <name> --password-file <file>' [CONTRACT=<band|margin>] [REGISTRY=<file>]"; exit 1; }
+	@set -f; args=$$(stylus/scripts/$(CONTRACT)-args.sh $(or $(REGISTRY),deployments/$(CHAIN).json)) && \
+		stylus/scripts/clone-stylus.sh $(RPC_URL_$(CHAIN)) $(CONTRACT) $(SOURCE) $(SIGNER) -- $$args
 
 deploy-band-feeds: check-foundry submodules
 	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \

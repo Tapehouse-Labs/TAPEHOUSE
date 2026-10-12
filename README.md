@@ -137,18 +137,24 @@ Robinhood Chain testnet (46630). Each address links to its page on the [explorer
 
 | Contract | Address |
 |---|---|
-| Band (Stylus) | [`0xa70118d3324D90532E7D2854627b13CacE305641`](https://explorer.testnet.chain.robinhood.com/address/0xa70118d3324D90532E7D2854627b13CacE305641) |
-| Margin engine (Stylus) | [`0x9B2DB8135222d7B05aEA29B54aE0317E8640D6B0`](https://explorer.testnet.chain.robinhood.com/address/0x9B2DB8135222d7B05aEA29B54aE0317E8640D6B0) |
-| Margin accounts | [`0xE1387eCD1f35585F4f956EdCF74a953652AD5a6D`](https://explorer.testnet.chain.robinhood.com/address/0xE1387eCD1f35585F4f956EdCF74a953652AD5a6D) |
-| Supply vault | [`0xFd6ca888c009Ce955da00C9EceD2D36000D42861`](https://explorer.testnet.chain.robinhood.com/address/0xFd6ca888c009Ce955da00C9EceD2D36000D42861) |
-| Liquidator | [`0x44aaE55cE9B4a5c3017aC56f3fB82B83EFF1AbA5`](https://explorer.testnet.chain.robinhood.com/address/0x44aaE55cE9B4a5c3017aC56f3fB82B83EFF1AbA5) |
-| Gap backstop | [`0x98aaE11A428082B1b868A96826b9AAa705e36645`](https://explorer.testnet.chain.robinhood.com/address/0x98aaE11A428082B1b868A96826b9AAa705e36645) |
-| Reopening auction | [`0x1D593f95eB6E2da95B793ca723790718d158a1B0`](https://explorer.testnet.chain.robinhood.com/address/0x1D593f95eB6E2da95B793ca723790718d158a1B0) |
+| Band (Stylus) | [`0x01DA82A9c906d019514620A12ECa626cA5a71eDC`](https://explorer.testnet.chain.robinhood.com/address/0x01DA82A9c906d019514620A12ECa626cA5a71eDC) |
+| Margin engine (Stylus) | [`0x5bCBa966C2475838F932bf2210300640b6016684`](https://explorer.testnet.chain.robinhood.com/address/0x5bCBa966C2475838F932bf2210300640b6016684) |
+| Margin accounts | [`0x8e48C914BAa3fF8404113cD0A31D6Fc5CEA73279`](https://explorer.testnet.chain.robinhood.com/address/0x8e48C914BAa3fF8404113cD0A31D6Fc5CEA73279) |
+| Supply vault | [`0x34b6cF00fE70f8dC5d6Da185df8Aa9031Db4Bc3D`](https://explorer.testnet.chain.robinhood.com/address/0x34b6cF00fE70f8dC5d6Da185df8Aa9031Db4Bc3D) |
+| Liquidator | [`0x637bD28667d71d497d372159A03A9de9F76f15Bb`](https://explorer.testnet.chain.robinhood.com/address/0x637bD28667d71d497d372159A03A9de9F76f15Bb) |
+| Gap backstop | [`0x623791C146D59B3217b195A9cb6be47261ce8Cc5`](https://explorer.testnet.chain.robinhood.com/address/0x623791C146D59B3217b195A9cb6be47261ce8Cc5) |
+| Reopening auction | [`0xf0Ae417779aA297c2ab6D0faBBc864Fee7Df786f`](https://explorer.testnet.chain.robinhood.com/address/0xf0Ae417779aA297c2ab6D0faBBc864Fee7Df786f) |
 | Sponsor paymaster | [`0x3721b8136593BCC78787943664cF9404d12Ecbd2`](https://explorer.testnet.chain.robinhood.com/address/0x3721b8136593BCC78787943664cF9404d12Ecbd2) |
+| Wrapped TSLA (`wTSLA`) | [`0x588ecCac8c70cdE770b57BA9A192CfF8D636534e`](https://explorer.testnet.chain.robinhood.com/address/0x588ecCac8c70cdE770b57BA9A192CfF8D636534e) |
+| Wrapped AMZN (`wAMZN`) | [`0x04D3d2Bb86BbeE4b4AeD29474fB30D7b639Aa381`](https://explorer.testnet.chain.robinhood.com/address/0x04D3d2Bb86BbeE4b4AeD29474fB30D7b639Aa381) |
 
 `deployments/<chainId>.json` lists every contract the repository uses on each chain, and fork tests check each entry against the chain.
 
 ### What is not live yet
+
+The testnet's Stock Tokens predate the `oraclePaused` view the band reads from a Stock Token, so the testnet's collateral is the wrapped token: `wTSLA` and `wAMZN` wrap Robinhood's testnet TSLA and AMZN one to one, forward their multiplier, pause and issuer registry, and add `oraclePaused`. The app wraps a deposit's Stock Token first, from the wallet. On Robinhood Chain the Stock Tokens are deposited as they are.
+
+The band and the margin engine on the testnet are second instances of the programs already active on the chain, deployed with `make clone-stylus`. Arbitrum paused new Stylus activations on 2 October 2026, so the programs the repository now holds, which read `tokenPaused` when a token has no `oraclePaused`, wait for activations to reopen; the wrapper makes the testnet run without them.
 
 Stock lending, short positions, index baskets and gap cover are built and tested on the dev node, but they are not deployed on the testnet, so the app does not offer them. Restricted-jurisdiction and sanctions screening are not implemented. The mainnet deployment follows the testnet's.
 

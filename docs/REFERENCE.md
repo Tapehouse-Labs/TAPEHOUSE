@@ -67,13 +67,14 @@ make test
 | `make gas-stylus-devnode` · `snapshot-stylus-devnode` | Compares the dev-node suite's L2 gas with `stylus/.gas-devnode`, failing on a move over 0.5%, or regenerates it |
 | `make gas-table` | Prints the L2 gas of the margin program and of its Solidity reference on the same calls, from the last dev-node run |
 | `make deploy-stylus CHAIN=<id> SIGNER='<flags>' [CONTRACT=margin]` | Deploys `band`, or the program `CONTRACT` names, reproducibly, configured from `deployments/<id>.json`, and prints the transaction and address |
+| `make clone-stylus CHAIN=<id> SOURCE=<address> SIGNER='--account <name> --password-file <file>' [CONTRACT=margin]` | Deploys a new instance of a program that is already active, with its own constructor arguments from `deployments/<id>.json`, through StylusDeployer, and prints the transaction and address. The instance runs the code `SOURCE` runs and needs no activation, so it works while a chain pauses new activations |
 | `make verify-stylus CHAIN=<id> TX=<hash> [CONTRACT=margin]` | Verifies a deployment of `band`, or of the program `CONTRACT` names, against the checked-out source |
 | `make deploy-band-feeds CHAIN=<id> SIGNER='<flags>'` | Deploys a `BandFeed` for every launch asset the chain's band configures and prints each address |
 | `make verify-band-feeds CHAIN=<id>` | Verifies every feed in the registry's `.bandFeeds` on Sourcify |
 | `make simulate-supply-vault` | Simulates the supply vault's deployment on a pinned fork of Robinhood Chain |
 | `make deploy-supply-vault CHAIN=<id> SIGNER='<flags>'` | Deploys the supply vault with `forge script`, configured from `deployments/<id>.json`, and records it there |
 | `make verify-supply-vault CHAIN=<id>` | Verifies the registry's supply vault on Sourcify |
-| `DEBT_CAP=<units> WEEKEND_DEBT_CAP=<units> PREMIUM_RATE=<bps a year> RESERVE_SHARE=<bps> make deploy-margin-accounts CHAIN=<id> SIGNER='<flags>'` | Deploys the margin accounts with `forge create`, each asset capped at its selling depth and with the weekend premium's rate and the reserve's share, records them in `deployments/<id>.json`, makes them the supply vault's borrower and the owner their guardian; the signer owns the vault |
+| `DEBT_CAP=<units> WEEKEND_DEBT_CAP=<units> PREMIUM_RATE=<bps a year> RESERVE_SHARE=<bps> make deploy-margin-accounts CHAIN=<id> SIGNER='<flags>'` | Deploys the margin accounts with `forge create`, each asset capped at its selling depth, or at `ASSET_CAPS` where the chain has no Chainlink feeds, and with the weekend premium's rate and the reserve's share, records them in `deployments/<id>.json`, makes them the supply vault's borrower and the owner their guardian; the signer owns the vault |
 | `make verify-margin-accounts CHAIN=<id>` | Verifies the registry's margin accounts on Sourcify |
 | `make deploy-liquidator CHAIN=<id> SIGNER='<flags>'` | Deploys the liquidator with `forge create`, makes it the margin accounts' liquidator and records it in `deployments/<id>.json`; the signer owns the accounts |
 | `make verify-liquidator CHAIN=<id>` | Verifies the registry's liquidator on Sourcify |
@@ -461,6 +462,10 @@ _The table of gas measurements is in the [README](../README.md#stylus-versus-sol
 Reads: `debt()`, `idle()`, `utilization()`, `borrowRate()`, `supplyRate()`, `borrowIndex()` and `rateModel()`, with the ERC-4626 views; rates are a year, with 18 decimals.
 
 `make deploy-supply-vault` deploys with `forge script`, then a separate `Register` script records the address in `deployments/<id>.json` from Foundry's broadcast files, only for a deployment whose transaction succeeded.
+
+## Wrapped Stock Tokens
+
+`StockTokenWrapper` is an ERC-20 over a Stock Token, one to one: `depositFor` takes the Stock Token and mints the wrapper, `withdrawTo` burns it and returns the Stock Token, and the wrapper has a permit. It forwards the wrapped token's `uiMultiplier`, `newUIMultiplier`, `effectiveAt`, `paused` and `ACCESS_CONTROLLED_REGISTRY`, and answers `oraclePaused` with the wrapped token's `tokenPaused`, so a Stock Token that predates `oraclePaused` can be the band's and the accounts' token. The Robinhood Chain testnet's TSLA and AMZN are wrapped this way; `deployments/46630.json` lists the wrappers under `.tokens`. The app wraps the Stock Token a deposit is short of before it asks for the permit. `make clone-stylus` deploys the band and the margin engine over the wrappers while Arbitrum pauses new Stylus activations.
 
 ## The margin accounts
 

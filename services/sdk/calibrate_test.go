@@ -117,7 +117,7 @@ func TestSetParametersPacksTheFourArrays(t *testing.T) {
 	}
 	want, _ := margin.NewMargin().TryPackSetParameters([]uint32{31_352}, []uint16{}, []uint32{118_601}, []uint32{3_561_773, 1_377_156})
 	address, _ := m.Address()
-	if tx.To != common.HexToAddress("0x9B2DB8135222d7B05aEA29B54aE0317E8640D6B0") || tx.To != address || !slices.Equal(tx.Data, want) {
+	if tx.To != common.HexToAddress("0x5bCBa966C2475838F932bf2210300640b6016684") || tx.To != address || !slices.Equal(tx.Data, want) {
 		t.Fatalf("%x to %v", tx.Data, tx.To)
 	}
 }

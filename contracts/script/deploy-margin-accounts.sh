@@ -6,7 +6,8 @@
 # owner, makes them the vault's borrower, then records them in the registry under .tapehouse.MarginAccounts, and makes
 # the owner their guardian. Each asset's cap, in raw tokens, is the engine's selling depth in USD over the token's
 # price, its Chainlink price times its ERC-8056 multiplier; zero for an asset without a Stock Token or a feed. The
-# weekend premium starts at PREMIUM_RATE, and RESERVE_SHARE of each premium paid goes to the reserve.
+# weekend premium starts at PREMIUM_RATE, and RESERVE_SHARE of each premium paid goes to the reserve. ASSET_CAPS,
+# raw tokens in the engine's order, replaces the computed caps where a chain has no Chainlink feeds to price them.
 # Checks first that the signer is the registry's owner and owns the vault, that the vault has no borrower, and that
 # each feed answers a positive price at most a day and a minute old. Uses forge create: the
 # constructor reads the Stylus programs, which forge script cannot run. SIGNER is forge's wallet flags for the
@@ -43,6 +44,7 @@ for symbol in $(cast call --rpc-url "$rpc" "$margin" "assets()(bytes32[])" | tr 
   fi
   caps=${caps:+$caps,}$cap
 done
+caps=${ASSET_CAPS:-$caps}
 [ "$(cast call --rpc-url "$rpc" "$vault" "owner()(address)")" = "$owner" ] || { echo "the vault's owner is not $owner" >&2; exit 1; }
 [ "$(cast call --rpc-url "$rpc" "$vault" "borrower()(address)")" = 0x0000000000000000000000000000000000000000 ] ||
   { echo "the vault already has a borrower" >&2; exit 1; }

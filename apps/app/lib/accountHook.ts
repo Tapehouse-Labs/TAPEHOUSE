@@ -34,6 +34,7 @@ import { describeRevert } from "./errors";
 import { REFRESH_MS, useSettled } from "./hooks";
 import { asCall, type Call, direct, type Intent, shortfall, smartAccountPlan, vaultAddress } from "./intent";
 import { useSmartAccount } from "./smartAccountHook";
+import { stockHeld, underlyingOf, wrapperAbi, wrapPlan } from "./wrapped";
 
 /**
  * The call gas a user operation carries beyond its estimate, on top of a fifth or a quarter more: another operation in
@@ -67,7 +68,10 @@ export function useAccountState(account: Address | undefined, owner: Address | u
   });
 }
 
-/** What the wallet holds of ether, USDG, WETH and each Stock Token, for the deposit and repay amounts. */
+/**
+ * What the wallet holds of ether, USDG, WETH and each Stock Token, for the deposit and repay amounts. A wrapped Stock
+ * Token counts what the wallet holds of it and of the Stock Token it wraps, which the deposit wraps first.
+ */
 export function useWalletBalances(owner: Address | undefined, stockTokens: readonly Address[]) {
   const deployments = useDeployments();
   const client = usePublicClient();
@@ -80,7 +84,9 @@ export function useWalletBalances(owner: Address | undefined, stockTokens: reado
       const [eth, ...amounts] = await Promise.all([
         client!.getBalance({ address: owner! }),
         ...tokens.map((address) =>
-          client!.readContract({ address, abi: erc20Abi, functionName: "balanceOf", args: [owner!] }),
+          stockTokens.includes(address)
+            ? stockHeld(client!, address, owner!)
+            : client!.readContract({ address, abi: erc20Abi, functionName: "balanceOf", args: [owner!] }),
         ),
       ]);
       return { eth, tokens: Object.fromEntries(tokens.map((t, i) => [t, amounts[i]!])) as Record<Address, bigint> };
@@ -111,11 +117,12 @@ export function useLiquidationPreview(
   });
 }
 
-export type SendPhase = "wrapping" | "permit" | "checking" | "signing" | "sending";
+export type SendPhase = "wrapping" | "stock" | "permit" | "checking" | "signing" | "sending";
 
 /** What the primary button says while a send is in each phase. */
 export const PHASE: Record<SendPhase, string> = {
   wrapping: "Wrapping your ether…",
+  stock: "Wrapping your Stock Token…",
   permit: "Sign the permit in your wallet…",
   checking: "Checking it against the chain…",
   signing: "Waiting for your wallet…",
@@ -152,6 +159,7 @@ export function useSend() {
       const intent = typeof request === "function" ? await request() : request;
       if (!client || !wallet || !account || !owner) throw new Error("Connect your wallet first.");
       const sender = { deployments, client, wallet, account, owner, bundler: smart.bundler, phase: setPhase };
+      await wrapStock(sender, intent);
       if (smart.enabled) await sendFromSmartAccount(sender, intent);
       else await sendFromWallet(sender, intent);
     },
@@ -168,6 +176,42 @@ export function useSend() {
     reset: mutation.reset,
     succeeded: mutation.isSuccess,
   } as const;
+}
+
+/**
+ * Before a deposit of a wrapped Stock Token, the wallet wraps the Stock Token it holds into it, one to one, for what
+ * its wrapper balance is short of: an allowance if it needs one, then the wrapping, each a transaction of the wallet.
+ */
+async function wrapStock(s: Sender, intent: Intent) {
+  if (intent.kind !== "deposit" || intent.token === "ETH") return;
+  const wrapper = intent.token;
+  const stock = await underlyingOf(s.client, wrapper);
+  if (!stock) return;
+  const [held, allowance] = await Promise.all([
+    s.client.readContract({ address: wrapper, abi: erc20Abi, functionName: "balanceOf", args: [s.owner] }),
+    s.client.readContract({ address: stock, abi: erc20Abi, functionName: "allowance", args: [s.owner, wrapper] }),
+  ]);
+  const plan = wrapPlan({ held, allowance, amount: intent.amount });
+  if (!plan) return;
+  s.phase("stock");
+  if (plan.approve) {
+    const { request } = await s.client.simulateContract({
+      address: stock,
+      abi: erc20Abi,
+      functionName: "approve",
+      args: [wrapper, plan.amount],
+      account: s.owner,
+    });
+    await confirm(s, await s.wallet.writeContract(request));
+  }
+  const { request } = await s.client.simulateContract({
+    address: wrapper,
+    abi: wrapperAbi,
+    functionName: "depositFor",
+    args: [s.owner, plan.amount],
+    account: s.owner,
+  });
+  await confirm(s, await s.wallet.writeContract(request));
 }
 
 function permitDeadline(): bigint {
