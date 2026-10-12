@@ -1,0 +1,137 @@
+{
+  "problem": {
+    "belowFloor": "Una puja por debajo del piso de la ronda se rechaza.",
+    "tooSmall": "Una puja debe valer al menos el mínimo al precio del piso.",
+    "belowBond": "El depósito debe ser al menos la fianza.",
+    "belowEscrow": "El depósito debe cubrir lo que la puja deja en custodia: su precio por su cantidad."
+  },
+  "phase": {
+    "salt": "Firma el secreto de tu puja en tu wallet…",
+    "approve": "Aprueba USDG en tu wallet…"
+  },
+  "page": {
+    "title": "Subasta · la reapertura del lunes",
+    "intro": "Puja por los Stock Tokens de las cuentas que se quedaron cortas durante el fin de semana, en la subasta que se liquida en la apertura regular en {chain}.",
+    "block": "Leído en el bloque {block}",
+    "connect": "Conecta una wallet para pujar. La etapa de la subasta y cada ronda de abajo se leen de la cadena sin ella.",
+    "wrongNetwork": "Tu wallet está en otra red. Tapehouse corre en <b>{chain}</b>.",
+    "switch": "Cambiar a {chain}",
+    "absent": "La subasta de reapertura aún no está desplegada en esta cadena.",
+    "done": "Listo. Cada cifra se vuelve a leer de la cadena."
+  },
+  "stage": {
+    "title": "En qué punto está la subasta",
+    "idle": "No hay ninguna ronda abierta. Una ronda se abre cuando un cierre de fin de semana o de festivo está por terminar.",
+    "committing": "Se están comprometiendo pujas. La revelación empieza el {reveal} UTC, media hora antes de la apertura regular el {open} UTC.",
+    "revealing": "Se están revelando las pujas, hasta la apertura regular el {open} UTC. Un compromiso que no se revele para entonces pierde parte de su depósito.",
+    "clearing": "La ronda espera su precio de compensación, que cualquiera puede enviar hasta el {closes} UTC. La apertura regular fue el {open} UTC.",
+    "cleared": "La ronda se compensó. La apertura regular fue el {open} UTC; quienes ganaron pueden reclamar sus tokens.",
+    "lapsed": "La ventana de compensación se cerró sin precio. La apertura regular fue el {open} UTC; cada postor puede reclamar toda su custodia."
+  },
+  "notes": {
+    "label": "Cómo funciona la subasta",
+    "sealed": {
+      "term": "Pujas selladas",
+      "body": "Te comprometes con una puja oculta y un depósito. Nadie ve su precio ni su tamaño hasta la media hora previa a la apertura regular, cuando la revelas."
+    },
+    "uniform": {
+      "term": "Un precio para todos",
+      "body": "La ronda tiene un único precio de compensación: el más alto al que las pujas iguales o superiores toman toda la oferta. Cada puja ganadora paga ese precio, ofreciera lo que ofreciera."
+    },
+    "floor": {
+      "term": "El piso",
+      "body": "Ninguna puja puede estar por debajo del piso, un 10% bajo el borde inferior de la banda sellada antes de la reapertura."
+    },
+    "backstop": {
+      "term": "El backstop",
+      "body": "Lo que las pujas no toman, lo compra el backstop de brecha al precio de compensación, nunca por encima del borde inferior de la banda y dentro de su límite de exposición."
+    },
+    "reveal": {
+      "term": "Revela tu puja",
+      "body": "Un compromiso que no reveles antes de la apertura regular pierde parte de su depósito, al menos la fianza."
+    }
+  },
+  "round": {
+    "title": "La ronda",
+    "caption": "La ronda de reapertura de cada activo: su piso, sus lotes y su oferta, lo comprometido y revelado, y el precio de compensación",
+    "none": "Aún no hay ronda que mostrar.",
+    "asset": "Activo",
+    "floor": "Piso",
+    "fromSeal": "de la banda sellada",
+    "fromQuote": "de la banda en vivo",
+    "lots": "Lotes",
+    "supply": "Oferta",
+    "deposits": "Comprometido",
+    "bids": "Pujas reveladas",
+    "price": "Precio de compensación",
+    "proposed": "propuesto",
+    "settled": "compensado",
+    "resultTitle": "Lo que vendieron las rondas compensadas",
+    "resultCaption": "De cada ronda compensada: el precio, lo que compraron las pujas, lo que pagaron y lo que tomó el backstop",
+    "sold": "Vendido a pujas",
+    "paid": "Pagado",
+    "taken": "Tomado por el backstop"
+  },
+  "bids": {
+    "title": "Pujas reveladas",
+    "none": "Aún no se ha revelado ninguna puja.",
+    "summary": "{asset} · {count, plural, one {# puja} other {# pujas}}",
+    "caption": "Las pujas reveladas de {asset}, de mayor a menor precio",
+    "price": "Precio",
+    "quantity": "Cantidad",
+    "escrow": "Custodia",
+    "bidder": "Postor",
+    "you": "Tú"
+  },
+  "bid": {
+    "title": "Haz una puja",
+    "asset": "Activo",
+    "quantity": "Cantidad",
+    "price": "Precio en USD",
+    "deposit": "Depósito",
+    "assetLabel": "Activo por el que pujar",
+    "quantityLabel": "Cantidad a comprar",
+    "priceLabel": "Precio más alto que pagarás, en USD por token",
+    "depositLabel": "Depósito, en USDG",
+    "floor": "Piso {floor}",
+    "floorUnset": "La ronda aún no tiene un precio del que tomar un piso, así que tu precio no se puede comprobar contra él.",
+    "floorProjected": "La ronda aún no se abrió: su piso se proyecta desde la banda de la que lo tomará, y la primera fianza lo fija.",
+    "escrow": "Una vez revelada, esta puja deja en custodia {escrow} USDG: su precio por su cantidad.",
+    "hides": "Un depósito mayor que la custodia oculta el tamaño de tu puja; lo que no queda en custodia vuelve al revelar.",
+    "balance": "Tienes {amount} USDG; la fianza es de {bond} USDG.",
+    "flow": "Tu wallet primero firma un mensaje gratuito que deriva el secreto de tu puja, puede pedirte aprobar USDG y luego compromete.",
+    "closed": "Las pujas solo se comprometen antes de que empiece la revelación.",
+    "submit": "Comprometer puja",
+    "saved": "El secreto de cada puja se deriva de tu wallet; este navegador guarda el resto para revelarla."
+  },
+  "mine": {
+    "title": "Tus pujas",
+    "none": "No tienes pujas en la subasta.",
+    "caption": "Tus pujas por ronda: lo que ofrece cada una, en qué punto está y qué puede hacer después",
+    "round": "Apertura regular",
+    "asset": "Activo",
+    "bid": "Puja",
+    "status": "Estado",
+    "next": "Siguiente",
+    "offer": "{quantity} a {price}",
+    "reveal": "Revelar",
+    "claim": "Reclamar",
+    "forfeit": "Confiscar",
+    "unsaved": "Revelada desde otro navegador; aquí todavía se puede reclamar.",
+    "forfeitNote": "Un compromiso que no se revela antes de la apertura regular pierde parte de su depósito, al menos la fianza; el resto vuelve.",
+    "waitReveal": "La revelación abre media hora antes de la apertura regular.",
+    "waitClear": "El reclamo abre cuando la ronda se compensa.",
+    "state": {
+      "committed": "Comprometida",
+      "revealed": "Revelada",
+      "claimed": "Reclamada",
+      "returned": "Devuelta"
+    }
+  },
+  "clear": {
+    "title": "Compensar la ronda",
+    "body": "Cualquiera puede compensar una ronda: vende cada lote a las pujas al precio de compensación y el backstop compra el resto. El contrato comprueba el precio contra las pujas reveladas.",
+    "button": "Compensar {asset} a {price}",
+    "none": "Ningún precio compensa {asset}: no tiene oferta para sus pujas."
+  }
+}

@@ -8,6 +8,7 @@ import { createConfig, http, injected, WagmiProvider } from "wagmi";
 import { chainOf } from "@/lib/chains";
 
 const DeploymentsContext = createContext<Deployments | null>(null);
+const IndexerContext = createContext<string | undefined>(undefined);
 const SmartAccountsContext = createContext<{ bundlerUrl?: string; sponsorUrl?: string }>({});
 
 /** The registry of the chain the app runs on. */
@@ -22,17 +23,24 @@ export function useSmartAccountUrls(): { bundlerUrl?: string; sponsorUrl?: strin
   return use(SmartAccountsContext);
 }
 
+/** The indexer whose public API serves history, when the app has one. */
+export function useIndexerUrl(): string | undefined {
+  return use(IndexerContext);
+}
+
 export function Providers({
   deployments,
   rpcUrl,
   bundlerUrl,
   sponsorUrl,
+  indexerUrl,
   children,
 }: {
   deployments: Deployments;
   rpcUrl: string | undefined;
   bundlerUrl: string | undefined;
   sponsorUrl: string | undefined;
+  indexerUrl: string | undefined;
   children: React.ReactNode;
 }) {
   const [config] = useState(() => {
@@ -50,7 +58,9 @@ export function Providers({
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <DeploymentsContext value={deployments}>
-          <SmartAccountsContext value={urls}>{children}</SmartAccountsContext>
+          <SmartAccountsContext value={urls}>
+            <IndexerContext value={indexerUrl}>{children}</IndexerContext>
+          </SmartAccountsContext>
         </DeploymentsContext>
       </QueryClientProvider>
     </WagmiProvider>

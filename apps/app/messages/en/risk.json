@@ -41,5 +41,29 @@
     "revealing": "Revealing",
     "awaiting": "Awaiting clearing",
     "cleared": "Cleared"
+  },
+  "record": {
+    "title": "Record",
+    "intro": "What the indexer holds of past reopening rounds and of what the backstop paid, each linked to its transaction.",
+    "none": "No round has cleared yet, and the backstop has paid nothing.",
+    "roundsTitle": "Cleared rounds",
+    "roundsCaption": "Reopening rounds that cleared, the latest first",
+    "open": "Regular open",
+    "asset": "Asset",
+    "price": "Clearing price",
+    "sold": "Sold",
+    "paid": "Paid",
+    "taken": "Backstop took",
+    "backstopTitle": "What the backstop paid",
+    "backstopCaption": "What the backstop covered and bought, by the closure it counts from",
+    "closure": "Closure",
+    "action": "Action",
+    "amount": "USDG",
+    "covered": "Covered a shortfall",
+    "bought": "Bought the auction's remainder",
+    "position": "Position",
+    "cross": "Cross positions",
+    "unfinal": "not final yet",
+    "error": "The indexer could not be reached."
   }
 }

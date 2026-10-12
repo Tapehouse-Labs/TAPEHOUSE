@@ -18,6 +18,7 @@ export const SECTIONS = [
   { href: "/", key: "account" },
   { href: "/earn", key: "earn" },
   { href: "/risk", key: "risk" },
+  { href: "/auction", key: "auction" },
   { href: "/simulator", key: "simulator" },
 ] as const;
 

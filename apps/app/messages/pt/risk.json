@@ -41,5 +41,29 @@
     "revealing": "Em revelação",
     "awaiting": "Aguardando liquidação",
     "cleared": "Liquidada"
+  },
+  "record": {
+    "title": "Registro",
+    "intro": "O que o indexer guarda das rodadas de reabertura passadas e do que o backstop pagou, cada uma ligada à sua transação.",
+    "none": "Nenhuma rodada foi compensada ainda, e o backstop não pagou nada.",
+    "roundsTitle": "Rodadas compensadas",
+    "roundsCaption": "Rodadas de reabertura compensadas, as mais recentes primeiro",
+    "open": "Abertura regular",
+    "asset": "Ativo",
+    "price": "Preço de compensação",
+    "sold": "Vendido",
+    "paid": "Pago",
+    "taken": "O backstop tomou",
+    "backstopTitle": "O que o backstop pagou",
+    "backstopCaption": "O que o backstop cobriu e comprou, pelo fechamento de que conta",
+    "closure": "Fechamento",
+    "action": "Ação",
+    "amount": "USDG",
+    "covered": "Cobriu um déficit",
+    "bought": "Comprou o remanescente do leilão",
+    "position": "Posição",
+    "cross": "Posições cruzadas",
+    "unfinal": "ainda não é final",
+    "error": "Não foi possível acessar o indexer."
   }
 }

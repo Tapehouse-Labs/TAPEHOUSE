@@ -10,6 +10,10 @@
     "title": "Risk",
     "description": "Every band, the gap backstop's exposure and the latest reopening rounds, read from the chain."
   },
+  "auction": {
+    "title": "Auction",
+    "description": "Bid in the Monday reopening auction of Stock Tokens whose holders fell short over the weekend."
+  },
   "simulator": {
     "title": "Simulator",
     "description": "Margin any portfolio of Stock Tokens with Tapehouse's engine, live from the chain."

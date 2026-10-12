@@ -33,6 +33,11 @@ describe("loadRegistry", () => {
     expect(sponsorUrl).toBe("http://127.0.0.1:4338");
   });
 
+  test("TAPEHOUSE_INDEXER_URL names the indexer that serves the history", async () => {
+    expect((await loadRegistry({})).indexerUrl).toBeUndefined();
+    expect((await loadRegistry({ TAPEHOUSE_INDEXER_URL: "https://indexer.example" })).indexerUrl).toBe("https://indexer.example");
+  });
+
   test("TAPEHOUSE_REGISTRY names a registry file, such as the dev node's", async () => {
     const file = join(mkdtempSync(join(tmpdir(), "registry-")), "devnode.json");
     writeFileSync(file, JSON.stringify({ chainId: 412346, tapehouse: { Band: "0x5fbdb2315678afecb367f032d93f642f64180aa3" } }));

@@ -10,6 +10,10 @@
     "title": "Riesgo",
     "description": "Cada banda, la exposición del backstop de brecha y las últimas rondas de reapertura, leídas de la cadena."
   },
+  "auction": {
+    "title": "Subasta",
+    "description": "Puja en la subasta de reapertura del lunes de los Stock Tokens cuyos titulares se quedaron cortos durante el fin de semana."
+  },
   "simulator": {
     "title": "Simulador",
     "description": "Calcula el margen de cualquier portafolio de Stock Tokens con el motor de Tapehouse, en vivo desde la cadena."

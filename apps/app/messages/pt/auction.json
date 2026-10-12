@@ -1,0 +1,137 @@
+{
+  "problem": {
+    "belowFloor": "Um lance abaixo do piso da rodada é recusado.",
+    "tooSmall": "Um lance deve valer pelo menos o mínimo ao preço do piso.",
+    "belowBond": "O depósito deve ser pelo menos a caução.",
+    "belowEscrow": "O depósito deve cobrir o que o lance mantém em custódia: o seu preço vezes a sua quantidade."
+  },
+  "phase": {
+    "salt": "Assine o segredo do seu lance na sua carteira…",
+    "approve": "Aprove o USDG na sua carteira…"
+  },
+  "page": {
+    "title": "Leilão · a reabertura de segunda",
+    "intro": "Dê lances pelos Stock Tokens das contas que ficaram curtas no fim de semana, no leilão que liquida na abertura regular em {chain}.",
+    "block": "Lido no bloco {block}",
+    "connect": "Conecte uma carteira para dar lances. A etapa do leilão e cada rodada abaixo são lidas da cadeia sem ela.",
+    "wrongNetwork": "Sua carteira está em outra rede. A Tapehouse roda em <b>{chain}</b>.",
+    "switch": "Mudar para {chain}",
+    "absent": "O leilão de reabertura ainda não foi implantado nesta cadeia.",
+    "done": "Pronto. Cada número é lido de novo da cadeia."
+  },
+  "stage": {
+    "title": "Em que ponto está o leilão",
+    "idle": "Nenhuma rodada está aberta. Uma rodada abre quando um fechamento de fim de semana ou feriado está para terminar.",
+    "committing": "Os lances estão sendo comprometidos. A revelação começa em {reveal} UTC, meia hora antes da abertura regular em {open} UTC.",
+    "revealing": "Os lances estão sendo revelados, até a abertura regular em {open} UTC. Um compromisso não revelado até lá perde parte da sua caução.",
+    "clearing": "A rodada aguarda o seu preço de compensação, que qualquer pessoa pode enviar até {closes} UTC. A abertura regular foi em {open} UTC.",
+    "cleared": "A rodada foi compensada. A abertura regular foi em {open} UTC; quem venceu pode reivindicar os seus tokens.",
+    "lapsed": "A janela de compensação fechou sem preço. A abertura regular foi em {open} UTC; cada licitante pode reivindicar toda a sua custódia."
+  },
+  "notes": {
+    "label": "Como funciona o leilão",
+    "sealed": {
+      "term": "Lances selados",
+      "body": "Você se compromete com um lance oculto e uma caução. Ninguém vê o preço nem o tamanho até a meia hora anterior à abertura regular, quando você o revela."
+    },
+    "uniform": {
+      "term": "Um preço para todos",
+      "body": "A rodada tem um único preço de compensação: o mais alto em que os lances iguais ou superiores levam toda a oferta. Cada lance vencedor paga esse preço, qualquer que fosse a sua oferta."
+    },
+    "floor": {
+      "term": "O piso",
+      "body": "Nenhum lance pode ficar abaixo do piso, 10% abaixo da borda inferior da banda selada antes da reabertura."
+    },
+    "backstop": {
+      "term": "O backstop",
+      "body": "O que os lances não levam, o backstop de gap compra ao preço de compensação, nunca acima da borda inferior da banda e dentro do seu limite de exposição."
+    },
+    "reveal": {
+      "term": "Revele o seu lance",
+      "body": "Um compromisso que você não revele antes da abertura regular perde parte da caução, pelo menos o valor da caução mínima."
+    }
+  },
+  "round": {
+    "title": "A rodada",
+    "caption": "A rodada de reabertura de cada ativo: o piso, os lotes e a oferta, o que foi comprometido e revelado, e o preço de compensação",
+    "none": "Ainda não há rodada para mostrar.",
+    "asset": "Ativo",
+    "floor": "Piso",
+    "fromSeal": "da banda selada",
+    "fromQuote": "da banda ao vivo",
+    "lots": "Lotes",
+    "supply": "Oferta",
+    "deposits": "Comprometido",
+    "bids": "Lances revelados",
+    "price": "Preço de compensação",
+    "proposed": "proposto",
+    "settled": "compensado",
+    "resultTitle": "O que as rodadas compensadas venderam",
+    "resultCaption": "De cada rodada compensada: o preço, o que os lances compraram, o que pagaram e o que o backstop levou",
+    "sold": "Vendido aos lances",
+    "paid": "Pago",
+    "taken": "Levado pelo backstop"
+  },
+  "bids": {
+    "title": "Lances revelados",
+    "none": "Nenhum lance foi revelado ainda.",
+    "summary": "{asset} · {count, plural, one {# lance} other {# lances}}",
+    "caption": "Os lances revelados de {asset}, do maior para o menor preço",
+    "price": "Preço",
+    "quantity": "Quantidade",
+    "escrow": "Custódia",
+    "bidder": "Licitante",
+    "you": "Você"
+  },
+  "bid": {
+    "title": "Dê um lance",
+    "asset": "Ativo",
+    "quantity": "Quantidade",
+    "price": "Preço em USD",
+    "deposit": "Depósito",
+    "assetLabel": "Ativo em que dar o lance",
+    "quantityLabel": "Quantidade a comprar",
+    "priceLabel": "Maior preço que você pagará, em USD por token",
+    "depositLabel": "Depósito, em USDG",
+    "floor": "Piso {floor}",
+    "floorUnset": "A rodada ainda não tem um preço de que tomar um piso, então o seu preço não pode ser conferido contra ele.",
+    "floorProjected": "A rodada ainda não abriu: o seu piso é projetado a partir da banda de que o tomará, e o primeiro compromisso o fixa.",
+    "escrow": "Depois de revelado, este lance mantém {escrow} USDG em custódia: o seu preço vezes a sua quantidade.",
+    "hides": "Um depósito acima da custódia esconde o tamanho do seu lance; o que não fica em custódia volta ao revelar.",
+    "balance": "Você tem {amount} USDG; a caução é de {bond} USDG.",
+    "flow": "Sua carteira primeiro assina uma mensagem gratuita que deriva o segredo do seu lance, pode pedir que você aprove o USDG e então compromete.",
+    "closed": "Os lances só são comprometidos antes de a revelação começar.",
+    "submit": "Comprometer lance",
+    "saved": "O segredo de cada lance é derivado da sua carteira; este navegador guarda o resto para revelá-lo."
+  },
+  "mine": {
+    "title": "Seus lances",
+    "none": "Você não tem lances no leilão.",
+    "caption": "Seus lances por rodada: o que cada um oferece, em que ponto está e o que pode fazer em seguida",
+    "round": "Abertura regular",
+    "asset": "Ativo",
+    "bid": "Lance",
+    "status": "Estado",
+    "next": "Próximo",
+    "offer": "{quantity} a {price}",
+    "reveal": "Revelar",
+    "claim": "Reivindicar",
+    "forfeit": "Confiscar",
+    "unsaved": "Revelado de outro navegador; aqui ainda pode ser reivindicado.",
+    "forfeitNote": "Um compromisso não revelado antes da abertura regular perde parte da caução, pelo menos o valor da caução mínima; o resto volta.",
+    "waitReveal": "A revelação abre meia hora antes da abertura regular.",
+    "waitClear": "A reivindicação abre quando a rodada é compensada.",
+    "state": {
+      "committed": "Comprometido",
+      "revealed": "Revelado",
+      "claimed": "Reivindicado",
+      "returned": "Devolvido"
+    }
+  },
+  "clear": {
+    "title": "Compensar a rodada",
+    "body": "Qualquer pessoa pode compensar uma rodada: ela vende cada lote aos lances ao preço de compensação e o backstop compra o resto. O contrato confere o preço com os lances revelados.",
+    "button": "Compensar {asset} a {price}",
+    "none": "Nenhum preço compensa {asset}: não há oferta para os seus lances."
+  }
+}

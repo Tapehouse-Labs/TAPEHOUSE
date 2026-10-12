@@ -41,5 +41,29 @@
     "revealing": "En revelación",
     "awaiting": "A la espera de la compensación",
     "cleared": "Compensada"
+  },
+  "record": {
+    "title": "Registro",
+    "intro": "Lo que el indexer guarda de las rondas de reapertura pasadas y de lo que pagó el backstop, cada una enlazada a su transacción.",
+    "none": "Ninguna ronda se ha compensado aún, y el backstop no ha pagado nada.",
+    "roundsTitle": "Rondas compensadas",
+    "roundsCaption": "Rondas de reapertura compensadas, las más recientes primero",
+    "open": "Apertura regular",
+    "asset": "Activo",
+    "price": "Precio de compensación",
+    "sold": "Vendido",
+    "paid": "Pagado",
+    "taken": "Tomó el backstop",
+    "backstopTitle": "Lo que pagó el backstop",
+    "backstopCaption": "Lo que el backstop cubrió y compró, por el cierre del que cuenta",
+    "closure": "Cierre",
+    "action": "Acción",
+    "amount": "USDG",
+    "covered": "Cubrió un faltante",
+    "bought": "Compró el remanente de la subasta",
+    "position": "Posición",
+    "cross": "Posiciones cruzadas",
+    "unfinal": "aún no es final",
+    "error": "No se pudo contactar al indexer."
   }
 }

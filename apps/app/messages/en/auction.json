@@ -1,0 +1,137 @@
+{
+  "problem": {
+    "belowFloor": "A bid below the round's floor is refused.",
+    "tooSmall": "A bid must be worth at least the minimum at the floor price.",
+    "belowBond": "The deposit must be at least the bond.",
+    "belowEscrow": "The deposit must cover what the bid escrows: its price times its quantity."
+  },
+  "phase": {
+    "salt": "Sign the secret of your bid in your wallet…",
+    "approve": "Approve USDG in your wallet…"
+  },
+  "page": {
+    "title": "Auction · the Monday reopening",
+    "intro": "Bid on the Stock Tokens of accounts that fell short over the weekend, in the auction that settles at the regular open on {chain}.",
+    "block": "Read at block {block}",
+    "connect": "Connect a wallet to bid. The auction's stage and every round below are read from the chain without one.",
+    "wrongNetwork": "Your wallet is on another network. Tapehouse runs on <b>{chain}</b>.",
+    "switch": "Switch to {chain}",
+    "absent": "The reopening auction is not deployed on this chain yet.",
+    "done": "Done. Every figure is read again from the chain."
+  },
+  "stage": {
+    "title": "Where the auction stands",
+    "idle": "No round is open. A round opens when a weekend or holiday closure is about to end.",
+    "committing": "Bids are being committed. The reveal begins on {reveal} UTC, half an hour before the regular open on {open} UTC.",
+    "revealing": "Bids are being revealed, until the regular open on {open} UTC. A commitment not revealed by then forfeits part of its deposit.",
+    "clearing": "The round awaits its clearing price, which anyone may submit until {closes} UTC. The regular open was on {open} UTC.",
+    "cleared": "The round cleared. The regular open was on {open} UTC; winning bidders may claim their tokens.",
+    "lapsed": "The clearing window closed without a price. The regular open was on {open} UTC; every bidder may claim its whole escrow back."
+  },
+  "notes": {
+    "label": "How the auction works",
+    "sealed": {
+      "term": "Sealed bids",
+      "body": "You commit to a hidden bid with a deposit. Nobody sees its price or size until the half hour before the regular open, when you reveal it."
+    },
+    "uniform": {
+      "term": "One price for all",
+      "body": "The round has a single clearing price: the highest price at which the bids at or above it take the whole supply. Every winning bid pays that price, whatever it offered."
+    },
+    "floor": {
+      "term": "The floor",
+      "body": "No bid may be below the floor, 10% under the low edge of the band sealed before the reopen."
+    },
+    "backstop": {
+      "term": "The backstop",
+      "body": "What the bids do not take, the gap backstop buys at the clearing price, never above the band's low edge and within its exposure limit."
+    },
+    "reveal": {
+      "term": "Reveal your bid",
+      "body": "A commitment you do not reveal before the regular open forfeits part of its deposit, at least the bond."
+    }
+  },
+  "round": {
+    "title": "The round",
+    "caption": "Each asset's reopening round: its floor, its lots and supply, what is committed and revealed, and the clearing price",
+    "none": "No round to show yet.",
+    "asset": "Asset",
+    "floor": "Floor",
+    "fromSeal": "from the sealed band",
+    "fromQuote": "from the live band",
+    "lots": "Lots",
+    "supply": "Supply",
+    "deposits": "Committed",
+    "bids": "Revealed bids",
+    "price": "Clearing price",
+    "proposed": "proposed",
+    "settled": "cleared",
+    "resultTitle": "What the cleared rounds sold",
+    "resultCaption": "For each cleared round: the price, what the bids bought, what they paid and what the backstop took",
+    "sold": "Sold to bids",
+    "paid": "Paid",
+    "taken": "Taken by the backstop"
+  },
+  "bids": {
+    "title": "Revealed bids",
+    "none": "No bid has been revealed yet.",
+    "summary": "{asset} · {count, plural, one {# bid} other {# bids}}",
+    "caption": "The revealed bids of {asset}, highest price first",
+    "price": "Price",
+    "quantity": "Quantity",
+    "escrow": "Escrow",
+    "bidder": "Bidder",
+    "you": "You"
+  },
+  "bid": {
+    "title": "Place a bid",
+    "asset": "Asset",
+    "quantity": "Quantity",
+    "price": "Price in USD",
+    "deposit": "Deposit",
+    "assetLabel": "Asset to bid on",
+    "quantityLabel": "Quantity to buy",
+    "priceLabel": "Highest price you will pay, in USD per token",
+    "depositLabel": "Deposit, in USDG",
+    "floor": "Floor {floor}",
+    "floorUnset": "The round has no price to take a floor from yet, so your price cannot be checked against it.",
+    "floorProjected": "The round has not opened: its floor is projected from the band it will take it from, and the first commitment fixes it.",
+    "escrow": "Once revealed, this bid escrows {escrow} USDG: its price times its quantity.",
+    "hides": "A deposit above the escrow hides the size of your bid; what is not escrowed comes back when you reveal.",
+    "balance": "You hold {amount} USDG; the bond is {bond} USDG.",
+    "flow": "Your wallet first signs a free message that derives the secret of your bid, may ask you to approve USDG, then commits.",
+    "closed": "Bids are committed only before the reveal begins.",
+    "submit": "Commit bid",
+    "saved": "The secret of each bid is derived from your wallet; this browser keeps the rest of it to reveal it."
+  },
+  "mine": {
+    "title": "Your bids",
+    "none": "You have no bids in the auction.",
+    "caption": "Your bids by round: what each one offers, where it stands and what it can do next",
+    "round": "Regular open",
+    "asset": "Asset",
+    "bid": "Bid",
+    "status": "Status",
+    "next": "Next",
+    "offer": "{quantity} at {price}",
+    "reveal": "Reveal",
+    "claim": "Claim",
+    "forfeit": "Forfeit",
+    "unsaved": "Revealed from another browser; it can still be claimed here.",
+    "forfeitNote": "A commitment not revealed before the regular open forfeits part of its deposit, at least the bond; the rest comes back.",
+    "waitReveal": "Reveal opens half an hour before the regular open.",
+    "waitClear": "Claim opens once the round is cleared.",
+    "state": {
+      "committed": "Committed",
+      "revealed": "Revealed",
+      "claimed": "Claimed",
+      "returned": "Returned"
+    }
+  },
+  "clear": {
+    "title": "Clear the round",
+    "body": "Anyone may clear a round: it sells each lot to the bids at the clearing price and the backstop buys the rest. The contract checks the price against the revealed bids.",
+    "button": "Clear {asset} at {price}",
+    "none": "No price clears {asset}: it has no supply for its bids."
+  }
+}

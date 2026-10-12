@@ -5,6 +5,7 @@
     "account": "Account",
     "earn": "Earn",
     "risk": "Risk",
+    "auction": "Auction",
     "simulator": "Simulator"
   },
   "faucet": "Get test USDG",

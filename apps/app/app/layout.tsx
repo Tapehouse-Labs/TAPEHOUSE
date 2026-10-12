@@ -33,7 +33,7 @@ export const viewport: Viewport = {
 const THEME = `(function(){try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`;
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const { deployments, rpcUrl, bundlerUrl, sponsorUrl } = await loadRegistry(process.env);
+  const { deployments, rpcUrl, bundlerUrl, sponsorUrl, indexerUrl } = await loadRegistry(process.env);
   const locale = await getLocale();
   return (
     <html
@@ -46,7 +46,13 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body>
         <NextIntlClientProvider>
-          <Providers deployments={deployments} rpcUrl={rpcUrl} bundlerUrl={bundlerUrl} sponsorUrl={sponsorUrl}>
+          <Providers
+            deployments={deployments}
+            rpcUrl={rpcUrl}
+            bundlerUrl={bundlerUrl}
+            sponsorUrl={sponsorUrl}
+            indexerUrl={indexerUrl}
+          >
             {children}
           </Providers>
         </NextIntlClientProvider>

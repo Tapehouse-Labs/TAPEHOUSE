@@ -6,7 +6,7 @@ import { useChains } from "wagmi";
 import { exposureName } from "@/lib/earn";
 import { useExplain, useFormat, useMsg } from "@/lib/i18n";
 import { exposureUsed, premiumWords, roundStatus, twapWords } from "@/lib/risk";
-import { useRiskState } from "@/lib/riskHook";
+import { useRecord, useRiskState } from "@/lib/riskHook";
 import type { RiskState } from "@/lib/riskRead";
 import { Bands } from "./Bands";
 
@@ -46,6 +46,7 @@ export function Risk() {
             <Reference bands={data.bands} />
             <Exposure state={data.backstop} />
             <Reopening auction={data.auction} />
+            <Record />
           </>
         )}
       </div>
@@ -148,7 +149,7 @@ function Reopening({ auction }: { auction: RiskState["auction"] }) {
   const f = useFormat();
   const rounds = auction?.rounds.filter((r) => r.round.sealMs > 0n) ?? [];
   return (
-    <section aria-labelledby="reopening-title" className="mt-10 pb-16">
+    <section aria-labelledby="reopening-title" className="mt-10">
       <h2 id="reopening-title" className="label">
         {t("title")}
       </h2>
@@ -186,6 +187,106 @@ function Reopening({ auction }: { auction: RiskState["auction"] }) {
             ))}
           </tbody>
         </table>
+      )}
+    </section>
+  );
+}
+
+function Record() {
+  const t = useTranslations("risk.record");
+  const f = useFormat();
+  const explain = useExplain();
+  const [chain] = useChains();
+  const record = useRecord();
+  const explorer = chain.blockExplorers?.default.url;
+  const link = (tx: string, finalized: boolean) => (
+    <>
+      {explorer ? (
+        <a href={`${explorer}/tx/${tx}`} target="_blank" rel="noreferrer" className="underline">
+          {f.shortAddress(tx)}
+        </a>
+      ) : (
+        f.shortAddress(tx)
+      )}
+      {!finalized && <span className="text-muted"> · {t("unfinal")}</span>}
+    </>
+  );
+  if (record.isPending && !record.isError && record.fetchStatus === "idle") return null;
+  return (
+    <section aria-labelledby="record-title" className="mt-10 pb-16">
+      <h2 id="record-title" className="label">
+        {t("title")}
+      </h2>
+      <p className="mt-4 max-w-[60ch] text-[15px] text-body">{t("intro")}</p>
+      {record.isError ? (
+        <p role="alert" className="mt-4 text-[14px] text-[var(--error)]">
+          {explain(record.error)}
+        </p>
+      ) : !record.data ? (
+        <span className="skeleton mt-4 block h-[18px] w-[18rem]" />
+      ) : record.data.rounds.length === 0 && record.data.actions.length === 0 ? (
+        <p className="mt-4 text-[15px] text-body">{t("none")}</p>
+      ) : (
+        <>
+          {record.data.rounds.length > 0 && (
+            <>
+              <h3 className="mt-6 text-[15px] font-semibold text-strong">{t("roundsTitle")}</h3>
+              <table className="ledger num">
+                <caption className="sr-only">{t("roundsCaption")}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t("open")}</th>
+                    <th scope="col">{t("asset")}</th>
+                    <th scope="col" className="r">{t("price")}</th>
+                    <th scope="col" className="r">{t("sold")}</th>
+                    <th scope="col" className="r">{t("paid")}</th>
+                    <th scope="col" className="r">{t("taken")}</th>
+                    <th scope="col">Tx</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {record.data.rounds.map((r) => (
+                    <tr key={`${r.tx}-${r.asset}`}>
+                      <th scope="row">{f.utc(new Date(Number(r.openMs)))}</th>
+                      <td>{r.asset}</td>
+                      <td className="r">{f.price(r.price)}</td>
+                      <td className="r">{f.tokens(r.sold)}</td>
+                      <td className="r">{f.usdg(r.paid)}</td>
+                      <td className="r">{f.tokens(r.taken)}</td>
+                      <td>{link(r.tx, r.finalized)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+          {record.data.actions.length > 0 && (
+            <>
+              <h3 className="mt-6 text-[15px] font-semibold text-strong">{t("backstopTitle")}</h3>
+              <table className="ledger num">
+                <caption className="sr-only">{t("backstopCaption")}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t("closure")}</th>
+                    <th scope="col">{t("action")}</th>
+                    <th scope="col" className="r">{t("amount")}</th>
+                    <th scope="col">Tx</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {record.data.actions.map((a) => (
+                    <tr key={`${a.tx}-${a.kind}-${a.position}`}>
+                      <th scope="row">{f.utc(new Date(Number(a.closesMs)))}</th>
+                      <td>{t(a.kind)}</td>
+                      <td className="r">{f.usdg(a.amount)}</td>
+                      <td>{link(a.tx, a.finalized)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </>
       )}
     </section>
   );
