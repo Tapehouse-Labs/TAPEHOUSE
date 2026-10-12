@@ -4,7 +4,7 @@
  * a link left empty is not rendered, so the footer never ships a dead end.
  */
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://tapehouse.xyz";
-export const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "#open-app";
+export const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.tapehouse.xyz";
 
 export const X_HANDLE = "tapehouseHQ";
 

@@ -10,8 +10,11 @@ const interTight = Inter_Tight({ variable: "--font-inter-tight", subsets: ["lati
 const splineMono = Spline_Sans_Mono({ variable: "--font-spline-mono", subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://app.tapehouse.xyz"),
   title: { default: "Tapehouse", template: "%s — Tapehouse" },
   description: "Portfolio margin for Stock Tokens.",
+  openGraph: { siteName: "Tapehouse", type: "website" },
+  twitter: { card: "summary_large_image" },
 };
 
 export const viewport: Viewport = {
