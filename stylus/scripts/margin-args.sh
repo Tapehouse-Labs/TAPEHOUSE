@@ -10,7 +10,8 @@
 # pair missing from it, or a value that is not a positive integer, is an error. Correlations are listed for
 # each pair (i, j), i < j, row by row. The market is the file's .market where the band prices it, and zero,
 # the equal-weighted portfolio, where it does not. Each asset's pool is the file's .uniswapV3 entry that
-# parameters.json's .pool names, and zero where the file has none; an asset missing from .pool is an error.
+# parameters.json's .pool names or, where the file has not that one, its only pool of that asset against USDG, and zero
+# where the file has none; an asset missing from .pool is an error.
 # Each asset's Stock Token, and USDG, WETH and the ETH/USD feed, are the file's .tokens.<asset>, .tokens.USDG,
 # .tokens.WETH and .chainlink.ETH_USD, zero where absent. The band is the file's .tapehouse.Band, zero where
 # absent, and the owner its .tapehouse.Owner.
@@ -46,7 +47,8 @@ for ((i = 0; i < ${#names[@]}; i++)); do
     "$parameters") || { echo "${parameters#"$root"/} has no two positive integer depths for ${names[i]}" >&2; exit 1; }
   pool=$(jq -er --arg key "${names[i]}" '.pool[$key] | strings' "$parameters") ||
     { echo "${parameters#"$root"/} has no pool for ${names[i]}" >&2; exit 1; }
-  pool=$(jq -r --arg name "$pool" --arg zero $zero_address '.uniswapV3[$name] // $zero' "$registry")
+  pool=$(jq -r --arg name "$pool" --arg prefix "${names[i]}_USDG_" --arg zero $zero_address \
+    '.uniswapV3 // {} | (.[$name] // ([to_entries[] | select(.key | startswith($prefix)) | .value] | if length == 1 then .[0] else $zero end))' "$registry")
   token=$(jq -r --arg name "${names[i]}" --arg zero $zero_address '.tokens[$name] // $zero' "$registry")
   symbol=$(cast format-bytes32-string "${names[i]}")
   assets+=",($symbol,$volatility_floor,$volatility,$gap_floor,$gap,$depths,$pool,$token)"

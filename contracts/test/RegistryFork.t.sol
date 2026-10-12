@@ -12,7 +12,7 @@ import {IV3SwapRouter} from "../src/interfaces/IUniswapV3.sol";
 
 contract RegistryForkTest is Test {
     uint256 internal constant ROBINHOOD_BLOCK = 69_922_505;
-    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 133_737_048;
+    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 133_745_312;
     uint256 internal constant ARBITRUM_BLOCK = 509_636_514;
     bytes32 internal constant BEACON_SLOT = 0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50;
     bytes4 internal constant STYLUS_ROOT_PREFIX = 0xeff00200;
@@ -247,13 +247,37 @@ contract RegistryForkTest is Test {
             for (uint256 j; j < end; ++j) {
                 symbol[j] = name[j];
             }
+            uint256 fee = vm.parseUint(_after(names[i], "_USDG_"));
             address token = vm.parseJsonAddress(json, string.concat(".tokens.", string(symbol)));
             assertEq(
-                factory.getPool(token, usdg, 3000),
+                // forge-lint: disable-next-line(unsafe-typecast)
+                factory.getPool(token, usdg, uint24(fee)),
                 vm.parseJsonAddress(json, string.concat(".uniswapV3.", names[i])),
                 names[i]
             );
         }
+    }
+
+    function _after(string memory text, string memory marker) internal pure returns (string memory) {
+        bytes memory t = bytes(text);
+        bytes memory m = bytes(marker);
+        for (uint256 i; i + m.length <= t.length; ++i) {
+            bool match_ = true;
+            for (uint256 j; j < m.length; ++j) {
+                if (t[i + j] != m[j]) {
+                    match_ = false;
+                    break;
+                }
+            }
+            if (match_) {
+                bytes memory rest = new bytes(t.length - i - m.length);
+                for (uint256 k; k < rest.length; ++k) {
+                    rest[k] = t[i + m.length + k];
+                }
+                return string(rest);
+            }
+        }
+        revert("no marker");
     }
 
     function _assertTokens(string memory json) internal view {

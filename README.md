@@ -138,17 +138,17 @@ Robinhood Chain testnet (46630). Each address links to its page on the [explorer
 | Contract | Address |
 |---|---|
 | Band (Stylus) | [`0xCAB25d6C9460BEE96997A1Df664b14daC2c49359`](https://explorer.testnet.chain.robinhood.com/address/0xCAB25d6C9460BEE96997A1Df664b14daC2c49359) |
-| Margin engine (Stylus) | [`0x3f8B7141121cC924d009412cf854A3FC055823DE`](https://explorer.testnet.chain.robinhood.com/address/0x3f8B7141121cC924d009412cf854A3FC055823DE) |
-| Margin accounts | [`0x0eA422C4a28b7544f3877197d0E47869136cdBd8`](https://explorer.testnet.chain.robinhood.com/address/0x0eA422C4a28b7544f3877197d0E47869136cdBd8) |
-| Supply vault | [`0x9b48CCD7d269Ef441507DDa76B20868ED740B12b`](https://explorer.testnet.chain.robinhood.com/address/0x9b48CCD7d269Ef441507DDa76B20868ED740B12b) |
-| Liquidator | [`0x2c3236242D4D1520E47543EaB43Efc5685233e70`](https://explorer.testnet.chain.robinhood.com/address/0x2c3236242D4D1520E47543EaB43Efc5685233e70) |
-| Gap backstop | [`0xef85945a16dA5Dd80fcC69AFD7DF61303E23d23E`](https://explorer.testnet.chain.robinhood.com/address/0xef85945a16dA5Dd80fcC69AFD7DF61303E23d23E) |
-| Reopening auction | [`0x3BD36AA37a5dD05Fae266Cb54865390C7b58C134`](https://explorer.testnet.chain.robinhood.com/address/0x3BD36AA37a5dD05Fae266Cb54865390C7b58C134) |
-| Stock lending, TSLA | [`0x9E35008FDEAba37393cAA3a3637611dd7f613148`](https://explorer.testnet.chain.robinhood.com/address/0x9E35008FDEAba37393cAA3a3637611dd7f613148) |
-| Stock lending, AMZN | [`0x5d3Bf3473E3f3A3Cc345Da17fB6b8267D93379DF`](https://explorer.testnet.chain.robinhood.com/address/0x5d3Bf3473E3f3A3Cc345Da17fB6b8267D93379DF) |
-| Short positions | [`0xD8e59Fb591A031212EC8d97cE9A2e2D07616A701`](https://explorer.testnet.chain.robinhood.com/address/0xD8e59Fb591A031212EC8d97cE9A2e2D07616A701) |
-| Basket `thPAIR` (TSLA and AMZN) | [`0xAe6766dd7FA97F83130939D66aB15c56A185362F`](https://explorer.testnet.chain.robinhood.com/address/0xAe6766dd7FA97F83130939D66aB15c56A185362F) |
-| Gap cover | [`0x5Ed2388461A35886d27Ba40e62de96c4cABC9960`](https://explorer.testnet.chain.robinhood.com/address/0x5Ed2388461A35886d27Ba40e62de96c4cABC9960) |
+| Margin engine (Stylus) | [`0x85cbe267eF0c5dEC5Fc2aFc0b439cc62caB94982`](https://explorer.testnet.chain.robinhood.com/address/0x85cbe267eF0c5dEC5Fc2aFc0b439cc62caB94982) |
+| Margin accounts | [`0x4594CF325603eBD1dac7B0f3ef8bCaA59660DBB7`](https://explorer.testnet.chain.robinhood.com/address/0x4594CF325603eBD1dac7B0f3ef8bCaA59660DBB7) |
+| Supply vault | [`0x1579c3DAc0B97bAD5be998fb4C1e9063466303c3`](https://explorer.testnet.chain.robinhood.com/address/0x1579c3DAc0B97bAD5be998fb4C1e9063466303c3) |
+| Liquidator | [`0xB0df45ca7626D390DF99a934F3e125C23A189cbb`](https://explorer.testnet.chain.robinhood.com/address/0xB0df45ca7626D390DF99a934F3e125C23A189cbb) |
+| Gap backstop | [`0x3604C18f302Cf6d6dDDCBB534cd132310B2bf7C4`](https://explorer.testnet.chain.robinhood.com/address/0x3604C18f302Cf6d6dDDCBB534cd132310B2bf7C4) |
+| Reopening auction | [`0x58F39a807ea6CFbeBCBd71995b1dA2E0608BF642`](https://explorer.testnet.chain.robinhood.com/address/0x58F39a807ea6CFbeBCBd71995b1dA2E0608BF642) |
+| Stock lending, TSLA | [`0xf281f0051bEC503F507d6b9Df10535e4787B610e`](https://explorer.testnet.chain.robinhood.com/address/0xf281f0051bEC503F507d6b9Df10535e4787B610e) |
+| Stock lending, AMZN | [`0x46acce332E1D390c3E4E43bE16665Dd005a09EB5`](https://explorer.testnet.chain.robinhood.com/address/0x46acce332E1D390c3E4E43bE16665Dd005a09EB5) |
+| Short positions | [`0x5d0eA334b512be35Bb6CE6949956c7E03589845B`](https://explorer.testnet.chain.robinhood.com/address/0x5d0eA334b512be35Bb6CE6949956c7E03589845B) |
+| Basket `thPAIR` (TSLA and AMZN) | [`0x7c51c996ad7B049D4A57Af9387c3Fee297E3d45F`](https://explorer.testnet.chain.robinhood.com/address/0x7c51c996ad7B049D4A57Af9387c3Fee297E3d45F) |
+| Gap cover | [`0x482434d135eeA48797c1d960DF0f3A01E434ad17`](https://explorer.testnet.chain.robinhood.com/address/0x482434d135eeA48797c1d960DF0f3A01E434ad17) |
 | Sponsor paymaster | [`0x3721b8136593BCC78787943664cF9404d12Ecbd2`](https://explorer.testnet.chain.robinhood.com/address/0x3721b8136593BCC78787943664cF9404d12Ecbd2) |
 | Wrapped TSLA (`wTSLA`) | [`0x588ecCac8c70cdE770b57BA9A192CfF8D636534e`](https://explorer.testnet.chain.robinhood.com/address/0x588ecCac8c70cdE770b57BA9A192CfF8D636534e) |
 | Wrapped AMZN (`wAMZN`) | [`0x04D3d2Bb86BbeE4b4AeD29474fB30D7b639Aa381`](https://explorer.testnet.chain.robinhood.com/address/0x04D3d2Bb86BbeE4b4AeD29474fB30D7b639Aa381) |
@@ -157,8 +157,8 @@ Robinhood Chain testnet (46630). Each address links to its page on the [explorer
 | Uniswap v3 factory | [`0x843788502e38cD2BeCf3B1A09f8CF30353f3a983`](https://explorer.testnet.chain.robinhood.com/address/0x843788502e38cD2BeCf3B1A09f8CF30353f3a983) |
 | Uniswap v3 swap router | [`0x0A8c14340c3f59aF1B1e2C834135e1477bae2C64`](https://explorer.testnet.chain.robinhood.com/address/0x0A8c14340c3f59aF1B1e2C834135e1477bae2C64) |
 | Uniswap v3 quoter | [`0x905a4ca58Fed98Bc21639DC651db2271F7E3B9e0`](https://explorer.testnet.chain.robinhood.com/address/0x905a4ca58Fed98Bc21639DC651db2271F7E3B9e0) |
-| wTSLA / USDG pool | [`0xF572Fa3cC8d71d9cd5c78FBCDB9B2Acd92d234Db`](https://explorer.testnet.chain.robinhood.com/address/0xF572Fa3cC8d71d9cd5c78FBCDB9B2Acd92d234Db) |
-| wAMZN / USDG pool | [`0xBC338DDbc6FD55da21c29ed8165DFaB9E3bB6c8A`](https://explorer.testnet.chain.robinhood.com/address/0xBC338DDbc6FD55da21c29ed8165DFaB9E3bB6c8A) |
+| wTSLA / USDG pool, 0.05% | [`0x3B5a8161d8A352b6C2cE2f358eE3413eDbdAdAfF`](https://explorer.testnet.chain.robinhood.com/address/0x3B5a8161d8A352b6C2cE2f358eE3413eDbdAdAfF) |
+| wAMZN / USDG pool, 0.05% | [`0x951f2226CfBcc7cEC0347a7be10a78082D3078D2`](https://explorer.testnet.chain.robinhood.com/address/0x951f2226CfBcc7cEC0347a7be10a78082D3078D2) |
 
 `deployments/<chainId>.json` lists every contract the repository uses on each chain, and fork tests check each entry against the chain.
 
@@ -170,7 +170,7 @@ The testnet has no Uniswap v3, so the repository deploys Uniswap's factory, a si
 
 The band and the margin engine on the testnet are second instances of the programs already active on the chain, deployed with `make clone-stylus`. Arbitrum paused new Stylus activations on 2 October 2026, so the programs the repository now holds, which read `tokenPaused` when a token has no `oraclePaused`, wait for activations to reopen; the wrapper makes the testnet run without them.
 
-Stock lending, short positions and the basket are deployed on the testnet and work on chain, at the small scale the pools' depth allows. The app offers deposits, loans and the supply vault; it does not offer them yet. The gap cover is deployed, and the testnet has no Chainlink feed to settle it on, so the band's Chainlink feeds are RedStone round feeds: each follows RedStone's regular-hours price of the asset, signed by the data service that signs the band's 24/7 feeds, checked on chain, and scaled by the Stock Token's multiplier as Robinhood Chain's Chainlink feeds are. The band and the cover read them as they read Arbitrum One's regular-hours Chainlink feeds, which they are written for. They are not independent of RedStone's signers as Chainlink's are, and on Robinhood Chain the band and the cover take Chainlink's. Cover is on sale from the last trading day before a weekend or holiday, so it opens on the testnet on Friday. Nothing arbitrages the testnet's pools, so their price drifts from the band's, and a short sells only within the band's low edge. The app is not served to embargoed countries and regions, by Vercel's geolocation (451), and sends nothing for an address on OFAC's sanctions list, taken from the Treasury's file; the issuer's blocks on a connected address are shown on connecting. The mainnet deployment follows the testnet's.
+Stock lending, short positions and the basket are deployed on the testnet and work on chain, at the small scale the pools' depth allows. The app offers deposits, loans and the supply vault; it does not offer them yet. The gap cover is deployed, and the testnet has no Chainlink feed to settle it on, so the band's Chainlink feeds are RedStone round feeds: each follows RedStone's regular-hours price of the asset, signed by the data service that signs the band's 24/7 feeds, checked on chain, and scaled by the Stock Token's multiplier as Robinhood Chain's Chainlink feeds are. The band and the cover read them as they read Arbitrum One's regular-hours Chainlink feeds, which they are written for. They are not independent of RedStone's signers as Chainlink's are, and on Robinhood Chain the band and the cover take Chainlink's. Cover is on sale from the last trading day before a weekend or holiday, so it opens on the testnet on Friday. The testnet's pools charge 0.05%: a short sells only at the band's low edge or above, which a band as narrow as 0.3% leaves no room for in a 0.3% pool. Nothing but the pools keeper arbitrages them, so their price follows the band's only as closely as it trades them back. The app is not served to embargoed countries and regions, by Vercel's geolocation (451), and sends nothing for an address on OFAC's sanctions list, taken from the Treasury's file; the issuer's blocks on a connected address are shown on connecting. The mainnet deployment follows the testnet's.
 
 ---
 

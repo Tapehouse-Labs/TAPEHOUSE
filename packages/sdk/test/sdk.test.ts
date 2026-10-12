@@ -165,7 +165,7 @@ describe('deployments', () => {
     expect(d.tapehouse).toEqual({ MarginAccounts: alice })
     expect(d.baskets).toEqual({ PAIR: bob })
     expect(robinhood.baskets).toEqual({})
-    expect(testnet.baskets).toEqual({ PAIR: '0xAe6766dd7FA97F83130939D66aB15c56A185362F' })
+    expect(testnet.baskets).toEqual({ PAIR: '0x7c51c996ad7B049D4A57Af9387c3Fee297E3d45F' })
     expect(() => parseDeployments({ chainId: 1, tapehouse: { Baskets: { PAIR: 1 } } })).toThrow(
       '.tapehouse.Baskets.PAIR is not an address.',
     )

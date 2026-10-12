@@ -7,7 +7,7 @@ import {StockTokenWrapper, IWrappedStock} from "../src/StockTokenWrapper.sol";
 contract StockTokenWrapperForkTest is Test {
     address internal constant TSLA = 0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E;
     address internal constant AMZN = 0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02;
-    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 133_737_048;
+    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 133_745_312;
 
     function test_WrapsTheTestnetStockTokens() public {
         vm.createSelectFork("robinhood-testnet", ROBINHOOD_TESTNET_BLOCK);
