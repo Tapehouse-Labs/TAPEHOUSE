@@ -19,11 +19,11 @@ export function Seal() {
   return (
     <span role="status" aria-label={s.label} data-state={s.state} className="seal num">
       <span aria-hidden="true">[ {s.state} ]</span>
-      {s.hours !== undefined && (
+      {s.eta !== undefined && (
         <>
           <span aria-hidden="true" className="text-muted">·</span>
           <span aria-hidden="true">
-            {s.state === "OPEN" ? "CLOSES" : "OPENS"} {s.hours}H
+            {s.state === "OPEN" ? "CLOSES" : "OPENS"} {s.eta}
           </span>
         </>
       )}
