@@ -192,3 +192,15 @@ func present(amounts ...*big.Int) error {
 	}
 	return nil
 }
+
+// Allowance reads how much of token spender may take from holder.
+func (c *Client) Allowance(opts *bind.CallOpts, token, holder, spender common.Address) (*big.Int, error) {
+	binding := stocktoken.NewStockToken()
+	return read(c, opts, target{address: token}, binding.UnpackAllowance)(binding.TryPackAllowance(holder, spender))
+}
+
+// Decimals reads an ERC-20 token's decimals.
+func (c *Client) Decimals(opts *bind.CallOpts, token common.Address) (uint8, error) {
+	binding := stocktoken.NewStockToken()
+	return read(c, opts, target{address: token}, binding.UnpackDecimals)(binding.TryPackDecimals())
+}

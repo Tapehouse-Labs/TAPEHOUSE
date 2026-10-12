@@ -21,7 +21,7 @@ SDK_BINDINGS := Aggregator:AggregatorV3Interface.sol/AggregatorV3Interface Band:
 	ShortPositions:ShortPositions.sol/ShortPositions SponsorPaymaster:SponsorPaymaster.sol/SponsorPaymaster \
 	StockLendingVault:StockLendingVault.sol/StockLendingVault \
 	StockToken:Interfaces.sol/IStockToken StockTokenRegistry:IStockToken.sol/IStockTokenRegistry \
-	SupplyVault:SupplyVault.sol/SupplyVault \
+	SupplyVault:SupplyVault.sol/SupplyVault SwapRouter:IUniswapV3.sol/IV3SwapRouter \
 	UniswapV3Pool:IUniswapV3Pool.sol/IUniswapV3Pool Usdg:IUSDG.sol/IUSDG Weth:IWETH.sol/IWETH
 SDK_GENERATED := crates/sdk/abi services/sdk/bindings packages/sdk/src/generated.ts
 SDK_PAYLOAD := stylus/contracts/band/testdata/nvda-24_7.hex

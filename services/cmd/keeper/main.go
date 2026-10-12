@@ -2,13 +2,14 @@
 
 // Command keeper runs Tapehouse's keepers on the chain of a registry: RedStone's prices, multiplier syncs, signed
 // halts, seals, the premium's closures, the shorts' marks, burns and dust, liquidations, the backstop, the reopening
-// auction, recalls and buy-ins, short liquidations, basket rebalances and the gap cover's settlement. It reads its
-// configuration from the environment: TAPEHOUSE_DEPLOYMENTS, TAPEHOUSE_RPC_URL, its key as TAPEHOUSE_KEEPER_KEYSTORE
-// and TAPEHOUSE_KEEPER_PASSWORD_FILE or TAPEHOUSE_KEEPER_KEY, and optionally TAPEHOUSE_RPC_FALLBACK_URLS,
-// TAPEHOUSE_RPC_RATE, TAPEHOUSE_INDEXER_URL, TAPEHOUSE_KEEPERS, the halt signer's TAPEHOUSE_HALT_KEYSTORE and
-// TAPEHOUSE_HALT_PASSWORD_FILE or TAPEHOUSE_HALT_KEY, TAPEHOUSE_HALTS_URL, TAPEHOUSE_KEEPER_BUY,
-// TAPEHOUSE_KEEPER_REBALANCE, REDSTONE_API_KEY and REDSTONE_BACKUP_API_KEY. A keystore's password is read only from
-// the file its *_PASSWORD_FILE names, never from the environment itself; the hex keys are for a dev node.
+// auction, recalls and buy-ins, short liquidations, basket rebalances, the gap cover's settlement and, where asked, the
+// pools' trades back to their bands. It reads its configuration from the environment: TAPEHOUSE_DEPLOYMENTS,
+// TAPEHOUSE_RPC_URL, its key as TAPEHOUSE_KEEPER_KEYSTORE and TAPEHOUSE_KEEPER_PASSWORD_FILE or TAPEHOUSE_KEEPER_KEY,
+// and optionally TAPEHOUSE_RPC_FALLBACK_URLS, TAPEHOUSE_RPC_RATE, TAPEHOUSE_INDEXER_URL, TAPEHOUSE_KEEPERS, the halt
+// signer's TAPEHOUSE_HALT_KEYSTORE and TAPEHOUSE_HALT_PASSWORD_FILE or TAPEHOUSE_HALT_KEY, TAPEHOUSE_HALTS_URL,
+// TAPEHOUSE_KEEPER_BUY, TAPEHOUSE_KEEPER_REBALANCE, TAPEHOUSE_KEEPER_ALIGN, REDSTONE_API_KEY and
+// REDSTONE_BACKUP_API_KEY. A keystore's password is read only from the file its *_PASSWORD_FILE names, never from the
+// environment itself; the hex keys are for a dev node.
 package main
 
 import (

@@ -55,6 +55,9 @@ type Config struct {
 	// Rebalance has the basket keeper rebalance from its own Stock Tokens even when the pools do not pay for the
 	// bands' width, the team paying it: TAPEHOUSE_KEEPER_REBALANCE=subsidise.
 	Rebalance bool
+	// Align has the pools keeper trade the registry's Uniswap v3 pools back to their bands from the keeper's own
+	// tokens, where no arbitrageur does: TAPEHOUSE_KEEPER_ALIGN=true.
+	Align bool
 }
 
 // ConfigFromEnv reads the configuration from the environment.
@@ -67,6 +70,7 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 		RPCRate:     20,
 		Buy:         getenv("TAPEHOUSE_KEEPER_BUY") == "true",
 		Rebalance:   getenv("TAPEHOUSE_KEEPER_REBALANCE") == "subsidise",
+		Align:       getenv("TAPEHOUSE_KEEPER_ALIGN") == "true",
 	}
 	if primary := getenv("TAPEHOUSE_RPC_URL"); primary != "" {
 		cfg.RPCURLs = append(cfg.RPCURLs, primary)
@@ -89,6 +93,9 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 	for _, name := range cfg.Keepers {
 		if _, ok := jobByName(name); !ok {
 			return cfg, fmt.Errorf("TAPEHOUSE_KEEPERS: no keeper %q; the keepers are %s", name, strings.Join(Names(), ", "))
+		}
+		if name == "pools" && !cfg.Align {
+			return cfg, errors.New("TAPEHOUSE_KEEPERS: the pools keeper trades from the keeper's own tokens, and needs TAPEHOUSE_KEEPER_ALIGN=true")
 		}
 	}
 	return cfg, nil
@@ -125,12 +132,16 @@ type Keeper struct {
 
 // New returns the keepers of cfg over chain, sending from key and signing halts with haltKey, which may be nil.
 func New(cfg Config, deployments *sdk.Deployments, chain Chain, key, haltKey *ecdsa.PrivateKey, log *slog.Logger) (*Keeper, error) {
-	if len(cfg.Keepers) == 0 {
+	defaulted := len(cfg.Keepers) == 0
+	if defaulted {
 		for _, j := range jobs {
 			if _, ok := deployments.Tapehouse[j.contract]; ok || (j.contract == "Baskets" && len(deployments.Baskets) > 0) {
 				cfg.Keepers = append(cfg.Keepers, j.name)
 			}
 		}
+	}
+	if defaulted && cfg.Align && deployments.UniswapV3["SwapRouter02"] != (common.Address{}) {
+		cfg.Keepers = append(cfg.Keepers, "pools")
 	}
 	for _, name := range cfg.Keepers {
 		if j, _ := jobByName(name); j.index && cfg.IndexerURL == "" {
@@ -170,7 +181,7 @@ func (k *Keeper) From() common.Address {
 }
 
 // job is one keeper: its name, how often it runs a pass, the registry's contract it keeps, and whether it reads the
-// index.
+// index. A job with no contract runs only where it is asked for.
 type job struct {
 	name     string
 	every    time.Duration
@@ -194,6 +205,7 @@ var jobs = []job{
 	{"shorts", 15 * time.Second, "ShortPositions", true, (*Keeper).shorts},
 	{"basket", 5 * time.Minute, "Baskets", false, (*Keeper).rebalance},
 	{"gapcover", 20 * time.Second, "GapCover", true, (*Keeper).gapCover},
+	{"pools", 60 * time.Second, "", false, (*Keeper).alignPools},
 }
 
 // Names are the keepers, in the order they first run.
