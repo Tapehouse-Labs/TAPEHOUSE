@@ -138,21 +138,26 @@ Robinhood Chain testnet (46630). Each address links to its page on the [explorer
 | Contract | Address |
 |---|---|
 | Band (Stylus) | [`0x01DA82A9c906d019514620A12ECa626cA5a71eDC`](https://explorer.testnet.chain.robinhood.com/address/0x01DA82A9c906d019514620A12ECa626cA5a71eDC) |
-| Margin engine (Stylus) | [`0x5bCBa966C2475838F932bf2210300640b6016684`](https://explorer.testnet.chain.robinhood.com/address/0x5bCBa966C2475838F932bf2210300640b6016684) |
-| Margin accounts | [`0x8e48C914BAa3fF8404113cD0A31D6Fc5CEA73279`](https://explorer.testnet.chain.robinhood.com/address/0x8e48C914BAa3fF8404113cD0A31D6Fc5CEA73279) |
-| Supply vault | [`0x34b6cF00fE70f8dC5d6Da185df8Aa9031Db4Bc3D`](https://explorer.testnet.chain.robinhood.com/address/0x34b6cF00fE70f8dC5d6Da185df8Aa9031Db4Bc3D) |
-| Liquidator | [`0x637bD28667d71d497d372159A03A9de9F76f15Bb`](https://explorer.testnet.chain.robinhood.com/address/0x637bD28667d71d497d372159A03A9de9F76f15Bb) |
-| Gap backstop | [`0x623791C146D59B3217b195A9cb6be47261ce8Cc5`](https://explorer.testnet.chain.robinhood.com/address/0x623791C146D59B3217b195A9cb6be47261ce8Cc5) |
-| Reopening auction | [`0xf0Ae417779aA297c2ab6D0faBBc864Fee7Df786f`](https://explorer.testnet.chain.robinhood.com/address/0xf0Ae417779aA297c2ab6D0faBBc864Fee7Df786f) |
+| Margin engine (Stylus) | [`0x1D8Bb664C471a5b265AfBE30C14DCD751e63A758`](https://explorer.testnet.chain.robinhood.com/address/0x1D8Bb664C471a5b265AfBE30C14DCD751e63A758) |
+| Margin accounts | [`0xe9fB385A36b0691941AA9846707ae0CB7CAe0aa2`](https://explorer.testnet.chain.robinhood.com/address/0xe9fB385A36b0691941AA9846707ae0CB7CAe0aa2) |
+| Supply vault | [`0xE9DCf4C8F888b077fD888C63869DC4736b17D9AE`](https://explorer.testnet.chain.robinhood.com/address/0xE9DCf4C8F888b077fD888C63869DC4736b17D9AE) |
+| Liquidator | [`0x34fe0a8039c74a30B69e13bd030F6807c854Ee66`](https://explorer.testnet.chain.robinhood.com/address/0x34fe0a8039c74a30B69e13bd030F6807c854Ee66) |
+| Gap backstop | [`0x36AbD9b8ca78A5Cc90DCA0805CcD752532cf20B3`](https://explorer.testnet.chain.robinhood.com/address/0x36AbD9b8ca78A5Cc90DCA0805CcD752532cf20B3) |
+| Reopening auction | [`0x34cCd0E78384b50f03d5551aF8f7eb095Bf77B5C`](https://explorer.testnet.chain.robinhood.com/address/0x34cCd0E78384b50f03d5551aF8f7eb095Bf77B5C) |
 | Sponsor paymaster | [`0x3721b8136593BCC78787943664cF9404d12Ecbd2`](https://explorer.testnet.chain.robinhood.com/address/0x3721b8136593BCC78787943664cF9404d12Ecbd2) |
 | Wrapped TSLA (`wTSLA`) | [`0x588ecCac8c70cdE770b57BA9A192CfF8D636534e`](https://explorer.testnet.chain.robinhood.com/address/0x588ecCac8c70cdE770b57BA9A192CfF8D636534e) |
 | Wrapped AMZN (`wAMZN`) | [`0x04D3d2Bb86BbeE4b4AeD29474fB30D7b639Aa381`](https://explorer.testnet.chain.robinhood.com/address/0x04D3d2Bb86BbeE4b4AeD29474fB30D7b639Aa381) |
+| Uniswap v3 factory | [`0x843788502e38cD2BeCf3B1A09f8CF30353f3a983`](https://explorer.testnet.chain.robinhood.com/address/0x843788502e38cD2BeCf3B1A09f8CF30353f3a983) |
+| wTSLA / USDG pool | [`0xF572Fa3cC8d71d9cd5c78FBCDB9B2Acd92d234Db`](https://explorer.testnet.chain.robinhood.com/address/0xF572Fa3cC8d71d9cd5c78FBCDB9B2Acd92d234Db) |
+| wAMZN / USDG pool | [`0xBC338DDbc6FD55da21c29ed8165DFaB9E3bB6c8A`](https://explorer.testnet.chain.robinhood.com/address/0xBC338DDbc6FD55da21c29ed8165DFaB9E3bB6c8A) |
 
 `deployments/<chainId>.json` lists every contract the repository uses on each chain, and fork tests check each entry against the chain.
 
 ### What is not live yet
 
 The testnet's Stock Tokens predate the `oraclePaused` view the band reads from a Stock Token, so the testnet's collateral is the wrapped token: `wTSLA` and `wAMZN` wrap Robinhood's testnet TSLA and AMZN one to one, forward their multiplier, pause and issuer registry, and add `oraclePaused`. The app wraps a deposit's Stock Token first, from the wallet. On Robinhood Chain the Stock Tokens are deposited as they are.
+
+The testnet has no Uniswap v3, so the repository deploys Uniswap's factory and a pool for each asset against USDG, seeded with the USDG the team holds. The margin engine reads each pool's depth, which is small, so the testnet's loans are small.
 
 The band and the margin engine on the testnet are second instances of the programs already active on the chain, deployed with `make clone-stylus`. Arbitrum paused new Stylus activations on 2 October 2026, so the programs the repository now holds, which read `tokenPaused` when a token has no `oraclePaused`, wait for activations to reopen; the wrapper makes the testnet run without them.
 

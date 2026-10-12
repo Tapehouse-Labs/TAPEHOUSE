@@ -69,6 +69,7 @@ make test
 | `make deploy-stylus CHAIN=<id> SIGNER='<flags>' [CONTRACT=margin]` | Deploys `band`, or the program `CONTRACT` names, reproducibly, configured from `deployments/<id>.json`, and prints the transaction and address |
 | `make clone-stylus CHAIN=<id> SOURCE=<address> SIGNER='--account <name> --password-file <file>' [CONTRACT=margin]` | Deploys a new instance of a program that is already active, with its own constructor arguments from `deployments/<id>.json`, through StylusDeployer, and prints the transaction and address. The instance runs the code `SOURCE` runs and needs no activation, so it works while a chain pauses new activations |
 | `make verify-stylus CHAIN=<id> TX=<hash> [CONTRACT=margin]` | Verifies a deployment of `band`, or of the program `CONTRACT` names, against the checked-out source |
+| `POOL_USDG=<units> make deploy-uniswap-pools CHAIN=<id> SIGNER='--account <name> --password-file <file>' [REGISTRY=<file>]` | On a chain without Uniswap v3, deploys its factory and, for each asset the band gives a Stock Token, a 0.3% pool against USDG at the band feed's price, seeded with `POOL_USDG` USDG and the Stock Token those ticks take, in the ticks 11% either side of the price, and records them in the registry. The margin engine reads a pool half an hour after it is created |
 | `make deploy-band-feeds CHAIN=<id> SIGNER='<flags>'` | Deploys a `BandFeed` for every launch asset the chain's band configures and prints each address |
 | `make verify-band-feeds CHAIN=<id>` | Verifies every feed in the registry's `.bandFeeds` on Sourcify |
 | `make simulate-supply-vault` | Simulates the supply vault's deployment on a pinned fork of Robinhood Chain |
@@ -466,6 +467,10 @@ Reads: `debt()`, `idle()`, `utilization()`, `borrowRate()`, `supplyRate()`, `bor
 ## Wrapped Stock Tokens
 
 `StockTokenWrapper` is an ERC-20 over a Stock Token, one to one: `depositFor` takes the Stock Token and mints the wrapper, `withdrawTo` burns it and returns the Stock Token, and the wrapper has a permit. It forwards the wrapped token's `uiMultiplier`, `newUIMultiplier`, `effectiveAt`, `paused` and `ACCESS_CONTROLLED_REGISTRY`, and answers `oraclePaused` with the wrapped token's `tokenPaused`, so a Stock Token that predates `oraclePaused` can be the band's and the accounts' token. The Robinhood Chain testnet's TSLA and AMZN are wrapped this way; `deployments/46630.json` lists the wrappers under `.tokens`. The app wraps the Stock Token a deposit is short of before it asks for the permit. `make clone-stylus` deploys the band and the margin engine over the wrappers while Arbitrum pauses new Stylus activations.
+
+### Uniswap v3 on a testnet
+
+`contracts/uniswap-testnet` is a Foundry project of its own, compiled as Uniswap v3-core is, with `UniswapV3Seeder`: Uniswap v3 takes liquidity through a callback an account cannot answer, so the seeder mints for the caller, who pays from an allowance. Its tests run against the factory and pools compiled from `lib/v3-core`. `make deploy-uniswap-pools` deploys the factory and the pools from it.
 
 ## The margin accounts
 

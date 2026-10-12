@@ -72,7 +72,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus clone-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
-	deploy-band-feeds verify-band-feeds simulate-supply-vault deploy-supply-vault verify-supply-vault \
+	deploy-uniswap-pools deploy-band-feeds verify-band-feeds simulate-supply-vault deploy-supply-vault verify-supply-vault \
 	deploy-margin-accounts verify-margin-accounts deploy-liquidator verify-liquidator deploy-gap-backstop verify-gap-backstop deploy-reopening-auction verify-reopening-auction deploy-stock-lending verify-stock-lending deploy-short-positions verify-short-positions deploy-morpho-oracles verify-morpho-oracles deploy-basket verify-baskets deploy-gap-cover verify-gap-cover deploy-sponsor-paymaster verify-sponsor-paymaster deploy-contracts-devnode test-contracts-devnode \
 	bundler bundler-stop sponsor sponsor-stop run-sponsor test-sponsorship-devnode lint-scripts lint-licenses
 
@@ -214,6 +214,7 @@ build-contracts: check-foundry submodules
 
 test-contracts: check-foundry submodules
 	cd contracts && forge test --gas-snapshot-emit false
+	cd contracts/uniswap-testnet && forge test
 
 lint-contracts: check-foundry check-slither submodules
 	cd contracts && forge fmt --check
@@ -317,6 +318,11 @@ clone-stylus: check-foundry
 		{ echo "Usage: make clone-stylus CHAIN=<4663|46630|42161|412346> SOURCE=<deployed instance> SIGNER='--account <name> --password-file <file>' [CONTRACT=<band|margin>] [REGISTRY=<file>]"; exit 1; }
 	@set -f; args=$$(stylus/scripts/$(CONTRACT)-args.sh $(or $(REGISTRY),deployments/$(CHAIN).json)) && \
 		stylus/scripts/clone-stylus.sh $(RPC_URL_$(CHAIN)) $(CONTRACT) $(SOURCE) $(SIGNER) -- $$args
+
+deploy-uniswap-pools: check-foundry
+	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
+		{ echo "Usage: POOL_USDG=<USDG units> make deploy-uniswap-pools CHAIN=<46630|412346> SIGNER='--account <name> --password-file <file>' [REGISTRY=<file>]"; exit 1; }
+	@contracts/script/deploy-uniswap-pools.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
 
 deploy-band-feeds: check-foundry submodules
 	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
