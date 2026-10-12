@@ -39,6 +39,16 @@ describe("seal", () => {
     expect(seal({ state: 1, boundaryMs: BigInt(now) - HOUR }, now)).toMatchObject({ hours: 0, eta: "<1M" });
   });
 
+  test("a boundary the band does not know yet has no countdown", () => {
+    expect(seal({ state: 2, boundaryMs: 0n }, now)).toEqual({
+      state: "OPEN",
+      hours: undefined,
+      eta: undefined,
+      label: "Market open",
+    });
+    expect(seal({ state: 1, boundaryMs: 0n }, now)).toMatchObject({ state: "CLOSED", eta: undefined, label: "Market closed" });
+  });
+
   test("an unknown session has no countdown", () => {
     expect(seal({ state: 0, boundaryMs: 0n }, now)).toEqual({
       state: "UNKNOWN",

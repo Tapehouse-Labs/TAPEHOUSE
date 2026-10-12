@@ -17,10 +17,15 @@ export type Seal = {
   label: string;
 };
 
-/** The session seal: the market's state and the time to the session's next boundary, in whole hours, or in minutes under an hour. */
+/** The session seal: the market's state and the time to the session's next boundary, in whole hours or, under an hour, minutes. A boundary of zero is not known, and has no countdown. */
 export function seal(session: { state: number; boundaryMs: bigint }, nowMs: number): Seal {
   if (session.state !== 1 && session.state !== 2) {
     return { state: "UNKNOWN", hours: undefined, eta: undefined, label: "Market session not known, every band degraded" };
+  }
+  if (session.boundaryMs === 0n) {
+    return session.state === 2
+      ? { state: "OPEN", hours: undefined, eta: undefined, label: "Market open" }
+      : { state: "CLOSED", hours: undefined, eta: undefined, label: "Market closed" };
   }
   const ahead = session.boundaryMs - BigInt(nowMs);
   const minutes = ahead > 0n ? Number(ahead / 60_000n) : 0;
