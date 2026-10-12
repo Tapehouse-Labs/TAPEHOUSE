@@ -82,6 +82,7 @@ pub struct Asset {
     multiplier_after: StorageU128,
     halt_issued_at: StorageU64,
     halt_until: StorageU64,
+    token_pause: StorageBool,
 }
 
 #[storage]
@@ -187,8 +188,11 @@ impl Band {
                     .token_terms(token, Change::default())
                     .filter(|(current, _, _)| *current != 0)
                     .ok_or(BandError::InvalidToken(InvalidToken { token }))?;
-                token::oracle_paused(self.vm(), token)
-                    .ok_or(BandError::InvalidToken(InvalidToken { token }))?;
+                if token::oracle_paused(self.vm(), token).is_none() {
+                    token::token_paused(self.vm(), token)
+                        .ok_or(BandError::InvalidToken(InvalidToken { token }))?;
+                    self.assets.setter(symbol).token_pause.set(true);
+                }
                 let now = self.vm().block_timestamp();
                 if let Some(change) =
                     multiplier::record(Change::default(), current, new, effective_at, now)
@@ -210,6 +214,13 @@ impl Band {
             asset.index_feed_id.get(),
             asset.token.get(),
         )
+    }
+
+    /// Whether the issuer's pause of `symbol`'s Stock Token is read from its `tokenPaused()` rather
+    /// than its `oraclePaused()`, which a token without the latter needs. Fixed at construction;
+    /// false for an asset without a token.
+    pub fn pause_source(&self, symbol: B256) -> bool {
+        self.assets.getter(symbol).token_pause.get()
     }
 
     /// The token's multiplier change as it affects the band now: its status (0 none, 1 scheduled,
@@ -597,7 +608,15 @@ impl Band {
 
     fn oracle_paused(&self, symbol: B256) -> bool {
         let token = self.assets.getter(symbol).token.get();
-        token != Address::ZERO && token::oracle_paused(self.vm(), token).unwrap_or(true)
+        if token == Address::ZERO {
+            return false;
+        }
+        let paused = if self.assets.getter(symbol).token_pause.get() {
+            token::token_paused(self.vm(), token)
+        } else {
+            token::oracle_paused(self.vm(), token)
+        };
+        paused.unwrap_or(true)
     }
 
     fn change_of(&self, symbol: B256) -> Change {
@@ -1893,6 +1912,119 @@ mod tests {
             result,
             Err(BandError::InvalidToken(InvalidToken { token: TOKEN }))
         );
+    }
+
+    const UI_MULTIPLIER_CALL: [u8; 4] = [0xa6, 0x0b, 0xf1, 0x3d];
+    const NEW_UI_MULTIPLIER_CALL: [u8; 4] = [0xdc, 0x76, 0x70, 0x07];
+    const EFFECTIVE_AT_CALL: [u8; 4] = [0x97, 0xa4, 0x06, 0x4f];
+    const ORACLE_PAUSED_CALL: [u8; 4] = [0x77, 0x06, 0xba, 0x52];
+    const TOKEN_PAUSED_CALL: [u8; 4] = [0x86, 0xc7, 0x5e, 0x74];
+
+    fn word(value: u64) -> Result<Vec<u8>, Vec<u8>> {
+        Ok(U256::from(value).to_be_bytes::<32>().to_vec())
+    }
+
+    fn mock_multiplier(vm: &TestVM) {
+        vm.set_block_timestamp(WED_3AM_S);
+        vm.mock_static_call(TOKEN, UI_MULTIPLIER_CALL.to_vec(), word(1));
+        vm.mock_static_call(TOKEN, NEW_UI_MULTIPLIER_CALL.to_vec(), word(1));
+        vm.mock_static_call(TOKEN, EFFECTIVE_AT_CALL.to_vec(), word(1));
+    }
+
+    fn construct_with_token(vm: &TestVM) -> (Band, Result<(), BandError>) {
+        let mut band = Band::from(vm);
+        let result = band.constructor(
+            vec![symbol("NVDA")],
+            vec![Address::ZERO],
+            vec![symbol("NVDA---24_7")],
+            vec![B256::ZERO],
+            vec![TOKEN],
+            HALT_SIGNER,
+            OWNER,
+            Address::ZERO,
+            false,
+        );
+        (band, result)
+    }
+
+    fn construct_legacy(vm: &TestVM) -> Band {
+        mock_multiplier(vm);
+        vm.mock_static_call(TOKEN, ORACLE_PAUSED_CALL.to_vec(), Err(vec![]));
+        vm.mock_static_call(TOKEN, TOKEN_PAUSED_CALL.to_vec(), word(1));
+        let (band, result) = construct_with_token(vm);
+        assert_eq!(result, Ok(()));
+        band
+    }
+
+    #[test]
+    fn a_token_with_an_oracle_pause_keeps_the_oracle_pause_source() {
+        let vm = TestVM::default();
+        mock_multiplier(&vm);
+        vm.mock_static_call(TOKEN, TOKEN_PAUSED_CALL.to_vec(), word(1));
+        vm.mock_static_call(TOKEN, ORACLE_PAUSED_CALL.to_vec(), word(1));
+        let (band, result) = construct_with_token(&vm);
+        assert_eq!(result, Ok(()));
+        assert!(!band.pause_source(symbol("NVDA")));
+        vm.mock_static_call(TOKEN, ORACLE_PAUSED_CALL.to_vec(), word(0));
+        assert!(!band.halt(symbol("NVDA")).3);
+        vm.mock_static_call(TOKEN, ORACLE_PAUSED_CALL.to_vec(), word(1));
+        assert!(band.halt(symbol("NVDA")).3);
+        vm.mock_static_call(TOKEN, ORACLE_PAUSED_CALL.to_vec(), Err(vec![]));
+        assert!(band.halt(symbol("NVDA")).3);
+    }
+
+    #[test]
+    fn a_token_without_an_oracle_pause_but_with_a_token_pause_is_accepted() {
+        let vm = TestVM::default();
+        let band = construct_legacy(&vm);
+        assert!(band.pause_source(symbol("NVDA")));
+        vm.mock_static_call(TOKEN, TOKEN_PAUSED_CALL.to_vec(), word(0));
+        assert!(!band.halt(symbol("NVDA")).3);
+    }
+
+    #[test]
+    fn a_paused_legacy_token_halts_its_asset() {
+        let vm = TestVM::default();
+        let band = construct_legacy(&vm);
+        vm.mock_static_call(TOKEN, TOKEN_PAUSED_CALL.to_vec(), word(1));
+        assert!(band.halt(symbol("NVDA")).3);
+    }
+
+    #[test]
+    fn a_legacy_token_whose_pause_cannot_be_read_halts_its_asset() {
+        let vm = TestVM::default();
+        let band = construct_legacy(&vm);
+        vm.mock_static_call(TOKEN, TOKEN_PAUSED_CALL.to_vec(), Err(vec![]));
+        assert!(band.halt(symbol("NVDA")).3);
+    }
+
+    #[test]
+    fn a_legacy_token_ignores_the_oracle_pause_at_runtime() {
+        let vm = TestVM::default();
+        let band = construct_legacy(&vm);
+        vm.mock_static_call(TOKEN, ORACLE_PAUSED_CALL.to_vec(), word(1));
+        vm.mock_static_call(TOKEN, TOKEN_PAUSED_CALL.to_vec(), word(0));
+        assert!(!band.halt(symbol("NVDA")).3);
+    }
+
+    #[test]
+    fn constructor_rejects_a_token_with_neither_pause() {
+        let vm = TestVM::default();
+        mock_multiplier(&vm);
+        vm.mock_static_call(TOKEN, ORACLE_PAUSED_CALL.to_vec(), Err(vec![]));
+        vm.mock_static_call(TOKEN, TOKEN_PAUSED_CALL.to_vec(), Err(vec![]));
+        let (_, result) = construct_with_token(&vm);
+        assert_eq!(
+            result,
+            Err(BandError::InvalidToken(InvalidToken { token: TOKEN }))
+        );
+    }
+
+    #[test]
+    fn an_asset_without_a_token_has_the_oracle_pause_source() {
+        let vm = TestVM::default();
+        let band = Band::from(&vm);
+        assert!(!band.pause_source(symbol("NVDA")));
     }
 
     #[test]

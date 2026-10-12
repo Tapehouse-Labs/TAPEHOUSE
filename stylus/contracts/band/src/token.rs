@@ -10,6 +10,7 @@ sol_interface! {
         function newUIMultiplier() external view returns (uint256);
         function effectiveAt() external view returns (uint256);
         function oraclePaused() external view returns (bool);
+        function tokenPaused() external view returns (bool);
     }
 }
 
@@ -38,4 +39,10 @@ pub fn oracle_paused(host: &impl Host, token: Address) -> Option<bool> {
     IStockToken::new(token)
         .oracle_paused(host, Call::new())
         .ok()
+}
+
+/// Whether the issuer has paused the token itself, for a token without `oraclePaused()`. `None` when
+/// the call fails.
+pub fn token_paused(host: &impl Host, token: Address) -> Option<bool> {
+    IStockToken::new(token).token_paused(host, Call::new()).ok()
 }
