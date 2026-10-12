@@ -2,6 +2,7 @@
 pragma solidity 0.8.37;
 
 import {Test} from "forge-std/Test.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {GapCover} from "../src/GapCover.sol";
 import {IMargin} from "../src/interfaces/IMargin.sol";
 import {IUSDG} from "../src/interfaces/IUSDG.sol";
@@ -298,7 +299,7 @@ contract GapCoverInvariantTest is Test {
         MarginDouble engine = new MarginDouble(symbols, address(band), address(0));
         engine.setWeekendGap("NVDA", 118_601);
         engine.setWeekendGap("SPY", 54_840);
-        cover = new GapCover(IMargin(address(engine)), IUSDG(address(usdg)));
+        cover = new GapCover(IMargin(address(engine)), IUSDG(address(usdg)), new AggregatorV3Interface[](0), false);
         handler = new GapCoverHandler(cover, usdg, band, nvda, spy);
         targetContract(address(handler));
     }

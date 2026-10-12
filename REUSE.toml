@@ -146,6 +146,7 @@ SPDX-FileComment = "CREATE2 salt and initcode of StylusDeployer (nitro-contracts
 [[annotations]]
 path = [
     "stylus/contracts/band/testdata/*.hex",
+    "contracts/test/data/redstone-prices.hex",
     "services/internal/redstone/testdata/*.hex",
     "services/internal/redstone/testdata/*.json",
 ]

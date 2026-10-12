@@ -11,6 +11,16 @@
         "name": "usdg_",
         "type": "address",
         "internalType": "contract IUSDG"
+      },
+      {
+        "name": "feeds_",
+        "type": "address[]",
+        "internalType": "contract AggregatorV3Interface[]"
+      },
+      {
+        "name": "regularHours_",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "nonpayable"
@@ -1971,6 +1981,11 @@
         "internalType": "uint80"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "LengthMismatch",
+    "inputs": []
   },
   {
     "type": "error",

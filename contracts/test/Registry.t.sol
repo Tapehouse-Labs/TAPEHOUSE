@@ -17,18 +17,29 @@ contract RegistryTest is Test {
             assertTrue(vm.contains(path, string.concat("/", chainId, ".json")), path);
             string[] memory groups = vm.parseJsonKeys(json, "$");
             for (uint256 g; g < groups.length; ++g) {
-                if (keccak256(bytes(groups[g])) == keccak256("chainId")) continue;
-                string memory group = string.concat(".", groups[g]);
-                string[] memory names = vm.parseJsonKeys(json, group);
-                for (uint256 n; n < names.length; ++n) {
-                    string memory key = string.concat(group, ".", names[n]);
-                    address entry = vm.parseJsonAddress(json, key);
-                    assertTrue(entry != address(0), key);
-                    assertEq(vm.parseJsonString(json, key), vm.toString(entry), key);
-                }
+                if (keccak256(bytes(groups[g])) != keccak256("chainId")) _check(json, string.concat(".", groups[g]));
             }
             ++checked;
         }
         assertGt(checked, 0, "no registry files");
+    }
+
+    function keysOf(string memory json, string memory key) external view returns (string[] memory) {
+        return vm.parseJsonKeys(json, key);
+    }
+
+    /// @dev Every address under `group`, however deep the groups nest, is not zero and written as its checksum.
+    function _check(string memory json, string memory group) internal view {
+        string[] memory names = this.keysOf(json, group);
+        for (uint256 n; n < names.length; ++n) {
+            string memory key = string.concat(group, ".", names[n]);
+            try this.keysOf(json, key) returns (string[] memory) {
+                _check(json, key);
+            } catch {
+                address entry = vm.parseJsonAddress(json, key);
+                assertTrue(entry != address(0), key);
+                assertEq(vm.parseJsonString(json, key), vm.toString(entry), key);
+            }
+        }
     }
 }

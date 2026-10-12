@@ -17,6 +17,7 @@ SDK_BINDINGS := Aggregator:AggregatorV3Interface.sol/AggregatorV3Interface Band:
 	BandFeed:BandFeed.sol/BandFeed Basket:Basket.sol/Basket GapBackstop:GapBackstop.sol/GapBackstop \
 	GapCover:GapCover.sol/GapCover Liquidator:Liquidator.sol/Liquidator Margin:IMarginParameters.sol/IMarginParameters \
 	MarginAccounts:MarginAccounts.sol/MarginAccounts MorphoBandOracle:MorphoBandOracle.sol/MorphoBandOracle \
+	RoundFeed:RedStoneRoundFeed.sol/RedStoneRoundFeed \
 	MorphoBlue:Interfaces.sol/IMorpho QuoterV2:IQuoterV2.sol/IQuoterV2 ReopeningAuction:ReopeningAuction.sol/ReopeningAuction \
 	ShortPositions:ShortPositions.sol/ShortPositions SponsorPaymaster:SponsorPaymaster.sol/SponsorPaymaster \
 	StockLendingVault:StockLendingVault.sol/StockLendingVault \
@@ -73,7 +74,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus clone-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
 	deploy-uniswap-pools deploy-band-feeds verify-band-feeds simulate-supply-vault deploy-supply-vault verify-supply-vault \
-	deploy-margin-accounts verify-margin-accounts deploy-liquidator verify-liquidator deploy-gap-backstop verify-gap-backstop deploy-reopening-auction verify-reopening-auction deploy-stock-lending verify-stock-lending deploy-short-positions verify-short-positions deploy-morpho-oracles verify-morpho-oracles deploy-basket verify-baskets deploy-gap-cover verify-gap-cover deploy-sponsor-paymaster verify-sponsor-paymaster deploy-contracts-devnode test-contracts-devnode \
+	deploy-margin-accounts verify-margin-accounts deploy-liquidator verify-liquidator deploy-gap-backstop verify-gap-backstop deploy-reopening-auction verify-reopening-auction deploy-stock-lending verify-stock-lending deploy-short-positions verify-short-positions deploy-morpho-oracles verify-morpho-oracles deploy-basket verify-baskets deploy-round-feeds deploy-gap-cover verify-gap-cover deploy-sponsor-paymaster verify-sponsor-paymaster deploy-contracts-devnode test-contracts-devnode \
 	bundler bundler-stop sponsor sponsor-stop run-sponsor test-sponsorship-devnode lint-scripts lint-licenses
 
 all: build
@@ -382,6 +383,11 @@ deploy-basket: check-foundry submodules
 	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
 		{ echo "Usage: BASKET=<key> NAME=<share name> SYMBOL=<share symbol> ASSETS=<asset>,... UNITS=<raw units per share>,... make deploy-basket CHAIN=<4663|412346> SIGNER='<forge wallet flags of the accounts' owner>' [REGISTRY=<file>]"; exit 1; }
 	@contracts/script/deploy-basket.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
+
+deploy-round-feeds: check-foundry submodules
+	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \
+		{ echo "Usage: ROUND_FEEDS=\"<asset> ...\" make deploy-round-feeds CHAIN=<46630|412346> SIGNER='<forge wallet flags>' [REGISTRY=<file>]"; exit 1; }
+	@contracts/script/deploy-round-feeds.sh $(RPC_URL_$(CHAIN)) $(or $(REGISTRY),deployments/$(CHAIN).json) $(SIGNER)
 
 deploy-gap-cover: check-foundry submodules
 	@test -n "$(RPC_URL_$(CHAIN))" && test -n "$(SIGNER)" || \

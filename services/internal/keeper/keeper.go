@@ -205,6 +205,7 @@ var jobs = []job{
 	{"shorts", 15 * time.Second, "ShortPositions", true, (*Keeper).shorts},
 	{"basket", 5 * time.Minute, "Baskets", false, (*Keeper).rebalance},
 	{"gapcover", 20 * time.Second, "GapCover", true, (*Keeper).gapCover},
+	{"rounds", 60 * time.Second, "GapCover", false, (*Keeper).writeRounds},
 	{"pools", 60 * time.Second, "", false, (*Keeper).alignPools},
 }
 

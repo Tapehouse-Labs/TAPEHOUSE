@@ -228,17 +228,34 @@ contract GapCover is ERC4626 {
     error NoCover(uint256 id);
     /// @notice The series of cover `id` has not settled.
     error NotSettled(uint256 id);
+    /// @notice The feeds do not match the engine's assets one to one.
+    error LengthMismatch();
 
     /// @param engine_ The margin engine, whose band and assets the cover takes.
     /// @param usdg_ USDG, which the writers deposit and the covers are paid in.
-    constructor(IMargin engine_, IUSDG usdg_) ERC20("Tapehouse Gap Cover", "thCOVER") ERC4626(usdg_) {
+    /// @param feeds_ The feed that settles each of the engine's assets, in the engine's order, for a chain where the
+    /// band names none, as one without Chainlink does: a zero entry leaves that asset to the band's feed, and none at
+    /// all leaves every asset to it.
+    /// @param regularHours_ Whether `feeds_` follow NYSE's regular hours. Unused without `feeds_`: the band's chain
+    /// configuration then says whether its own feeds do.
+    constructor(IMargin engine_, IUSDG usdg_, AggregatorV3Interface[] memory feeds_, bool regularHours_)
+        ERC20("Tapehouse Gap Cover", "thCOVER")
+        ERC4626(usdg_)
+    {
         engine = engine_;
         band = IBand(engine_.band());
         _usdg = usdg_;
+        bool bandRegularHours;
         // slither-disable-next-line unused-return
-        (, regularHours) = band.chainConfig(); // forge-lint: disable-line(unused-return)
+        (, bandRegularHours) = band.chainConfig(); // forge-lint: disable-line(unused-return)
+        regularHours = feeds_.length == 0 ? bandRegularHours : regularHours_;
         bytes32[] memory symbols = engine_.assets();
+        if (feeds_.length != 0 && feeds_.length != symbols.length) revert LengthMismatch();
         for (uint256 i; i < symbols.length; ++i) {
+            if (feeds_.length != 0 && address(feeds_[i]) != address(0)) {
+                _feeds[symbols[i]] = feeds_[i];
+                continue;
+            }
             // slither-disable-next-line unused-return,calls-loop
             (address chainlinkFeed,,,) = band.asset(symbols[i]); // forge-lint: disable-line(calls-loop, unused-return)
             _feeds[symbols[i]] = AggregatorV3Interface(chainlinkFeed);

@@ -1,0 +1,286 @@
+[
+  {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "dataFeedId_",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "description_",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "dataFeedId",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "decimals",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "description",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getRoundData",
+    "inputs": [
+      {
+        "name": "roundId",
+        "type": "uint80",
+        "internalType": "uint80"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint80",
+        "internalType": "uint80"
+      },
+      {
+        "name": "answer",
+        "type": "int256",
+        "internalType": "int256"
+      },
+      {
+        "name": "startedAt",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "updatedAt",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint80",
+        "internalType": "uint80"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "latestRoundData",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint80",
+        "internalType": "uint80"
+      },
+      {
+        "name": "",
+        "type": "int256",
+        "internalType": "int256"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint80",
+        "internalType": "uint80"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "update",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "roundId",
+        "type": "uint80",
+        "internalType": "uint80"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "version",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "AnswerUpdated",
+    "inputs": [
+      {
+        "name": "current",
+        "type": "int256",
+        "indexed": true,
+        "internalType": "int256"
+      },
+      {
+        "name": "roundId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "updatedAt",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "AnswerTooLarge",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InsufficientNumberOfUniqueSigners",
+    "inputs": [
+      {
+        "name": "received",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "required",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidPayload",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidSignature",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotNewer",
+    "inputs": [
+      {
+        "name": "timestamp",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "lastTimestamp",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "SignerNotAuthorised",
+    "inputs": [
+      {
+        "name": "signer",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "TimestampIsFromTheFuture",
+    "inputs": [
+      {
+        "name": "timestamp",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "blockTimestamp",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "TimestampIsTooOld",
+    "inputs": [
+      {
+        "name": "timestamp",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "blockTimestamp",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "TimestampsMustMatchAndBePositive",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ValueTooWide",
+    "inputs": [
+      {
+        "name": "bytesWide",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  }
+]

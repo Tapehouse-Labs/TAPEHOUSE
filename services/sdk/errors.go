@@ -22,6 +22,7 @@ import (
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/marginaccounts"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/morphobandoracle"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/reopeningauction"
+	"github.com/tapehouse/tapehouse/services/sdk/bindings/roundfeed"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/shortpositions"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocklendingvault"
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/stocktoken"
@@ -29,7 +30,7 @@ import (
 	"github.com/tapehouse/tapehouse/services/sdk/bindings/usdg"
 )
 
-// Revert is a call's revert, decoded: a custom error of Tapehouse's contracts, its margin engine, its baskets, the band, the Stock Tokens or USDG, or
+// Revert is a call's revert, decoded: a custom error of Tapehouse's contracts, its margin engine, its baskets, its round feeds, the band, the Stock Tokens or USDG, or
 // Solidity's Error(string) and Panic(uint256).
 type Revert struct {
 	Name string
@@ -57,6 +58,7 @@ func (r *Revert) Unwrap() error {
 var revertErrors = func() map[[4]byte]abi.Error {
 	errs := map[[4]byte]abi.Error{}
 	for _, metadata := range []*bind.MetaData{
+		&roundfeed.RoundFeedMetaData,
 		&shortpositions.ShortPositionsMetaData,
 		&margin.MarginMetaData,
 		&gapcover.GapCoverMetaData,

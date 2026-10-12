@@ -248,7 +248,7 @@ contract GapCoverForkTest is Test {
                 assets[i], uint32(vm.parseJsonUint(parameters, string.concat(".weekendGap.", symbols[i], ".initial")))
             );
         }
-        cover = new GapCover(IMargin(address(engine)), IUSDG(address(usdg)));
+        cover = new GapCover(IMargin(address(engine)), IUSDG(address(usdg)), new AggregatorV3Interface[](0), false);
         vm.startPrank(writer);
         usdg.approve(address(cover), 100_000 * USDG);
         cover.deposit(100_000 * USDG, writer);

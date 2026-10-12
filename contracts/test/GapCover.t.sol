@@ -5,6 +5,7 @@ import {Test, Vm} from "forge-std/Test.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {GapCover} from "../src/GapCover.sol";
 import {IMargin} from "../src/interfaces/IMargin.sol";
 import {IUSDG} from "../src/interfaces/IUSDG.sol";
@@ -64,7 +65,7 @@ contract GapCoverTest is Test {
         engine.setWeekendGap(NVDA, NVDA_GAP);
         engine.setWeekendGap(SPY, SPY_GAP);
         engine.setWeekendGap(TSLA, 135_345);
-        cover = new GapCover(IMargin(address(engine)), IUSDG(address(usdg)));
+        cover = new GapCover(IMargin(address(engine)), IUSDG(address(usdg)), new AggregatorV3Interface[](0), false);
         _deposit(writer, DEPOSIT);
         usdg.mint(buyer, 1_000_000 * USDG);
         vm.prank(buyer);
@@ -85,6 +86,22 @@ contract GapCoverTest is Test {
         assertEq(cover.held(), DEPOSIT);
         assertEq(cover.totalAssets(), DEPOSIT);
         assertEq(cover.capacity(), DEPOSIT);
+    }
+
+    function test_TheCoverTakesItsFeedsFromItsConstructorWhereTheBandNamesNone() public {
+        StubAggregator tslaFeed = new StubAggregator(8, 400e8, FRIDAY - 9 days, "TSLA / USD");
+        AggregatorV3Interface[] memory feeds = new AggregatorV3Interface[](3);
+        feeds[2] = AggregatorV3Interface(address(tslaFeed));
+        GapCover own = new GapCover(IMargin(address(engine)), IUSDG(address(usdg)), feeds, true);
+        assertEq(own.feed(NVDA), address(nvdaFeed), "a zero entry leaves the band's");
+        assertEq(own.feed(SPY), address(spyFeed));
+        assertEq(own.feed(TSLA), address(tslaFeed));
+        assertTrue(own.regularHours(), "the constructor says the feeds follow the regular hours");
+        assertFalse(cover.regularHours(), "without feeds the band says");
+
+        feeds = new AggregatorV3Interface[](2);
+        vm.expectRevert(GapCover.LengthMismatch.selector);
+        new GapCover(IMargin(address(engine)), IUSDG(address(usdg)), feeds, false);
     }
 
     function test_ThePremiumIsTheLayersExpectedPayoutUnderTheFittedTailWithItsLoading() public {
@@ -485,7 +502,8 @@ contract GapCoverTest is Test {
         band.setSession(BandDouble.Session(2, 1, 3, REGULAR_CLOSE_MS - 1 hours * 1000, revised));
         _assertSales(cover, CLOSE_MS, revised);
         band.setSequencer(makeAddr("sequencer"), true);
-        GapCover regular = new GapCover(IMargin(address(engine)), IUSDG(address(usdg)));
+        GapCover regular =
+            new GapCover(IMargin(address(engine)), IUSDG(address(usdg)), new AggregatorV3Interface[](0), false);
         _assertSales(regular, revised, revised - 4 hours * 1000);
         vm.warp(revised / 1000 - 1);
         _assertSales(cover, CLOSE_MS, revised);
@@ -786,7 +804,8 @@ contract GapCoverTest is Test {
         PhasedAggregator phased = new PhasedAggregator();
         phased.add(1, 600e8, FRIDAY - 9 days, FRIDAY - 9 days);
         band.setAsset(SPY, BandDouble.Asset(address(phased), bytes32(0), "USA500.Y---24_7", address(0)));
-        GapCover second = new GapCover(IMargin(address(engine)), IUSDG(address(usdg)));
+        GapCover second =
+            new GapCover(IMargin(address(engine)), IUSDG(address(usdg)), new AggregatorV3Interface[](0), false);
         _deposit(other, DEPOSIT, second);
         vm.prank(buyer);
         usdg.approve(address(second), type(uint256).max);
@@ -1216,7 +1235,8 @@ contract GapCoverTest is Test {
 
     function test_OnARegularHoursChainSalesEndAtTheRegularCloseAndTheReopeningIsTheRegularOpen() public {
         band.setSequencer(makeAddr("sequencer"), true);
-        GapCover regular = new GapCover(IMargin(address(engine)), IUSDG(address(usdg)));
+        GapCover regular =
+            new GapCover(IMargin(address(engine)), IUSDG(address(usdg)), new AggregatorV3Interface[](0), false);
         assertTrue(regular.regularHours());
         _deposit(other, DEPOSIT, regular);
         vm.prank(buyer);
@@ -1378,7 +1398,7 @@ contract GapCoverTest is Test {
 
     function _coverOver(address feed) internal returns (GapCover target) {
         band.setAsset(NVDA, BandDouble.Asset(feed, "NVDA---24_7", bytes32(0), address(0)));
-        target = new GapCover(IMargin(address(engine)), IUSDG(address(usdg)));
+        target = new GapCover(IMargin(address(engine)), IUSDG(address(usdg)), new AggregatorV3Interface[](0), false);
         band.setAsset(NVDA, BandDouble.Asset(address(nvdaFeed), "NVDA---24_7", bytes32(0), address(0)));
         vm.prank(buyer);
         usdg.approve(address(target), type(uint256).max);

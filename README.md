@@ -148,6 +148,9 @@ Robinhood Chain testnet (46630). Each address links to its page on the [explorer
 | Stock lending, AMZN | [`0xAC0c666928bEC48B2B4D256a0C79DA5C50277b6F`](https://explorer.testnet.chain.robinhood.com/address/0xAC0c666928bEC48B2B4D256a0C79DA5C50277b6F) |
 | Short positions | [`0x1577125897F2B94b4cf5C720aB66EF8767230028`](https://explorer.testnet.chain.robinhood.com/address/0x1577125897F2B94b4cf5C720aB66EF8767230028) |
 | Basket `thPAIR` (TSLA and AMZN) | [`0x9e6675e957d8b533F2BF216B25Aea838c5c51Fa9`](https://explorer.testnet.chain.robinhood.com/address/0x9e6675e957d8b533F2BF216B25Aea838c5c51Fa9) |
+| Gap cover | [`0xec864276B562f9702CFE8B36344D5aCdA49558dF`](https://explorer.testnet.chain.robinhood.com/address/0xec864276B562f9702CFE8B36344D5aCdA49558dF) |
+| TSLA round feed (RedStone) | [`0x518ccFF227DDB85E62aB42ECE39453b4E091fc7A`](https://explorer.testnet.chain.robinhood.com/address/0x518ccFF227DDB85E62aB42ECE39453b4E091fc7A) |
+| AMZN round feed (RedStone) | [`0x6d9826D902C14978896d994EAb18A90c5aaf9279`](https://explorer.testnet.chain.robinhood.com/address/0x6d9826D902C14978896d994EAb18A90c5aaf9279) |
 | Sponsor paymaster | [`0x3721b8136593BCC78787943664cF9404d12Ecbd2`](https://explorer.testnet.chain.robinhood.com/address/0x3721b8136593BCC78787943664cF9404d12Ecbd2) |
 | Wrapped TSLA (`wTSLA`) | [`0x588ecCac8c70cdE770b57BA9A192CfF8D636534e`](https://explorer.testnet.chain.robinhood.com/address/0x588ecCac8c70cdE770b57BA9A192CfF8D636534e) |
 | Wrapped AMZN (`wAMZN`) | [`0x04D3d2Bb86BbeE4b4AeD29474fB30D7b639Aa381`](https://explorer.testnet.chain.robinhood.com/address/0x04D3d2Bb86BbeE4b4AeD29474fB30D7b639Aa381) |
@@ -167,7 +170,7 @@ The testnet has no Uniswap v3, so the repository deploys Uniswap's factory, a si
 
 The band and the margin engine on the testnet are second instances of the programs already active on the chain, deployed with `make clone-stylus`. Arbitrum paused new Stylus activations on 2 October 2026, so the programs the repository now holds, which read `tokenPaused` when a token has no `oraclePaused`, wait for activations to reopen; the wrapper makes the testnet run without them.
 
-Stock lending, short positions and the basket are deployed on the testnet and work on chain, at the small scale the pools' depth allows. The app offers deposits, loans and the supply vault; it does not offer them yet. Gap cover is not deployed: it prices a weekend's gap against a Chainlink feed, and the testnet has none. Nothing arbitrages the testnet's pools, so their price drifts from the band's, and a short sells only within the band's low edge. Restricted-jurisdiction and sanctions screening are not implemented. The mainnet deployment follows the testnet's.
+Stock lending, short positions and the basket are deployed on the testnet and work on chain, at the small scale the pools' depth allows. The app offers deposits, loans and the supply vault; it does not offer them yet. The gap cover is deployed, and settles on RedStone round feeds, because the testnet has no Chainlink feed: they follow RedStone's regular-hours price, are signed by the same data service as the band's 24/7 feeds, and are checked on chain. Cover is on sale from the last trading day before a weekend or holiday, so it opens on the testnet on Friday. Nothing arbitrages the testnet's pools, so their price drifts from the band's, and a short sells only within the band's low edge. Restricted-jurisdiction and sanctions screening are not implemented. The mainnet deployment follows the testnet's.
 
 ---
 
