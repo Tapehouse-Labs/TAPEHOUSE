@@ -15,6 +15,7 @@ path = [
     ".nvmrc",
     "apps/app/messages/**/*.json",
     "apps/landing/messages/**/*.json",
+    "docs/backtest-*.json",
     "package.json",
     "pnpm-lock.yaml",
     "deployments/*.json",

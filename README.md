@@ -103,6 +103,7 @@ Test USDG comes from [Paxos' faucet](https://faucet.paxos.com/?network=robinhood
 | The deployed programs are the code in this repository | [Verification](#verification): rebuild a deployment and compare it byte for byte |
 | It runs on a public network | The [live app](https://app.tapehouse.xyz) and the [addresses below](#deployed-contracts) |
 | Every claim is tested | The CI badge above, and `make test` |
+| The weekend parameters come from history | [`docs/BACKTEST.md`](docs/BACKTEST.md): 890 closures since 2010, with where the model falls short |
 | It can be integrated | [SDKs](#services-and-sdks) in TypeScript, Rust and Go, and an MCP server for agents |
 
 ---

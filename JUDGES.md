@@ -60,7 +60,9 @@ make compare-margin CHAIN=46630
 
 On the testnet's two assets it compares 32 calls (the views, scenarios, the digest of every lattice size and the requirement at three horizons) and the Stylus program is 12.3× cheaper for the requirement and 13.5× for the 256-point scenario set. On the dev node the same suite gives 13.1× for three assets, 16.7× for six and up to 20.5× for the full launch set ([README](README.md#stylus-versus-solidity)); `make devnode deploy-stylus-devnode test-stylus-devnode gas-table` reproduces it. To call one yourself: `cast call $MARGIN "requirement(int256[],uint256[],uint64,bool)(uint256,uint8)" "[1000000000000000000,-500000000000000000]" "[37800000000,26000000000]" 172800 false`, once on the program (`0x85cbe267eF0c5dEC5Fc2aFc0b439cc62caB94982`) and once on the reference.
 
-**8. Run the tests.** `make test`. Fork tests need an archive RPC for each chain (`ROBINHOOD_RPC_URL`, `ROBINHOOD_TESTNET_RPC_URL`, `ARBITRUM_RPC_URL`; see the [reference](docs/REFERENCE.md#networks)).
+**8. Read the evidence behind the parameters.** [`docs/BACKTEST.md`](docs/BACKTEST.md) runs the band and the margin engine over all 890 weekends and holidays since 2010 and says what happened: the requirement in force covered every closure in 400 synthetic portfolios, and no portfolio lost more than its margin at the deployed 5× weekend cap. It also states where the model falls short, such as NVDA's pool depth and the band's hit rate on the reopening. `make backtest` repeats it.
+
+**9. Run the tests.** `make test`. Fork tests need an archive RPC for each chain (`ROBINHOOD_RPC_URL`, `ROBINHOOD_TESTNET_RPC_URL`, `ARBITRUM_RPC_URL`; see the [reference](docs/REFERENCE.md#networks)).
 
 ## What is live, what is tested, what is not
 

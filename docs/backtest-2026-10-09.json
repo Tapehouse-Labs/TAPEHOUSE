@@ -1,0 +1,2587 @@
+{
+  "history": {
+    "assets": [
+      "NVDA",
+      "TSLA",
+      "AAPL",
+      "MSFT",
+      "GOOGL",
+      "SPY"
+    ],
+    "from": "2010-06-29",
+    "to": "2026-10-09",
+    "sessions": 4096,
+    "closures": 890,
+    "launch": "2026-07-01",
+    "closuresSinceLaunch": 14
+  },
+  "coverage": {
+    "long": {
+      "portfolios": 200,
+      "bufferCoversClosed": 193,
+      "coveredAtWorst": 7,
+      "largestShortfall": 0.04446179542121011,
+      "ramp": [
+        0.9984719101123596,
+        1,
+        1
+      ]
+    },
+    "mixed": {
+      "portfolios": 200,
+      "bufferCoversClosed": 198,
+      "coveredAtWorst": 178,
+      "largestShortfall": 0.04063397341518846,
+      "ramp": [
+        0.9998539325842697,
+        1,
+        1
+      ]
+    }
+  },
+  "horizons": [
+    {
+      "asset": "NVDA",
+      "days": 1.852888256774614,
+      "variance": 0.3820520062596168
+    },
+    {
+      "asset": "TSLA",
+      "days": 1.3326978221374675,
+      "variance": 0.48377551328357704
+    },
+    {
+      "asset": "AAPL",
+      "days": 2.7025410157787673,
+      "variance": 0.5729259646268451
+    },
+    {
+      "asset": "MSFT",
+      "days": 1.7114224775124107,
+      "variance": 0.37485465872090057
+    },
+    {
+      "asset": "GOOGL",
+      "days": 1.3834682744099407,
+      "variance": 0.3634520412905148
+    },
+    {
+      "asset": "SPY",
+      "days": 2.6813262082305322,
+      "variance": 0.6128769668443699
+    }
+  ],
+  "leverage": {
+    "worst": [
+      {
+        "asset": "NVDA",
+        "move": -0.1473617772223661,
+        "date": "2019-01-28"
+      },
+      {
+        "asset": "TSLA",
+        "move": 0.16805665303710304,
+        "date": "2012-01-17"
+      },
+      {
+        "asset": "AAPL",
+        "move": -0.12958228855829246,
+        "date": "2020-03-16"
+      },
+      {
+        "asset": "MSFT",
+        "move": -0.11855456475979598,
+        "date": "2020-03-16"
+      },
+      {
+        "asset": "GOOGL",
+        "move": -0.1026623887883159,
+        "date": "2020-03-16"
+      },
+      {
+        "asset": "SPY",
+        "move": -0.10448527069918312,
+        "date": "2020-03-16"
+      }
+    ],
+    "cap": 4,
+    "deployedCap": 5,
+    "model": {
+      "long": {
+        "portfolios": 200,
+        "count": 193,
+        "closures": [
+          "2015-08-24",
+          "2020-03-09",
+          "2020-03-16",
+          "2024-08-05"
+        ]
+      },
+      "mixed": {
+        "portfolios": 200,
+        "count": 22,
+        "closures": [
+          "2020-03-09",
+          "2020-03-16",
+          "2024-08-05"
+        ]
+      }
+    },
+    "atCap": {
+      "long": {
+        "portfolios": 200,
+        "count": 0,
+        "closures": null
+      },
+      "mixed": {
+        "portfolios": 200,
+        "count": 0,
+        "closures": null
+      }
+    },
+    "atDeployedCap": {
+      "long": {
+        "portfolios": 200,
+        "count": 0,
+        "closures": null
+      },
+      "mixed": {
+        "portfolios": 200,
+        "count": 0,
+        "closures": null
+      }
+    },
+    "capacityModel": 0.9063173333333333,
+    "capacityCapped": 0.8,
+    "capacityLost": 0.11730695751642622,
+    "capacityAtCap": 0.75
+  },
+  "deleveraging": {
+    "long": 0.5315866666666667,
+    "mixed": 0.659306925998264,
+    "move": 0.05315866666666667
+  },
+  "march2020": {
+    "date": "2020-03-16",
+    "moves": {
+      "AAPL": -0.12958228855829246,
+      "GOOGL": -0.1026623887883159,
+      "MSFT": -0.11855456475979598,
+      "NVDA": -0.11804514605638783,
+      "SPY": -0.10448527069918312,
+      "TSLA": -0.14108524583745818
+    },
+    "binds": {
+      "long": 193,
+      "mixed": 22
+    },
+    "capacityScenario": 0.8809866554923125,
+    "capacityCap": 0.8,
+    "hedgeTaxScenario": 0,
+    "hedgeTaxCap": 0.1318613851996528
+  },
+  "capacity": {
+    "method": "Requirement across a closure as the margin accounts hold it (the larger of the buffered open and the closed requirement, at least gross over the weekend cap), before the liquidity add-on, for portfolios at 100,000 USD a weight, against Regulation T's 50%; a bad debt is a closure loss, from the last close to the next open, larger than the requirement.",
+    "model": 0.8,
+    "flat": 0.5,
+    "badDebtModel": 0,
+    "badDebtFlat": 0
+  },
+  "backstop": {
+    "debtCap": 100000,
+    "caps": [
+      {
+        "position": "NVDA",
+        "limit": 3561773,
+        "date": ""
+      },
+      {
+        "position": "TSLA",
+        "limit": 164067,
+        "date": ""
+      },
+      {
+        "position": "AAPL",
+        "limit": 169957,
+        "date": ""
+      },
+      {
+        "position": "MSFT",
+        "limit": 373481,
+        "date": ""
+      },
+      {
+        "position": "GOOGL",
+        "limit": 386624,
+        "date": ""
+      },
+      {
+        "position": "SPY",
+        "limit": 320861,
+        "date": ""
+      }
+    ],
+    "limits": [
+      {
+        "position": "cross",
+        "limit": 954,
+        "date": "2024-08-05"
+      },
+      {
+        "position": "NVDA",
+        "limit": 4079,
+        "date": "2019-01-28"
+      },
+      {
+        "position": "TSLA",
+        "limit": 4260,
+        "date": "2020-09-08"
+      },
+      {
+        "position": "AAPL",
+        "limit": 2079,
+        "date": "2020-03-16"
+      },
+      {
+        "position": "MSFT",
+        "limit": 838,
+        "date": "2020-03-16"
+      },
+      {
+        "position": "GOOGL",
+        "limit": 0,
+        "date": ""
+      },
+      {
+        "position": "SPY",
+        "limit": 0,
+        "date": ""
+      }
+    ],
+    "absorbed": 1635.3590461814601,
+    "closedYears": 5.071232876712329,
+    "premiumRateBps": 36
+  },
+  "liquidator": {
+    "blockSeconds": 0.102697,
+    "decays": [
+      {
+        "asset": "NVDA",
+        "volatility": 0.02857164838239659,
+        "openLvf": 0.00002775102629046723,
+        "openFill": 60.277517964313,
+        "closedLvf": 0.000023346881946611418,
+        "closedFill": 240.93389708144937
+      },
+      {
+        "asset": "TSLA",
+        "volatility": 0.03440543684651776,
+        "openLvf": 0.00003214998331279911,
+        "openFill": 60.32151016967458,
+        "closedLvf": 0.000027837683085208736,
+        "closedFill": 241.11353832173526
+      },
+      {
+        "asset": "AAPL",
+        "volatility": 0.017362602735661207,
+        "openLvf": 0.00001947071049782662,
+        "openFill": 60.19471089613776,
+        "closedLvf": 0.000014730019219957002,
+        "closedFill": 240.58920944786476
+      },
+      {
+        "asset": "MSFT",
+        "volatility": 0.016581298948862733,
+        "openLvf": 0.000018910062552183126,
+        "openFill": 60.18910420149411,
+        "closedLvf": 0.000014130596780541277,
+        "closedFill": 240.56523185828513
+      },
+      {
+        "asset": "GOOGL",
+        "volatility": 0.01774283664627711,
+        "openLvf": 0.000019744757860714454,
+        "openFill": 60.19745147723875,
+        "closedLvf": 0.000015021828547627021,
+        "closedFill": 240.600882168254
+      },
+      {
+        "asset": "SPY",
+        "volatility": 0.010572801824767393,
+        "openLvf": 0.000014767973271665516,
+        "openFill": 60.14768191367921,
+        "closedLvf": 0.0000095348335680306,
+        "closedFill": 240.38139697927795
+      }
+    ],
+    "openMinutesToFloor": 16.666666666666668,
+    "closedMinutesToFloor": 66.66666666666667,
+    "hourlyMove": 0.01
+  },
+  "reviews": {
+    "longestClosureHours": 96,
+    "longestClosure": "2012-10-31",
+    "closedShare": 0.3113017154389506,
+    "overflowAtMax": 2.6553041600833764,
+    "overflowAtCurve": 51.810812879675645,
+    "assets": [
+      {
+        "asset": "NVDA",
+        "aboveHaircut": 0.0033707865168539327,
+        "largestUp": 0.07534234866515299,
+        "restrictedDays": 4,
+        "buyIn": 137715.6
+      },
+      {
+        "asset": "TSLA",
+        "aboveHaircut": 0.02696629213483146,
+        "largestUp": 0.16805665303710304,
+        "restrictedDays": 23,
+        "buyIn": 16657.6
+      },
+      {
+        "asset": "AAPL",
+        "aboveHaircut": 0.0033707865168539327,
+        "largestUp": 0.06707059063319232,
+        "restrictedDays": 1,
+        "buyIn": 13678.4
+      },
+      {
+        "asset": "MSFT",
+        "aboveHaircut": 0,
+        "largestUp": 0.04218968710408988,
+        "restrictedDays": 1,
+        "buyIn": 14381.5
+      },
+      {
+        "asset": "GOOGL",
+        "aboveHaircut": 0.0011235955056179776,
+        "largestUp": 0.052627831470761555,
+        "restrictedDays": 0,
+        "buyIn": 35442.8
+      },
+      {
+        "asset": "SPY",
+        "aboveHaircut": 0,
+        "largestUp": 0.03943912543258721,
+        "restrictedDays": 0,
+        "buyIn": 87777.2
+      }
+    ]
+  },
+  "basket": {
+    "components": [
+      "NVDA",
+      "TSLA",
+      "AAPL",
+      "MSFT",
+      "GOOGL"
+    ],
+    "from": "2016-10-11",
+    "rebalances": 40,
+    "medianCost": 0.00029997354679594775,
+    "costPerYear": 0.0012923650014482185,
+    "medianDrift": 0.011966979576717898,
+    "largestDrift": 0.07694244262002134
+  },
+  "gapCover": {
+    "chain": {
+      "from": "2026-07-01",
+      "weekends": 14,
+      "raised": 0.6428571428571429,
+      "exceeded": {
+        "uniform": 0,
+        "volatile": 0,
+        "variance": 0,
+        "engineGap": 0
+      },
+      "calmRatio": 0.11663201201279837,
+      "calmExceed": {
+        "0.5": 0,
+        "0.75": 0,
+        "1": 0
+      }
+    },
+    "history": {
+      "from": "2010-06-29",
+      "weekends": 890,
+      "raised": 0.6125468164794008,
+      "exceeded": {
+        "uniform": 0.0016853932584269663,
+        "volatile": 0.00061835601857473,
+        "variance": 0.00016996664351075325,
+        "engineGap": 0.0009363295880149813
+      },
+      "calmRatio": 0.11600980075778755,
+      "calmExceed": {
+        "0.5": 0.014499758337361043,
+        "0.75": 0.007249879168680522,
+        "1": 0.0028999516674722086
+      }
+    }
+  },
+  "reopens": [
+    {
+      "chain": 4663,
+      "asset": "NVDA",
+      "date": "2026-07-06",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "NVDA",
+      "date": "2026-07-13",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "NVDA",
+      "date": "2026-07-20",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "NVDA",
+      "date": "2026-07-27",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "NVDA",
+      "date": "2026-08-03",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "NVDA",
+      "date": "2026-08-10",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "NVDA",
+      "date": "2026-08-17",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "NVDA",
+      "date": "2026-08-24",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "NVDA",
+      "date": "2026-08-31",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "NVDA",
+      "date": "2026-09-08",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "NVDA",
+      "date": "2026-09-14",
+      "evaluated": true,
+      "leadS": 3569,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 25.33199440339473,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "NVDA",
+      "date": "2026-09-21",
+      "evaluated": true,
+      "leadS": 3560,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 18.200484085977298,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "NVDA",
+      "date": "2026-09-28",
+      "evaluated": true,
+      "leadS": 3563,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 25.708468036615972,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "NVDA",
+      "date": "2026-10-05",
+      "evaluated": true,
+      "leadS": 3582,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 22.960052959198897,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "TSLA",
+      "date": "2026-07-06",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "TSLA",
+      "date": "2026-07-13",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "TSLA",
+      "date": "2026-07-20",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "TSLA",
+      "date": "2026-07-27",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "TSLA",
+      "date": "2026-08-03",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "TSLA",
+      "date": "2026-08-10",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "TSLA",
+      "date": "2026-08-17",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "TSLA",
+      "date": "2026-08-24",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "TSLA",
+      "date": "2026-08-31",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "TSLA",
+      "date": "2026-09-08",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "TSLA",
+      "date": "2026-09-14",
+      "evaluated": true,
+      "leadS": 3579,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 66.31035204345714,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "TSLA",
+      "date": "2026-09-21",
+      "evaluated": true,
+      "leadS": 3579,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 1.1574089814414545,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "TSLA",
+      "date": "2026-09-28",
+      "evaluated": true,
+      "leadS": 3571,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 3.8010274983379944,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "TSLA",
+      "date": "2026-10-05",
+      "evaluated": true,
+      "leadS": 3581,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 16.22625559316915,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "AAPL",
+      "date": "2026-07-06",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "AAPL",
+      "date": "2026-07-13",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "AAPL",
+      "date": "2026-07-20",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "AAPL",
+      "date": "2026-07-27",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "AAPL",
+      "date": "2026-08-03",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "AAPL",
+      "date": "2026-08-10",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "AAPL",
+      "date": "2026-08-17",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "AAPL",
+      "date": "2026-08-24",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "AAPL",
+      "date": "2026-08-31",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "AAPL",
+      "date": "2026-09-08",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "AAPL",
+      "date": "2026-09-14",
+      "evaluated": true,
+      "leadS": 3589,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 13.895601835876015,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "AAPL",
+      "date": "2026-09-21",
+      "evaluated": true,
+      "leadS": 3560,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 7.610009388370198,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "AAPL",
+      "date": "2026-09-28",
+      "evaluated": true,
+      "leadS": 3588,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 29.592685156125675,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "AAPL",
+      "date": "2026-10-05",
+      "evaluated": true,
+      "leadS": 3574,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 11.685918431917353,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "MSFT",
+      "date": "2026-07-06",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "MSFT",
+      "date": "2026-07-13",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "MSFT",
+      "date": "2026-07-20",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "MSFT",
+      "date": "2026-07-27",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "MSFT",
+      "date": "2026-08-03",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "MSFT",
+      "date": "2026-08-10",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "MSFT",
+      "date": "2026-08-17",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "MSFT",
+      "date": "2026-08-24",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "MSFT",
+      "date": "2026-08-31",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "MSFT",
+      "date": "2026-09-08",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "MSFT",
+      "date": "2026-09-14",
+      "evaluated": true,
+      "leadS": 3587,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 26.754832092912295,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "MSFT",
+      "date": "2026-09-21",
+      "evaluated": true,
+      "leadS": 3584,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 30.25034585177666,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "MSFT",
+      "date": "2026-09-28",
+      "evaluated": true,
+      "leadS": 3582,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 36.0765519619588,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "MSFT",
+      "date": "2026-10-05",
+      "evaluated": true,
+      "leadS": 3585,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 13.119688257953177,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "GOOGL",
+      "date": "2026-07-06",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "GOOGL",
+      "date": "2026-07-13",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "GOOGL",
+      "date": "2026-07-20",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "GOOGL",
+      "date": "2026-07-27",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "GOOGL",
+      "date": "2026-08-03",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "GOOGL",
+      "date": "2026-08-10",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "GOOGL",
+      "date": "2026-08-17",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "GOOGL",
+      "date": "2026-08-24",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "GOOGL",
+      "date": "2026-08-31",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "GOOGL",
+      "date": "2026-09-08",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "GOOGL",
+      "date": "2026-09-14",
+      "evaluated": true,
+      "leadS": 3582,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 10.584505935509192,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "GOOGL",
+      "date": "2026-09-21",
+      "evaluated": true,
+      "leadS": 3580,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 6.438469463881935,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "GOOGL",
+      "date": "2026-09-28",
+      "evaluated": true,
+      "leadS": 3591,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 13.533614638865377,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "GOOGL",
+      "date": "2026-10-05",
+      "evaluated": true,
+      "leadS": 3557,
+      "state": 2,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 14.661229311911939,
+      "inside": true
+    },
+    {
+      "chain": 4663,
+      "asset": "SPY",
+      "date": "2026-07-06",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "SPY",
+      "date": "2026-07-13",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "SPY",
+      "date": "2026-07-20",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "SPY",
+      "date": "2026-07-27",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "SPY",
+      "date": "2026-08-03",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "SPY",
+      "date": "2026-08-10",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "SPY",
+      "date": "2026-08-17",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "SPY",
+      "date": "2026-08-24",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "SPY",
+      "date": "2026-08-31",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "SPY",
+      "date": "2026-09-08",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "SPY",
+      "date": "2026-09-14",
+      "evaluated": true,
+      "leadS": 3566,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "SPY",
+      "date": "2026-09-21",
+      "evaluated": true,
+      "leadS": 3566,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "SPY",
+      "date": "2026-09-28",
+      "evaluated": true,
+      "leadS": 3580,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 4663,
+      "asset": "SPY",
+      "date": "2026-10-05",
+      "evaluated": true,
+      "leadS": 3560,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "NVDA",
+      "date": "2026-07-06",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "NVDA",
+      "date": "2026-07-13",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "NVDA",
+      "date": "2026-07-20",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "NVDA",
+      "date": "2026-07-27",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "NVDA",
+      "date": "2026-08-03",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "NVDA",
+      "date": "2026-08-10",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "NVDA",
+      "date": "2026-08-17",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "NVDA",
+      "date": "2026-08-24",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "NVDA",
+      "date": "2026-08-31",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "NVDA",
+      "date": "2026-09-08",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "NVDA",
+      "date": "2026-09-14",
+      "evaluated": true,
+      "leadS": 1785,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 79.25836084971105,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "NVDA",
+      "date": "2026-09-21",
+      "evaluated": true,
+      "leadS": 2210,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 5.745163118271446,
+      "inside": true
+    },
+    {
+      "chain": 42161,
+      "asset": "NVDA",
+      "date": "2026-09-28",
+      "evaluated": true,
+      "leadS": 1785,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 32.02605511767098,
+      "inside": true
+    },
+    {
+      "chain": 42161,
+      "asset": "NVDA",
+      "date": "2026-10-05",
+      "evaluated": true,
+      "leadS": 1783,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 18.672546785447608,
+      "inside": true
+    },
+    {
+      "chain": 42161,
+      "asset": "TSLA",
+      "date": "2026-07-06",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "TSLA",
+      "date": "2026-07-13",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "TSLA",
+      "date": "2026-07-20",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "TSLA",
+      "date": "2026-07-27",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "TSLA",
+      "date": "2026-08-03",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "TSLA",
+      "date": "2026-08-10",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "TSLA",
+      "date": "2026-08-17",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "TSLA",
+      "date": "2026-08-24",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "TSLA",
+      "date": "2026-08-31",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "TSLA",
+      "date": "2026-09-08",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "TSLA",
+      "date": "2026-09-14",
+      "evaluated": true,
+      "leadS": 1826,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 142.94155276057376,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "TSLA",
+      "date": "2026-09-21",
+      "evaluated": true,
+      "leadS": 1787,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 93.92297776990021,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "TSLA",
+      "date": "2026-09-28",
+      "evaluated": true,
+      "leadS": 1755,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 2.57310349994766,
+      "inside": true
+    },
+    {
+      "chain": 42161,
+      "asset": "TSLA",
+      "date": "2026-10-05",
+      "evaluated": true,
+      "leadS": 1782,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 56.07731560411611,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "AAPL",
+      "date": "2026-07-06",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "AAPL",
+      "date": "2026-07-13",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "AAPL",
+      "date": "2026-07-20",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "AAPL",
+      "date": "2026-07-27",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "AAPL",
+      "date": "2026-08-03",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "AAPL",
+      "date": "2026-08-10",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "AAPL",
+      "date": "2026-08-17",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "AAPL",
+      "date": "2026-08-24",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "AAPL",
+      "date": "2026-08-31",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "AAPL",
+      "date": "2026-09-08",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "AAPL",
+      "date": "2026-09-14",
+      "evaluated": true,
+      "leadS": 3273,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 40.19859304924323,
+      "inside": true
+    },
+    {
+      "chain": 42161,
+      "asset": "AAPL",
+      "date": "2026-09-21",
+      "evaluated": true,
+      "leadS": 1851,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 60.51417689649563,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "AAPL",
+      "date": "2026-09-28",
+      "evaluated": true,
+      "leadS": 2298,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 73.12452799157931,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "AAPL",
+      "date": "2026-10-05",
+      "evaluated": true,
+      "leadS": 1813,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 0.7956122079322281,
+      "inside": true
+    },
+    {
+      "chain": 42161,
+      "asset": "MSFT",
+      "date": "2026-07-06",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "MSFT",
+      "date": "2026-07-13",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "MSFT",
+      "date": "2026-07-20",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "MSFT",
+      "date": "2026-07-27",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "MSFT",
+      "date": "2026-08-03",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "MSFT",
+      "date": "2026-08-10",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "MSFT",
+      "date": "2026-08-17",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "MSFT",
+      "date": "2026-08-24",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "MSFT",
+      "date": "2026-08-31",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "MSFT",
+      "date": "2026-09-08",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "MSFT",
+      "date": "2026-09-14",
+      "evaluated": true,
+      "leadS": 1803,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 5.724385883865146,
+      "inside": true
+    },
+    {
+      "chain": 42161,
+      "asset": "MSFT",
+      "date": "2026-09-21",
+      "evaluated": true,
+      "leadS": 309,
+      "state": 3,
+      "live": 2,
+      "halfBps": 30,
+      "errorBps": 30.91946151199343,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "MSFT",
+      "date": "2026-09-28",
+      "evaluated": true,
+      "leadS": 1788,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 78.95137177651557,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "MSFT",
+      "date": "2026-10-05",
+      "evaluated": true,
+      "leadS": 1786,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 73.28421025318166,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "GOOGL",
+      "date": "2026-07-06",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "GOOGL",
+      "date": "2026-07-13",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "GOOGL",
+      "date": "2026-07-20",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "GOOGL",
+      "date": "2026-07-27",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "GOOGL",
+      "date": "2026-08-03",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "GOOGL",
+      "date": "2026-08-10",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "GOOGL",
+      "date": "2026-08-17",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "GOOGL",
+      "date": "2026-08-24",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "GOOGL",
+      "date": "2026-08-31",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "GOOGL",
+      "date": "2026-09-08",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "GOOGL",
+      "date": "2026-09-14",
+      "evaluated": true,
+      "leadS": 1832,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 13.526682472037033,
+      "inside": true
+    },
+    {
+      "chain": 42161,
+      "asset": "GOOGL",
+      "date": "2026-09-21",
+      "evaluated": true,
+      "leadS": 2003,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 37.9960500304466,
+      "inside": true
+    },
+    {
+      "chain": 42161,
+      "asset": "GOOGL",
+      "date": "2026-09-28",
+      "evaluated": true,
+      "leadS": 1801,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 2.087392991669823,
+      "inside": true
+    },
+    {
+      "chain": 42161,
+      "asset": "GOOGL",
+      "date": "2026-10-05",
+      "evaluated": true,
+      "leadS": 3295,
+      "state": 1,
+      "live": 1,
+      "halfBps": 55,
+      "errorBps": 85.22326665107549,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "SPY",
+      "date": "2026-07-06",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "SPY",
+      "date": "2026-07-13",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "SPY",
+      "date": "2026-07-20",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "SPY",
+      "date": "2026-07-27",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "SPY",
+      "date": "2026-08-03",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "SPY",
+      "date": "2026-08-10",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "SPY",
+      "date": "2026-08-17",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "SPY",
+      "date": "2026-08-24",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "SPY",
+      "date": "2026-08-31",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "SPY",
+      "date": "2026-09-08",
+      "evaluated": false,
+      "leadS": 0,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "SPY",
+      "date": "2026-09-14",
+      "evaluated": true,
+      "leadS": 1791,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "SPY",
+      "date": "2026-09-21",
+      "evaluated": true,
+      "leadS": 1783,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "SPY",
+      "date": "2026-09-28",
+      "evaluated": true,
+      "leadS": 2086,
+      "state": 0,
+      "live": 0,
+      "halfBps": 0,
+      "errorBps": 0,
+      "inside": false
+    },
+    {
+      "chain": 42161,
+      "asset": "SPY",
+      "date": "2026-10-05",
+      "evaluated": true,
+      "leadS": 1490,
+      "state": 1,
+      "live": 1,
+      "halfBps": 105,
+      "errorBps": 40.86113709593553,
+      "inside": true
+    }
+  ],
+  "impacts": [
+    {
+      "asset": "NVDA",
+      "block": 87026892,
+      "share": 0.1,
+      "engine": 0.0055000000000000005,
+      "pool": 0.009625119107815272
+    },
+    {
+      "asset": "NVDA",
+      "block": 87026892,
+      "share": 0.5,
+      "engine": 0.0255,
+      "pool": 0.32510271446215133
+    },
+    {
+      "asset": "NVDA",
+      "block": 87026892,
+      "share": 1,
+      "engine": 0.0505,
+      "pool": 0.6625508239803604
+    },
+    {
+      "asset": "TSLA",
+      "block": 87026892,
+      "share": 0.1,
+      "engine": 0.008,
+      "pool": 0.004981735815246302
+    },
+    {
+      "asset": "TSLA",
+      "block": 87026892,
+      "share": 0.5,
+      "engine": 0.028,
+      "pool": 0.015724252177464093
+    },
+    {
+      "asset": "TSLA",
+      "block": 87026892,
+      "share": 1,
+      "engine": 0.053,
+      "pool": 0.02940898351892829
+    },
+    {
+      "asset": "AAPL",
+      "block": 87026892,
+      "share": 0.1,
+      "engine": 0.0055000000000000005,
+      "pool": 0.0016133733238408166
+    },
+    {
+      "asset": "AAPL",
+      "block": 87026892,
+      "share": 0.5,
+      "engine": 0.0255,
+      "pool": 0.008634847120153943
+    },
+    {
+      "asset": "AAPL",
+      "block": 87026892,
+      "share": 1,
+      "engine": 0.0505,
+      "pool": 0.019026610313196857
+    },
+    {
+      "asset": "MSFT",
+      "block": 87026892,
+      "share": 0.1,
+      "engine": 0.008,
+      "pool": 0.01052837188504907
+    },
+    {
+      "asset": "MSFT",
+      "block": 87026892,
+      "share": 0.5,
+      "engine": 0.028,
+      "pool": 0.035862863256765465
+    },
+    {
+      "asset": "MSFT",
+      "block": 87026892,
+      "share": 1,
+      "engine": 0.053,
+      "pool": 0.06526461771549286
+    },
+    {
+      "asset": "GOOGL",
+      "block": 87026892,
+      "share": 0.1,
+      "engine": 0.0055000000000000005,
+      "pool": 0.0011004803633505311
+    },
+    {
+      "asset": "GOOGL",
+      "block": 87026892,
+      "share": 0.5,
+      "engine": 0.0255,
+      "pool": 0.009897300922860452
+    },
+    {
+      "asset": "GOOGL",
+      "block": 87026892,
+      "share": 1,
+      "engine": 0.0505,
+      "pool": 0.02057506844117285
+    },
+    {
+      "asset": "SPY",
+      "block": 87026892,
+      "share": 0.1,
+      "engine": 0.0055000000000000005,
+      "pool": 0.0028037081517499063
+    },
+    {
+      "asset": "SPY",
+      "block": 87026892,
+      "share": 0.5,
+      "engine": 0.0255,
+      "pool": 0.009726586337850396
+    },
+    {
+      "asset": "SPY",
+      "block": 87026892,
+      "share": 1,
+      "engine": 0.0505,
+      "pool": 0.01737568363451758
+    }
+  ],
+  "accuracy": [
+    {
+      "chain": 4663,
+      "reopens": 84,
+      "evaluated": 24,
+      "inside": 19,
+      "medianErrorBps": 15.443742452540544,
+      "medianLeadS": 3579.5
+    },
+    {
+      "chain": 42161,
+      "reopens": 84,
+      "evaluated": 24,
+      "inside": 11,
+      "medianErrorBps": 40.19859304924323,
+      "medianLeadS": 1796
+    }
+  ]
+}
