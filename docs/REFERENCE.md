@@ -718,6 +718,13 @@ TAPEHOUSE_CHAIN_ID=4663 pnpm --filter app build    # Robinhood Chain
 - **Simulator.** `/simulator` margins any portfolio of the engine's assets with the engine's own `currentRequirement` and `requirement`, at each band's low edge, with what it could borrow and its week; no wallet needed.
 - **On the dev node.** `make test-app-devnode` runs the app's end-to-end tests in a desktop and a phone browser, with `make bundler sponsor` running and the bands kept live by a keeper writing RedStone's packages (`make run-keeper CHAIN=412346 REGISTRY=stylus/target/devnode-registry.json`).
 - **Design.** The landing's tokens, from `packages/brand`, in light and dark; `apps/app/DESIGN.md` describes the system.
+
+### Compliance
+
+- **Where it is served.** `proxy.ts` answers a visitor from Cuba, Iran, North Korea or Syria, or from Crimea, Sevastopol, Donetsk or Luhansk, with `/restricted` and status 451, by the country and region headers Vercel sets from the visitor's address. Without the headers, as in development, nothing is restricted. Geolocation is best effort: it keeps out those who do not hide where they are, and no more.
+- **Who connects.** `lib/sanctions.json` holds the EVM addresses of the digital currency addresses of OFAC's Specially Designated Nationals list, from the Treasury's own file, which `pnpm run sanctions` rebuilds (`scripts/sanctions.mjs`); the file says when it was taken. A connected wallet or smart account on it is told so under the header, and `useSend`, through which every operation passes, sends nothing for it. The list is a copy: it is as current as its date.
+- **The issuer.** On connecting, the issuer's blocks on the wallet and the smart account are read with the account and shown for each Stock Token, before a deposit fails on chain.
+
 ## Reference bidder
 
 `services/cmd/bidder` bids in the reopening auction and buys in the liquidation auctions. It is built only on the Go SDK, go-ethereum and the indexer's public API, imports nothing else from this repository, and is meant to be copied out and run against the published SDK.

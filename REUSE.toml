@@ -154,3 +154,10 @@ precedence = "override"
 SPDX-FileCopyrightText = "RedStone Oracles"
 SPDX-License-Identifier = "LicenseRef-RedStone-Data"
 SPDX-FileComment = "Signed data packages from RedStone's public gateway, unmodified. REUSE requires a holder; the source is named, and no copyright is asserted over the data."
+
+[[annotations]]
+path = "apps/app/lib/sanctions.json"
+precedence = "override"
+SPDX-FileCopyrightText = "US Department of the Treasury, Office of Foreign Assets Control"
+SPDX-License-Identifier = "CC0-1.0"
+SPDX-FileComment = "Digital currency addresses of the Specially Designated Nationals list, a work of the US Government, extracted by apps/app/scripts/sanctions.mjs."

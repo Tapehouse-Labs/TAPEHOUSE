@@ -30,6 +30,7 @@ import {
 import { useConnection, usePublicClient, useWalletClient } from "wagmi";
 import { useDeployments } from "@/app/providers";
 import { readAccount } from "./accountRead";
+import { isSanctioned } from "./compliance";
 import { describeRevert } from "./errors";
 import { REFRESH_MS, useSettled } from "./hooks";
 import { asCall, type Call, direct, type Intent, shortfall, smartAccountPlan, vaultAddress } from "./intent";
@@ -158,6 +159,9 @@ export function useSend() {
     mutationFn: async (request: Intent | (() => Promise<Intent>)) => {
       const intent = typeof request === "function" ? await request() : request;
       if (!client || !wallet || !account || !owner) throw new Error("Connect your wallet first.");
+      if (isSanctioned(owner) || isSanctioned(account)) {
+        throw new Error("This address is on OFAC's sanctions list, so Tapehouse sends nothing for it.");
+      }
       const sender = { deployments, client, wallet, account, owner, bundler: smart.bundler, phase: setPhase };
       await wrapStock(sender, intent);
       if (smart.enabled) await sendFromSmartAccount(sender, intent);
