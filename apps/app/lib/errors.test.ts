@@ -55,6 +55,9 @@ describe("explain", () => {
     expect(say("TooManyRecalls", ["0x4e56444100000000000000000000000000000000000000000000000000000000"])).toBe(
       "The position already has 3 NVDA recalls open, the most an owner may.",
     );
+    expect(say("AssetRecovering", ["0x4e56444100000000000000000000000000000000000000000000000000000000", 1_790_001_800n])).toBe(
+      "NVDA's band was halted or had a multiplier change pending less than half an hour ago, so nothing new can be borrowed or withdrawn against it until 21 Sept, 14:43 UTC.",
+    );
     expect(say("BasketFrozen", ["0x152c42eda481651B6053f7f59bf617046c960EAB"])).toBe(
       "A basket the position holds is frozen: it backs no new loan or withdrawal until it moves again.",
     );

@@ -9,6 +9,7 @@
     "BasketFrozen": "Uma cesta que a posição possui está congelada: ela não sustenta nenhum novo empréstimo ou retirada até voltar a se mover.",
     "AssetFrozen": "{asset} está congelado pelo seu cofre de empréstimo ou pelo emissor: a posição não toma emprestado nem retira enquanto tiver dívida.",
     "AssetHalted": "{asset} está suspenso: não sustenta nada até a negociação ser retomada.",
+    "AssetRecovering": "A banda de {asset} esteve suspensa ou com uma mudança de multiplicador pendente há menos de meia hora, então nada novo pode ser tomado emprestado nem sacado contra ele até {until} UTC.",
     "OutOfReachOfAsset": "O cofre de empréstimo de {asset} pode devolver {returned} dos {asked} pedidos agora; resgate o restante.",
     "OutOfReach": "O cofre de empréstimo pode devolver {returned} dos {asked} pedidos agora.",
     "RecallTooSmall": "Um resgate deve enfileirar pelo menos um centésimo de token; este enfileiraria {amount}.",

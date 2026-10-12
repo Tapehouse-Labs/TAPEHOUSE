@@ -175,8 +175,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/brand
       '@tapehouse/sdk':
-        specifier: 0.1.3
-        version: 0.1.3(viem@2.57.2(typescript@5.9.3)(zod@4.6.5))
+        specifier: 0.1.4
+        version: 0.1.4(viem@2.57.2(typescript@5.9.3)(zod@4.6.5))
       next:
         specifier: 16.3.5
         version: 16.3.5(@babel/core@7.29.7(supports-color@7.2.0))(@playwright/test@1.63.0)(@types/node@20.19.43)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -1297,8 +1297,8 @@ packages:
     peerDependencies:
       react: ^18 || ^19
 
-  '@tapehouse/sdk@0.1.3':
-    resolution: {integrity: sha512-RZFsntt24/Swrhn138e5E1uH1+paovEjhWoERk+5m3qS0fbxOwkm2VShj2GtvpxR5bD30gGDxiuRig+Jo605sw==}
+  '@tapehouse/sdk@0.1.4':
+    resolution: {integrity: sha512-+Qm7Qke3vnnjvyxSW9weCNNFtorKju5CNJcTodN4WoQvku3OoSn8eJ++Q3eZoP3xlmC1BGB45FSbTxFir66edw==}
     peerDependencies:
       viem: ^2.57.2
 
@@ -4116,7 +4116,7 @@ snapshots:
       '@tanstack/query-core': 5.104.1
       react: 19.2.8
 
-  '@tapehouse/sdk@0.1.3(viem@2.57.2(typescript@5.9.3)(zod@4.6.5))':
+  '@tapehouse/sdk@0.1.4(viem@2.57.2(typescript@5.9.3)(zod@4.6.5))':
     dependencies:
       viem: 2.57.2(typescript@5.9.3)(zod@4.6.5)
 

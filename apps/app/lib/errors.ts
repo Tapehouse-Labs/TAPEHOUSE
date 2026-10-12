@@ -22,6 +22,8 @@ const WORDS: Record<string, (f: Formatters, args: readonly unknown[]) => Msg> = 
   BasketFrozen: () => msg("errors.revert.BasketFrozen"),
   AssetFrozen: (_, [symbol]) => msg("errors.revert.AssetFrozen", { asset: asset(symbol) }),
   AssetHalted: (_, [symbol]) => msg("errors.revert.AssetHalted", { asset: asset(symbol) }),
+  AssetRecovering: (f, [symbol, until]) =>
+    msg("errors.revert.AssetRecovering", { asset: asset(symbol), until: f.utc(new Date(Number(until) * 1000)) }),
   OutOfReach: (f, args) =>
     args.length === 3
       ? msg("errors.revert.OutOfReachOfAsset", {

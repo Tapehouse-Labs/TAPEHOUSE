@@ -9,6 +9,7 @@
     "BasketFrozen": "A basket the position holds is frozen: it backs no new loan or withdrawal until it moves again.",
     "AssetFrozen": "{asset} is frozen by its lending vault or its issuer: the position borrows nothing and withdraws nothing while in debt.",
     "AssetHalted": "{asset} is halted: it backs nothing until trading resumes.",
+    "AssetRecovering": "{asset}'s band was halted or had a multiplier change pending less than half an hour ago, so nothing new can be borrowed or withdrawn against it until {until} UTC.",
     "OutOfReachOfAsset": "The {asset} lending vault can return {returned} of the {asked} asked now; recall the rest.",
     "OutOfReach": "The lending vault can return {returned} of the {asked} asked now.",
     "RecallTooSmall": "A recall must queue at least a hundredth of a token; this one would queue {amount}.",
