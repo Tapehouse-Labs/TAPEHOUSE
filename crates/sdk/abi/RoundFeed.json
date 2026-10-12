@@ -11,6 +11,11 @@
         "name": "description_",
         "type": "string",
         "internalType": "string"
+      },
+      {
+        "name": "stockToken_",
+        "type": "address",
+        "internalType": "contract IMultiplier"
       }
     ],
     "stateMutability": "nonpayable"
@@ -122,6 +127,19 @@
         "name": "",
         "type": "uint80",
         "internalType": "uint80"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "stockToken",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IMultiplier"
       }
     ],
     "stateMutability": "view"

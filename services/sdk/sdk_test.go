@@ -1222,3 +1222,14 @@ func TestAnAuctionIsReadWithItsStartAndWhetherTheMarketWasClosed(t *testing.T) {
 		t.Fatalf("%+v, %v", got, err)
 	}
 }
+
+func TestTheRegistrySaysWhetherItsChainlinkFeedsFollowTheRegularHours(t *testing.T) {
+	on, err := sdk.ParseDeployments([]byte(`{"chainId":46630,"chainlinkRegularHours":true}`))
+	if err != nil || !on.ChainlinkRegularHours {
+		t.Fatalf("a registry that says so: %+v, %v", on, err)
+	}
+	off, err := sdk.ParseDeployments([]byte(`{"chainId":46630}`))
+	if err != nil || off.ChainlinkRegularHours {
+		t.Fatalf("a registry that does not: %+v, %v", off, err)
+	}
+}

@@ -20,6 +20,8 @@ pub struct Deployments {
     pub chain_id: u64,
     /// `.tokens`: USDG, WETH and the Stock Tokens.
     pub tokens: BTreeMap<String, Address>,
+    /// `.chainlinkRegularHours`: whether the Chainlink feeds follow NYSE's regular hours, where the registry says so.
+    pub chainlink_regular_hours: bool,
     /// `.chainlink`: the Chainlink feeds, which price the token or the share as the chain does.
     pub chainlink: BTreeMap<String, Address>,
     /// `.bandFeeds`: each asset's `BandFeed`.
@@ -89,6 +91,7 @@ impl Deployments {
             .unwrap_or(Value::Null);
         Ok(Self {
             chain_id,
+            chainlink_regular_hours: registry["chainlinkRegularHours"].as_bool().unwrap_or(false),
             tokens: addresses(&registry["tokens"], ".tokens")?,
             chainlink: addresses(&registry["chainlink"], ".chainlink")?,
             band_feeds: addresses(&registry["bandFeeds"], ".bandFeeds")?,

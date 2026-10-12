@@ -17,7 +17,10 @@ contract RegistryTest is Test {
             assertTrue(vm.contains(path, string.concat("/", chainId, ".json")), path);
             string[] memory groups = vm.parseJsonKeys(json, "$");
             for (uint256 g; g < groups.length; ++g) {
-                if (keccak256(bytes(groups[g])) != keccak256("chainId")) _check(json, string.concat(".", groups[g]));
+                bytes32 group = keccak256(bytes(groups[g]));
+                if (group != keccak256("chainId") && group != keccak256("chainlinkRegularHours")) {
+                    _check(json, string.concat(".", groups[g]));
+                }
             }
             ++checked;
         }

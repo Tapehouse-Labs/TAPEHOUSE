@@ -21,19 +21,22 @@ var Cross [32]byte
 
 // Deployments is a chain's address registry, deployments/<chainId>.json.
 type Deployments struct {
-	ChainID            uint64
-	Tokens             map[string]common.Address
-	Chainlink          map[string]common.Address
-	ChainlinkSequencer map[string]common.Address
-	BandFeeds          map[string]common.Address
-	Tapehouse          map[string]common.Address
-	StockLending       map[string]common.Address
-	Baskets            map[string]common.Address
-	UniswapV3          map[string]common.Address
-	Morpho             map[string]common.Address
-	MorphoMarkets      map[string]common.Hash
-	MorphoOracles      map[string]common.Address
-	ERC4337            map[string]common.Address
+	ChainID uint64
+	// ChainlinkRegularHours is whether the registry's Chainlink feeds follow NYSE's regular hours, as Arbitrum One's
+	// and a RedStone round feed's do, when it says so: .chainlinkRegularHours.
+	ChainlinkRegularHours bool
+	Tokens                map[string]common.Address
+	Chainlink             map[string]common.Address
+	ChainlinkSequencer    map[string]common.Address
+	BandFeeds             map[string]common.Address
+	Tapehouse             map[string]common.Address
+	StockLending          map[string]common.Address
+	Baskets               map[string]common.Address
+	UniswapV3             map[string]common.Address
+	Morpho                map[string]common.Address
+	MorphoMarkets         map[string]common.Hash
+	MorphoOracles         map[string]common.Address
+	ERC4337               map[string]common.Address
 }
 
 // TokenPriceFeed is a Chainlink feed that prices the Stock Token, as Robinhood Chain's do.
@@ -55,6 +58,7 @@ func LoadDeployments(path string) (*Deployments, error) {
 func ParseDeployments(data []byte) (*Deployments, error) {
 	var registry struct {
 		ChainID       uint64                     `json:"chainId"`
+		RegularHours  bool                       `json:"chainlinkRegularHours"`
 		Tokens        map[string]string          `json:"tokens"`
 		Chainlink     map[string]string          `json:"chainlink"`
 		Sequencer     map[string]string          `json:"chainlinkSequencer"`
@@ -71,7 +75,7 @@ func ParseDeployments(data []byte) (*Deployments, error) {
 	if registry.ChainID == 0 {
 		return nil, fmt.Errorf("the registry has no chainId")
 	}
-	d := &Deployments{ChainID: registry.ChainID}
+	d := &Deployments{ChainID: registry.ChainID, ChainlinkRegularHours: registry.RegularHours}
 	var err error
 	for _, group := range []struct {
 		into *map[string]common.Address

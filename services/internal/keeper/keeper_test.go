@@ -135,9 +135,14 @@ func TestTheKeepersRunAreThoseWhoseContractsTheRegistryNames(t *testing.T) {
 		t.Fatalf("index keepers without the index: %v, %v", k, err)
 	}
 	if k = w.keeper(Config{}); !slices.Equal(k.Keepers(), []string{"prices", "multiplier", "halt", "seal", "premium",
-		"mark", "sync", "liquidation", "backstop", "reopening", "recall", "shorts", "gapcover", "rounds"}) {
+		"mark", "sync", "liquidation", "backstop", "reopening", "recall", "shorts", "gapcover"}) {
 		t.Fatalf("every keeper: %v", k.Keepers())
 	}
+	w.deployments.ChainlinkRegularHours = true
+	if k = w.keeper(Config{}); !slices.Contains(k.Keepers(), "rounds") {
+		t.Fatalf("a registry whose Chainlink feeds follow the regular hours has the rounds keeper: %v", k.Keepers())
+	}
+	w.deployments.ChainlinkRegularHours = false
 	if err := k.Pass(context.Background(), "basket"); err != nil {
 		t.Fatalf("a basket pass with no basket: %v", err)
 	}

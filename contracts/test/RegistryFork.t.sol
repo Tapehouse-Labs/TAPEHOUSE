@@ -12,7 +12,7 @@ import {IV3SwapRouter} from "../src/interfaces/IUniswapV3.sol";
 
 contract RegistryForkTest is Test {
     uint256 internal constant ROBINHOOD_BLOCK = 69_922_505;
-    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 133_722_838;
+    uint256 internal constant ROBINHOOD_TESTNET_BLOCK = 133_737_048;
     uint256 internal constant ARBITRUM_BLOCK = 509_636_514;
     bytes32 internal constant BEACON_SLOT = 0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50;
     bytes4 internal constant STYLUS_ROOT_PREFIX = 0xeff00200;
@@ -205,16 +205,32 @@ contract RegistryForkTest is Test {
         address cover = vm.parseJsonAddress(json, ".tapehouse.GapCover");
         (bool ok, bytes memory engine) = cover.staticcall(abi.encodeWithSignature("engine()"));
         assertTrue(ok && abi.decode(engine, (address)) == margin, "tapehouse.GapCover engine");
-        string[] memory assets = vm.parseJsonKeys(json, ".roundFeeds");
-        for (uint256 i; i < assets.length; ++i) {
-            address feed = vm.parseJsonAddress(json, string.concat(".roundFeeds.", assets[i]));
-            bytes32 symbol = bytes32(bytes(assets[i]));
+        bytes memory regular;
+        (ok, regular) = cover.staticcall(abi.encodeWithSignature("regularHours()"));
+        assertTrue(
+            ok && abi.decode(regular, (bool)) == vm.parseJsonBool(json, ".chainlinkRegularHours"), "regular hours"
+        );
+        string[] memory names = vm.parseJsonKeys(json, ".chainlink");
+        for (uint256 i; i < names.length; ++i) {
+            address feed = vm.parseJsonAddress(json, string.concat(".chainlink.", names[i]));
+            bytes memory name = bytes(names[i]);
+            bytes memory asset = new bytes(name.length - 4);
+            for (uint256 j; j < asset.length; ++j) {
+                asset[j] = name[j];
+            }
+            bytes32 symbol = bytes32(asset);
             bytes memory settles;
             (ok, settles) = cover.staticcall(abi.encodeWithSignature("feed(bytes32)", symbol));
-            assertTrue(ok && abi.decode(settles, (address)) == feed, assets[i]);
+            assertTrue(ok && abi.decode(settles, (address)) == feed, names[i]);
             bytes memory id;
             (ok, id) = feed.staticcall(abi.encodeWithSignature("dataFeedId()"));
-            assertTrue(ok && abi.decode(id, (bytes32)) == symbol, assets[i]);
+            assertTrue(ok && abi.decode(id, (bytes32)) == symbol, names[i]);
+            (, bytes memory token) = feed.staticcall(abi.encodeWithSignature("stockToken()"));
+            assertEq(
+                abi.decode(token, (address)),
+                vm.parseJsonAddress(json, string.concat(".tokens.", string(asset))),
+                names[i]
+            );
         }
     }
 

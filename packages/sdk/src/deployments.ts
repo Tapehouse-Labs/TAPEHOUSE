@@ -16,6 +16,8 @@ export type SharePriceFeed = PriceFeed<'share'>
 /** A chain's address registry, `deployments/<chainId>.json`, every address checksummed. */
 export type Deployments = {
   chainId: number
+  /** Whether the Chainlink feeds follow NYSE's regular hours, where the registry says so: `.chainlinkRegularHours`. */
+  chainlinkRegularHours: boolean
   tokens: Record<string, Address>
   chainlink: Record<string, PriceFeed>
   bandFeeds: Record<string, Address>
@@ -54,6 +56,7 @@ export function parseDeployments(json: unknown): Deployments {
   const { Markets, ...morpho } = record(registry.morpho ?? {}, '.morpho')
   return {
     chainId,
+    chainlinkRegularHours: registry.chainlinkRegularHours === true,
     tokens: addresses(registry.tokens, '.tokens'),
     chainlink: Object.fromEntries(
       Object.entries(addresses(registry.chainlink, '.chainlink')).map(([name, address]) => [name, { address, kind }]),

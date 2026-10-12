@@ -3978,16 +3978,6 @@ export const gapCoverAbi = [
         "name": "usdg_",
         "type": "address",
         "internalType": "contract IUSDG"
-      },
-      {
-        "name": "feeds_",
-        "type": "address[]",
-        "internalType": "contract AggregatorV3Interface[]"
-      },
-      {
-        "name": "regularHours_",
-        "type": "bool",
-        "internalType": "bool"
       }
     ],
     "stateMutability": "nonpayable"
@@ -5948,11 +5938,6 @@ export const gapCoverAbi = [
         "internalType": "uint80"
       }
     ]
-  },
-  {
-    "type": "error",
-    "name": "LengthMismatch",
-    "inputs": []
   },
   {
     "type": "error",
@@ -11205,6 +11190,11 @@ export const roundFeedAbi = [
         "name": "description_",
         "type": "string",
         "internalType": "string"
+      },
+      {
+        "name": "stockToken_",
+        "type": "address",
+        "internalType": "contract IMultiplier"
       }
     ],
     "stateMutability": "nonpayable"
@@ -11316,6 +11306,19 @@ export const roundFeedAbi = [
         "name": "",
         "type": "uint80",
         "internalType": "uint80"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "stockToken",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IMultiplier"
       }
     ],
     "stateMutability": "view"

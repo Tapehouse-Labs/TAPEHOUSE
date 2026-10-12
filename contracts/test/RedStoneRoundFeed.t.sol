@@ -2,10 +2,18 @@
 pragma solidity 0.8.37;
 
 import {Test} from "forge-std/Test.sol";
-import {RedStoneRoundFeed} from "../src/RedStoneRoundFeed.sol";
+import {IMultiplier, RedStoneRoundFeed} from "../src/RedStoneRoundFeed.sol";
 
 /// @notice The feed against a real payload of RedStone's `redstone-primary-prod` data service: ten signed packages,
 /// five signers' of TSLA and of AMZN, captured from RedStone's gateway.
+contract MultiplierDouble is IMultiplier {
+    uint256 public override uiMultiplier = 1e18;
+
+    function set(uint256 value) external {
+        uiMultiplier = value;
+    }
+}
+
 contract RedStoneRoundFeedTest is Test {
     uint256 internal constant PACKAGE_SIZE = 142;
     bytes9 internal constant MARKER = 0x000002ed57011e0000;
@@ -22,8 +30,8 @@ contract RedStoneRoundFeedTest is Test {
             timestamp = (timestamp << 8) | uint8(payload[i]);
         }
         timestamp /= 1000;
-        tsla = new RedStoneRoundFeed(bytes32("TSLA"), "TSLA / USD, RedStone");
-        amzn = new RedStoneRoundFeed(bytes32("AMZN"), "AMZN / USD, RedStone");
+        tsla = new RedStoneRoundFeed(bytes32("TSLA"), "TSLA / USD, RedStone", IMultiplier(address(0)));
+        amzn = new RedStoneRoundFeed(bytes32("AMZN"), "AMZN / USD, RedStone", IMultiplier(address(0)));
         vm.warp(timestamp + 30);
     }
 
@@ -134,7 +142,7 @@ contract RedStoneRoundFeedTest is Test {
     }
 
     function test_AFeedTheDataServiceDoesNotCarryIsRefused() public {
-        RedStoneRoundFeed other = new RedStoneRoundFeed(bytes32("NOPE"), "none");
+        RedStoneRoundFeed other = new RedStoneRoundFeed(bytes32("NOPE"), "none", IMultiplier(address(0)));
         (bool ok, bytes memory reason) = _update(other, payload);
         assertFalse(ok);
         assertEq(bytes4(reason), RedStoneRoundFeed.InsufficientNumberOfUniqueSigners.selector);
@@ -144,5 +152,18 @@ contract RedStoneRoundFeedTest is Test {
         (bool ok, bytes memory reason) = _update(tsla, hex"1234");
         assertFalse(ok);
         assertEq(bytes4(reason), RedStoneRoundFeed.InvalidPayload.selector);
+    }
+
+    function test_ATokensMultiplierScalesTheAnswerToTheTokensPrice() public {
+        MultiplierDouble multiplier = new MultiplierDouble();
+        RedStoneRoundFeed plain = new RedStoneRoundFeed(bytes32("TSLA"), "share", IMultiplier(address(0)));
+        RedStoneRoundFeed token = new RedStoneRoundFeed(bytes32("TSLA"), "token", multiplier);
+        multiplier.set(2.5e18);
+        _update(plain, payload);
+        _update(token, payload);
+        (, int256 share,,,) = plain.latestRoundData();
+        (, int256 price,,,) = token.latestRoundData();
+        assertEq(price, share * 25 / 10, "the token's price is the share's times its multiplier");
+        assertEq(address(token.stockToken()), address(multiplier));
     }
 }

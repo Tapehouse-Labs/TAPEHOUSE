@@ -152,6 +152,11 @@ describe('deployments', () => {
     expect(d.stockLending).toEqual({ SPY: bob })
   })
 
+  test('a registry says whether its Chainlink feeds follow the regular hours', () => {
+    expect(parseDeployments({ chainId: 46630, chainlinkRegularHours: true }).chainlinkRegularHours).toBe(true)
+    expect(parseDeployments({ chainId: 46630 }).chainlinkRegularHours).toBe(false)
+  })
+
   test('the baskets are read from .tapehouse.Baskets', () => {
     const d = parseDeployments({
       chainId: 412346,
@@ -160,7 +165,7 @@ describe('deployments', () => {
     expect(d.tapehouse).toEqual({ MarginAccounts: alice })
     expect(d.baskets).toEqual({ PAIR: bob })
     expect(robinhood.baskets).toEqual({})
-    expect(testnet.baskets).toEqual({ PAIR: '0x9e6675e957d8b533F2BF216B25Aea838c5c51Fa9' })
+    expect(testnet.baskets).toEqual({ PAIR: '0xAe6766dd7FA97F83130939D66aB15c56A185362F' })
     expect(() => parseDeployments({ chainId: 1, tapehouse: { Baskets: { PAIR: 1 } } })).toThrow(
       '.tapehouse.Baskets.PAIR is not an address.',
     )

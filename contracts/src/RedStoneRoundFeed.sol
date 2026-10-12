@@ -3,11 +3,19 @@ pragma solidity 0.8.37;
 
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
+/// @notice The multiplier of a Stock Token, as ERC-8056 reports it.
+interface IMultiplier {
+    /// @notice The multiplier now, with 18 decimals.
+    function uiMultiplier() external view returns (uint256);
+}
+
 /// @title RedStone round feed
 /// @notice A Chainlink-compatible price feed of one RedStone data feed, for a chain without a Chainlink feed of the
 /// asset. Anyone may append a payload of RedStone's `redstone-primary-prod` data service to a call of `update`: the
 /// feed checks its signatures and keeps its value as the next round, with the package's time as the round's start.
 /// Its answers have 8 decimals, and its rounds are numbered from one in one phase, as Chainlink aggregators' are.
+/// Where it is given a Stock Token, its answer is the token's price, the share's times the token's multiplier, as
+/// the Chainlink feeds of Robinhood Chain's Stock Tokens are; without one, the share's.
 /// @dev The payload is read as RedStone's contracts read it, from the end of the calldata: the packages, each of the
 /// feed's values signed by one of the data service's five signers, and the value is the median of the first three
 /// unique signers' values. The signers and the three are the data service's at deployment. A package may be at most
@@ -36,7 +44,7 @@ contract RedStoneRoundFeed is AggregatorV3Interface {
     error TimestampIsFromTheFuture(uint256 timestamp, uint256 blockTimestamp);
     /// @notice The packages are not newer than the feed's last round.
     error NotNewer(uint256 timestamp, uint256 lastTimestamp);
-    /// @notice The feed's median is more than 128 bits wide.
+    /// @notice The feed's answer is more than 128 bits wide.
     error AnswerTooLarge();
 
     /// @notice A round was recorded.
@@ -60,6 +68,8 @@ contract RedStoneRoundFeed is AggregatorV3Interface {
 
     /// @notice The RedStone data feed this feed follows, as RedStone names it in bytes32.
     bytes32 public immutable dataFeedId;
+    /// @notice The Stock Token whose multiplier scales the answer; zero for the share's price.
+    IMultiplier public immutable stockToken;
     /// @notice The feed's number of decimals.
     uint8 public constant override decimals = 8;
     /// @notice The feed's version.
@@ -69,8 +79,9 @@ contract RedStoneRoundFeed is AggregatorV3Interface {
     uint64 private _latest;
     mapping(uint64 index => Round) private _rounds;
 
-    constructor(bytes32 dataFeedId_, string memory description_) {
+    constructor(bytes32 dataFeedId_, string memory description_, IMultiplier stockToken_) {
         dataFeedId = dataFeedId_;
+        stockToken = stockToken_;
         _description = description_;
     }
 
@@ -84,6 +95,7 @@ contract RedStoneRoundFeed is AggregatorV3Interface {
     // slither-disable-next-line timestamp
     function update() external returns (uint80 roundId) {
         (uint256 answer, uint256 timestampMs) = _verify(msg.data[4:]);
+        if (address(stockToken) != address(0)) answer = answer * stockToken.uiMultiplier() / 1e18;
         uint256 time = timestampMs / 1000;
         // forge-lint: disable-next-line(block-timestamp)
         if (block.timestamp > time + MAX_AGE) revert TimestampIsTooOld(time, block.timestamp);

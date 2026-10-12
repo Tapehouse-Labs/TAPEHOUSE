@@ -11,7 +11,8 @@
 # asset left with no leg at all is omitted. The halt signer and the owner are the file's
 # .tapehouse.HaltSigner and .tapehouse.Owner, which must be set. The sequencer-uptime feed is
 # .chainlinkSequencer.Uptime, zero where absent and refused when malformed. Arbitrum One's Chainlink feeds
-# follow NYSE regular hours, so there the ninth word is true.
+# follow NYSE regular hours, so there the ninth word is true, and so it is for a registry whose
+# .chainlinkRegularHours is true.
 set -euo pipefail
 
 registry=$1
@@ -49,5 +50,5 @@ owner=$(address tapehouse.Owner)
 sequencer=$zero_address
 [ "$(jq 'has("chainlinkSequencer")' "$registry")" = false ] || sequencer=$(address chainlinkSequencer.Uptime)
 regular_hours=false
-[ "$chain_id" != 42161 ] || regular_hours=true
+[ "$chain_id" != 42161 ] && [ "$(jq -r '.chainlinkRegularHours // false' "$registry")" != true ] || regular_hours=true
 echo "[${symbols#,}]" "[${feeds#,}]" "[${feed_ids#,}]" "[${index_ids#,}]" "[${tokens#,}]" "$halt_signer" "$owner" "$sequencer" "$regular_hours"

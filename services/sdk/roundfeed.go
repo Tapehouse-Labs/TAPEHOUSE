@@ -17,7 +17,7 @@ type RoundFeed struct {
 	feed *roundfeed.RoundFeed
 }
 
-// RoundFeed returns the RedStone round feed at address, one of the registry's .roundFeeds.
+// RoundFeed returns the RedStone round feed at address, one of the registry's .chainlink feeds.
 func (c *Client) RoundFeed(address common.Address) *RoundFeed {
 	return &RoundFeed{target: target{address: address}, c: c, feed: roundfeed.NewRoundFeed()}
 }

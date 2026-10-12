@@ -135,6 +135,9 @@ func New(cfg Config, deployments *sdk.Deployments, chain Chain, key, haltKey *ec
 	defaulted := len(cfg.Keepers) == 0
 	if defaulted {
 		for _, j := range jobs {
+			if j.name == "rounds" && !deployments.ChainlinkRegularHours {
+				continue
+			}
 			if _, ok := deployments.Tapehouse[j.contract]; ok || (j.contract == "Baskets" && len(deployments.Baskets) > 0) {
 				cfg.Keepers = append(cfg.Keepers, j.name)
 			}
@@ -205,7 +208,7 @@ var jobs = []job{
 	{"shorts", 15 * time.Second, "ShortPositions", true, (*Keeper).shorts},
 	{"basket", 5 * time.Minute, "Baskets", false, (*Keeper).rebalance},
 	{"gapcover", 20 * time.Second, "GapCover", true, (*Keeper).gapCover},
-	{"rounds", 60 * time.Second, "GapCover", false, (*Keeper).writeRounds},
+	{"rounds", 60 * time.Second, "Band", false, (*Keeper).writeRounds},
 	{"pools", 60 * time.Second, "", false, (*Keeper).alignPools},
 }
 

@@ -1037,3 +1037,17 @@ fn a_gap_cover_pays_the_fall_beyond_its_deductible_up_to_its_limit() {
         "TooEarlyToMeasure(1790899200000)"
     );
 }
+
+#[test]
+fn the_registry_says_whether_its_chainlink_feeds_follow_the_regular_hours() {
+    assert!(
+        Deployments::parse(r#"{"chainId":46630,"chainlinkRegularHours":true}"#)
+            .unwrap()
+            .chainlink_regular_hours
+    );
+    assert!(
+        !Deployments::parse(r#"{"chainId":46630}"#)
+            .unwrap()
+            .chainlink_regular_hours
+    );
+}
