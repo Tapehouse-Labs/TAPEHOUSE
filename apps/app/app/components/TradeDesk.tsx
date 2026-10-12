@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 "use client";
 
+import { useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useMemo } from "react";
 import type { Address } from "viem";
 import { PHASE, useMarginAccount, useSend, useWalletBalances } from "@/lib/accountHook";
-import { explain } from "@/lib/errors";
+import { useExplain, useMsg } from "@/lib/i18n";
 import type { Intent } from "@/lib/intent";
 import { useTradeState } from "@/lib/tradeHook";
 import { SmartAccount } from "./SmartAccount";
@@ -41,11 +42,14 @@ export function TradeDesk({ onDesk }: { onDesk: (desk: { desk: Desk; account: Re
 }
 
 function SendButton({ intent, label, sponsored }: { intent: Intent | undefined; label: string; sponsored: boolean }) {
+  const t = useTranslations("trade.send");
+  const say = useMsg();
+  const explain = useExplain();
   const send = useSend();
   return (
     <span className="inline-flex flex-col items-start gap-2">
       <button type="button" className="btn" disabled={!intent || send.pending} onClick={() => intent && send.send(intent)}>
-        {send.phase ? PHASE[send.phase] : `${label}${sponsored ? ", free" : ""}`}
+        {send.phase ? say(PHASE[send.phase]) : sponsored ? t("free", { label }) : label}
       </button>
       {send.error && (
         <span role="alert" className="max-w-[60ch] text-[14px] text-[var(--error)]">
@@ -54,7 +58,7 @@ function SendButton({ intent, label, sponsored }: { intent: Intent | undefined; 
       )}
       {send.succeeded && !send.pending && (
         <span role="status" className="text-[14px] text-[var(--gain)]">
-          Done. Every line is read again from the chain.
+          {t("done")}
         </span>
       )}
     </span>

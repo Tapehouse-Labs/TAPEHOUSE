@@ -13,6 +13,7 @@ path = [
     "services/Dockerfile",
     "services/Dockerfile.dockerignore",
     ".nvmrc",
+    "apps/app/messages/**/*.json",
     "package.json",
     "pnpm-lock.yaml",
     "deployments/*.json",

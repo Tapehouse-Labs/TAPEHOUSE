@@ -625,6 +625,10 @@ A new user holds Stock Tokens but often no ether for gas. Each user can have an 
 
 Reads: `entryPoint`, `signer`, `owner`, `maxCostPerOperation`, `paused`, `operations`, `freeOperationsLeft`, `FREE_OPERATIONS`, `eip712Domain`.
 
+## App languages
+
+The app is in English, Spanish and Portuguese. A visitor's language is the `locale` cookie, set by the language switch in the header, or else the best match of the browser's `Accept-Language`; the URL does not change. Catalogs are `apps/app/messages/<language>/<namespace>.json`, read with next-intl; `messages/en` defines every key, and `messages/catalogs.test.ts` fails on a missing or extra key, an invalid ICU message or a translation that changes a message's placeholders. Functions that decide what a visitor is told return message descriptors (`{ key, values }`), so their tests state the decision in any language; figures are formatted by `formatters(locale)` on exact bigint arithmetic, with the language's own separators, and a typed amount is read with the language's decimal separator alone. `apps/app/messages/README.md` holds the conventions and the glossary.
+
 ## SDKs
 
 Three SDKs read the band, its feeds, the margin accounts, the short positions, the baskets and the gap cover, and build their transactions:

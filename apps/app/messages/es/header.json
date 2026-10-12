@@ -1,0 +1,15 @@
+{
+  "brand": "Tapehouse, cuenta",
+  "sections": "Secciones",
+  "nav": {
+    "account": "Cuenta",
+    "earn": "Ganar",
+    "risk": "Riesgo",
+    "simulator": "Simulador"
+  },
+  "faucet": "Obtén USDG de prueba",
+  "theme": "Cambiar entre claro y oscuro",
+  "language": "Idioma",
+  "connected": "Conectado",
+  "disconnect": "Desconectar"
+}

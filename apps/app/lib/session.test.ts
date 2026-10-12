@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import { describe, expect, test } from "vitest";
-import { bandState, seal } from "./session";
+import { say } from "./say";
+import { bandState, seal as sealOf } from "./session";
+
+/** The seal with its label in English. */
+const seal = (...args: Parameters<typeof sealOf>) => {
+  const s = sealOf(...args);
+  return { ...s, label: say(s.label) };
+};
 
 const HOUR = 3_600_000n;
 const now = 1_790_000_000_000;
@@ -47,6 +54,15 @@ describe("seal", () => {
       label: "Market open",
     });
     expect(seal({ state: 1, boundaryMs: 0n }, now)).toMatchObject({ state: "CLOSED", eta: undefined, label: "Market closed" });
+  });
+
+  test("in Spanish and Portuguese, with their plurals", () => {
+    const one = sealOf({ state: 1, boundaryMs: BigInt(now) + 60_000n }, now).label;
+    const many = sealOf({ state: 2, boundaryMs: BigInt(now) + 3n * HOUR }, now).label;
+    expect(say(one, "es")).toBe("Mercado cerrado, reabre en 1 minuto");
+    expect(say(many, "es")).toBe("Mercado abierto, cierra en 3 horas");
+    expect(say(one, "pt")).toBe("Mercado fechado, reabre em 1 minuto");
+    expect(say(many, "pt")).toBe("Mercado aberto, fecha em 3 horas");
   });
 
   test("an unknown session has no countdown", () => {

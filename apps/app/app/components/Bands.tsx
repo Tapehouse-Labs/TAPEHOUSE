@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useChains } from "wagmi";
-import { explain } from "@/lib/errors";
-import { bandPercent, price } from "@/lib/format";
 import { useBands } from "@/lib/hooks";
+import { useExplain, useFormat } from "@/lib/i18n";
 import { bandState } from "@/lib/session";
 import { Seal } from "./Seal";
 
@@ -13,26 +13,28 @@ const TRACK_BPS = 400n;
 
 /** Every asset's band, live from the chain, each row hanging off the stem. */
 export function Bands() {
+  const t = useTranslations("account.bands");
   const bands = useBands();
   const [chain] = useChains();
   return (
     <section aria-labelledby="bands-title" className="mt-16">
       <div className="flex items-center justify-between gap-4">
         <h2 id="bands-title" className="label">
-          Live bands<span className="hidden sm:inline"> · {chain.name}</span>
+          {t("title")}
+          <span className="hidden sm:inline"> · {chain.name}</span>
         </h2>
         <span className="sm:hidden">
           <Seal />
         </span>
       </div>
       <table className="mt-3 w-full border-collapse text-[14px]">
-        <caption className="sr-only">Each asset&apos;s band: its state, live sources, centre and half-width</caption>
+        <caption className="sr-only">{t("caption")}</caption>
         <thead className="sr-only">
           <tr>
-            <th scope="col">Asset</th>
-            <th scope="col">Band</th>
-            <th scope="col">State</th>
-            <th scope="col">Centre</th>
+            <th scope="col">{t("asset")}</th>
+            <th scope="col">{t("band")}</th>
+            <th scope="col">{t("status")}</th>
+            <th scope="col">{t("centre")}</th>
           </tr>
         </thead>
         <tbody>
@@ -51,6 +53,9 @@ export function Bands() {
 }
 
 function Row({ query }: { query: ReturnType<typeof useBands>[number]["query"] }) {
+  const t = useTranslations("account.bands");
+  const f = useFormat();
+  const explain = useExplain();
   if (query.isPending) {
     return (
       <>
@@ -90,20 +95,22 @@ function Row({ query }: { query: ReturnType<typeof useBands>[number]["query"] })
       </td>
       <td className="hidden w-[118px] text-right sm:table-cell">
         <span className={`label ${state === "HALTED" || state === "DEGRADED" ? "!text-warning" : ""}`}>
-          {state}
-          <span className="text-muted"> · {q.live} live</span>
+          {t(`state.${state}`)}
+          <span className="text-muted"> · {t("live", { count: q.live })}</span>
         </span>
       </td>
       <td className="w-[112px] text-right">
         {priced ? (
-          <span className="num block font-semibold text-strong">{price(q.mid)}</span>
+          <span className="num block font-semibold text-strong">{f.price(q.mid)}</span>
         ) : (
           <span className="hidden font-semibold text-strong sm:block">—</span>
         )}
         {priced ? (
-          <span className="num block text-[12px] text-muted">{bandPercent(q.halfBps)}</span>
+          <span className="num block text-[12px] text-muted">{f.bandPercent(q.halfBps)}</span>
         ) : (
-          <span className={`label block sm:hidden ${state === "HALTED" || state === "DEGRADED" ? "!text-warning" : ""}`}>{state}</span>
+          <span className={`label block sm:hidden ${state === "HALTED" || state === "DEGRADED" ? "!text-warning" : ""}`}>
+            {t(`state.${state}`)}
+          </span>
         )}
       </td>
     </>

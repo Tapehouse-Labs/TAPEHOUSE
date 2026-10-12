@@ -1,0 +1,45 @@
+{
+  "noLimit": "Sin límite definido",
+  "twapInvalid": "Aún no es válido",
+  "page": {
+    "title": "Riesgo · bandas, backstop y reapertura",
+    "intro": "Lo que se interpone entre una brecha de fin de semana y una pérdida en {chain}, con cada cifra leída de la cadena.",
+    "block": "Leído en el bloque {block}"
+  },
+  "reference": {
+    "title": "Precio de referencia",
+    "caption": "El TWAP de cada activo y la prima del mercado de su token sobre la banda",
+    "asset": "Activo",
+    "twap": "TWAP",
+    "premium": "Prima"
+  },
+  "exposure": {
+    "title": "Exposición del backstop",
+    "absent": "El backstop de brecha aún no está desplegado en esta cadena.",
+    "caption": "El límite de exposición del backstop de brecha, lo que cubrió el cierre actual y lo que queda",
+    "position": "Posición",
+    "limit": "Límite",
+    "covered": "Cubierto",
+    "used": "Usado",
+    "left": "Restante",
+    "held": "El backstop tiene {amount} USDG; lo que queda nunca supera esa cifra."
+  },
+  "reopening": {
+    "title": "Subasta de reapertura",
+    "absent": "La subasta de reapertura aún no está desplegada en esta cadena.",
+    "none": "Aún no hay ninguna ronda de reapertura.",
+    "caption": "La última ronda de reapertura de cada activo",
+    "asset": "Activo",
+    "status": "Estado",
+    "floor": "Mínimo",
+    "lots": "Lotes",
+    "clearing": "Liquidación"
+  },
+  "round": {
+    "none": "Sin ronda",
+    "committing": "En compromiso",
+    "revealing": "En revelación",
+    "awaiting": "A la espera de la compensación",
+    "cleared": "Compensada"
+  }
+}

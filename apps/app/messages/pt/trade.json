@@ -1,0 +1,202 @@
+{
+  "countdown": {
+    "now": "agora",
+    "underMinute": "menos de um minuto",
+    "daysHours": "{days} d {hours} h",
+    "hoursMinutes": "{hours} h {minutes} min",
+    "minutes": "{minutes} min"
+  },
+  "saleFloor": {
+    "lowEdge": "a borda inferior da banda",
+    "centre": "o centro da banda"
+  },
+  "term": {
+    "restricted": "Restrito",
+    "isolated": "Isolado",
+    "lendingFee": "Taxa de empréstimo",
+    "pool": "Pool",
+    "recalls": "Resgates",
+    "liquidation": "Liquidação",
+    "pays": "Paga",
+    "layer": "Faixa",
+    "holding": "Posse",
+    "target": "Meta",
+    "pending": "Pendente",
+    "rebalance": "Rebalanceamento",
+    "frozen": "Congelada",
+    "margin": "Margem"
+  },
+  "notes": {
+    "short": {
+      "restricted": "{asset} caiu 10% desde o último fechamento: uma venda a descoberto só vende a não menos que o centro da banda até o fim do próximo dia UTC.",
+      "isolated": "Uma venda a descoberto por conta e Stock Token, só em USDG, com margem na borda superior da banda; não compensa com nada da sua conta de margem.",
+      "lendingFee": "{rate} ao ano sobre o que você toma emprestado, pagos em {asset} aos seus credores.",
+      "pool": "A venda e a recompra negociam pelo pool de {asset} com USDG, no seu nível de taxa de {tier}.",
+      "recalls": "Quando os credores de {asset} resgatam o que as vendas a descoberto tomaram emprestado e o aviso vence, cada venda a descoberto de {asset} recompra a sua parte pelo pool, em proporção.",
+      "liquidation": "Quando uma venda a descoberto fica sem garantia na borda superior da banda, qualquer um pode recomprá-la, a no máximo 1% acima do centro da banda e nunca acima da sua borda superior, por 0,5% do que custou; enquanto o mercado não está aberto, só quando fica sem garantia nas duas bordas. O que o seu USDG não alcança recomprar recai sobre os credores de {asset}."
+    },
+    "cover": {
+      "pays": "A queda de {asset} desde a última rodada do seu feed da Chainlink antes de o mercado fechar até a sua primeira rodada após a reabertura, quando essa rodada cai dentro da banda em quinze minutos; caso contrário, a mediana do centro da banda nesses minutos. Uma série que não pode ser resolvida assim é anulada e devolve o seu prêmio.",
+      "layer": "Paga só quedas, a faixa entre a franquia e o limite, sobre um nocional em USDG, e nada se o preço sobe ou cai menos que a franquia.",
+      "holding": "A cobertura não é transferível e é liquidada em dinheiro: você não tem nenhum token. Sua conta resgata um pagamento quando a série é resolvida, e o prêmio de volta se for anulada."
+    },
+    "basket": {
+      "target": "A meta é {holds} por cota: ela precifica a primeira emissão e orienta os rebalanceamentos, enquanto uma cota tem a sua parte do que {basket} tem.",
+      "pending": "O dono propôs {holds} a partir de {date}, sete dias depois da proposta, para que quem discorde resgate antes.",
+      "rebalance": "Qualquer um pode negociar com {basket} rumo à sua meta, só quando o que entra nas bordas inferiores das bandas vale ao menos o que sai nas suas bordas superiores.",
+      "frozen": "Um token em pausa, ou uma lista de bloqueio sobre as contas ou sobre a própria {basket}, congela {basket} nas contas (BasketFrozen); um endereço bloqueado não pode enviar nem receber as suas cotas; uma queima do emissor recai sobre todos os detentores de uma vez.",
+      "margin": "As cotas entram só na posição cruzada, nunca em uma isolada nem enquanto a conta tiver um dos seus tokens em uma posição isolada, e têm margem como os Stock Tokens que contêm, que contam contra os tetos dos seus ativos (AssetCapExceeded). Uma posição de margem que fica sem garantia tem as suas cestas desembrulhadas e os seus tokens vendidos como quaisquer outros."
+    }
+  },
+  "page": {
+    "title": "Negociar · vendas a descoberto, cobertura de gap e cestas",
+    "ticket": "Ordem",
+    "kind": {
+      "short": "Venda a descoberto",
+      "cover": "Cobertura de gap",
+      "basket": "Cestas"
+    }
+  },
+  "connect": {
+    "wrongNetwork": "Sua carteira está em outra rede. A Tapehouse funciona na <b>{chain}</b>.",
+    "visitor": "Cada linha da ordem é lida da chain. Conecte uma carteira para assiná-la.",
+    "waiting": "Aguardando sua carteira…",
+    "switch": "Mudar para {chain}"
+  },
+  "block": "Lido no bloco {block}",
+  "send": {
+    "free": "{label}, grátis",
+    "done": "Pronto. Cada linha é lida de novo da chain."
+  },
+  "short": {
+    "none": "Nenhum Stock Token pode ser vendido a descoberto nesta chain ainda.",
+    "you": "Você",
+    "action": {
+      "aria": "Ação da venda a descoberto",
+      "sell": "Vender",
+      "buyBack": "Recomprar",
+      "marginIn": "Adicionar margem",
+      "marginOut": "Retirar"
+    },
+    "verb": {
+      "sell": "vende",
+      "buyBack": "recompra",
+      "marginIn": "adiciona",
+      "marginOut": "retira"
+    },
+    "submit": "Vender a descoberto",
+    "amountAria": "Valor, {action, select, sell {vender} buyBack {recomprar} marginIn {adicionar margem} other {retirar}}",
+    "marginIn": "USDG para sua posição",
+    "marginOut": "USDG da sua posição",
+    "suffix": "vendida",
+    "stockToken": "Stock Token",
+    "poolPays": "O pool paga",
+    "poolAsks": "O pool pede",
+    "atLeast": "No mínimo",
+    "atMost": "No máximo",
+    "noQuote": "Sem cotação",
+    "at": "a",
+    "slippageAria": "Slippage, em porcentagem",
+    "floor": "Um token obtém no mínimo",
+    "floorValue": "{price}, {floor}",
+    "cost": "Um token custa no máximo",
+    "fullLimit": "apenas o seu limite, uma recompra total",
+    "highEdge": "{price}, a borda superior da banda",
+    "lendingFee": "Taxa de empréstimo",
+    "lendingFeeValue": "{rate} ao ano, em {asset}",
+    "lenders": "Os credores podem emprestar agora",
+    "feeTier": "Faixa de taxa do pool",
+    "source": "De",
+    "to": "Para",
+    "wallet": "sua carteira",
+    "marginNow": "Margem agora",
+    "marginAfter": "Margem depois",
+    "against": "{equity} contra {requirement}",
+    "revert": "Seria revertida",
+    "max": "Máx. {amount}",
+    "maxBuyBack": "Tudo o que deve, com folga para os juros até a execução",
+    "belowFloor": "O pool paga menos de {floor} por token, então a venda seria revertida: uma venda a descoberto nunca vende abaixo disso.",
+    "earlierTerm": "Livro anterior",
+    "earlier": "Esta venda a descoberto é de um livro anterior: não deve nada e mantém apenas seus {held} USDG para retirar.",
+    "deficitTerm": "Déficit",
+    "deficit": "Os USDG desta venda a descoberto não bastam para recomprar o que ela deve: só uma liquidação a encerra (Insolvent)."
+  },
+  "cover": {
+    "none": "A cobertura de gap ainda não foi implantada nesta chain.",
+    "you": "Você cobre",
+    "notionalAria": "Valor nocional, em USDG",
+    "usdgOf": "USDG de",
+    "paysBetween": "Paga a queda entre",
+    "deductibleAria": "Franquia, em porcentagem",
+    "limitAria": "Limite, em porcentagem",
+    "percentAnd": "% e",
+    "percent": "%",
+    "sales": "Vendas",
+    "closeIn": "encerram em {time}",
+    "closed": "encerradas até o mercado reabrir com um fechamento pela frente",
+    "premium": "Prêmio",
+    "atMost": "no máximo {max}, conforme o feed se mover",
+    "reserves": "USDG dos subscritores que reserva",
+    "reserveValue": "{reserve} de {capacity} livres",
+    "free": "{capacity} livres",
+    "gap": "Precificada com um gap de fim de semana de",
+    "gapValue": "{gap}",
+    "gapFrom": "{gap}, a partir do movimento da semana passada de {week}",
+    "minDeductible": "Menor franquia agora",
+    "submit": "Comprar cobertura"
+  },
+  "basket": {
+    "none": "Nenhuma cesta foi implantada nesta chain ainda.",
+    "you": "Você",
+    "aria": "Cesta",
+    "action": {
+      "aria": "Ação da cesta",
+      "mint": "Emitir",
+      "redeem": "Resgatar",
+      "unwrap": "Desembrulhar"
+    },
+    "verb": {
+      "mint": "emite",
+      "redeem": "resgata",
+      "unwrap": "desembrulha"
+    },
+    "sharesAria": "Cotas para {action, select, mint {emitir} redeem {resgatar} other {desembrulhar}}",
+    "sharesOf": "{one, select, true {cota} other {cotas}} de",
+    "takes": "Sai da sua carteira",
+    "receives": "Sua carteira recebe",
+    "unwrapHolds": "Sua posição cruzada mantém",
+    "into": "Para",
+    "source": "De",
+    "cross": "sua posição cruzada",
+    "held": "Sua posição cruzada mantém",
+    "shares": "{shares} cotas",
+    "atMost": "no máximo {assets}, conforme outras emissões e resgates o movam",
+    "marginNow": "Margem cruzada agora",
+    "against": "{equity} contra {requirement}",
+    "marginedAs": "com margem como {assets} por meio de cestas",
+    "nothing": "nada mantido em cestas ainda"
+  },
+  "book": {
+    "title": "Suas operações",
+    "cover": "Cobertura {asset} #{id}",
+    "coverDetail": "{notional} USDG, {deductible} a {limit} · série {status, select, open {aberta} settled {liquidada} other {anulada}}",
+    "coverSettled": "{notional} USDG, {deductible} a {limit} · série {status, select, open {aberta} settled {liquidada} other {anulada}} a {price} desde {reference}, paga {payout}",
+    "waits": "Aguarda a reabertura",
+    "release": "Liberar",
+    "unreadTerm": "Suas coberturas",
+    "unread": "O nó não retornou os logs da cobertura; recarregue para lê-los de novo",
+    "credited": "Creditado na sua conta",
+    "amountUsdg": "{amount} USDG",
+    "claim": "Resgatar para sua carteira",
+    "short": "Venda a descoberto {asset}",
+    "shortEarlier": "de um livro anterior: não deve nada",
+    "shortOwes": "deve {debt} {asset} · margem {equity} contra {requirement}",
+    "buyBack": "Recomprar",
+    "takeOut": "Retirar",
+    "basket": "Cesta {key}",
+    "inCross": "na sua posição cruzada",
+    "shares": "{shares} cotas",
+    "redeem": "Resgatar"
+  },
+  "notesAria": "Antes de assinar"
+}

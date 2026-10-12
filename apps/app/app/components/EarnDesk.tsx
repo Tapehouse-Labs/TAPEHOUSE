@@ -2,17 +2,18 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import type { Address, Hex } from "viem";
 import { usePublicClient } from "wagmi";
 import { useDeployments } from "@/app/providers";
 import type { AccountState } from "@/lib/accountRead";
 import { PHASE, useAccountState, useMarginAccount, useSend, useWalletBalances } from "@/lib/accountHook";
-import { parseAmount, tokens, unparse, usdg } from "@/lib/amounts";
 import { cooldown, span } from "@/lib/earn";
 import { claimable, type EarnState, type Holding } from "@/lib/earnRead";
-import { explain } from "@/lib/errors";
+import { useExplain, useFormat, useMsg } from "@/lib/i18n";
 import type { Intent, Vault } from "@/lib/intent";
+import { msg } from "@/lib/messages";
 import { EarnView, type OpenRow } from "./Earn";
 import { SmartAccount } from "./SmartAccount";
 
@@ -47,7 +48,6 @@ export function EarnDesk({ row }: { row: OpenRow }) {
 }
 
 type BackstopView = "deposit" | "leave" | "gains";
-const BACKSTOP_VIEW: Record<BackstopView, string> = { deposit: "Deposit", leave: "Leave", gains: "Gains and premium" };
 
 function BackstopActions({
   backstop,
@@ -58,6 +58,8 @@ function BackstopActions({
   timestamp: bigint;
   context: PanelContext;
 }) {
+  const t = useTranslations("earn.desk");
+  const f = useFormat();
   const deployments = useDeployments();
   const client = usePublicClient();
   const [view, setView] = useState<BackstopView>("deposit");
@@ -66,11 +68,16 @@ function BackstopActions({
   if (!depositor || !client || !account) return null;
   return (
     <div>
-      <Choice options={BACKSTOP_VIEW} value={view} onChange={setView} label="Backstop action" />
+      <Choice
+        options={{ deposit: t("deposit"), leave: t("leave"), gains: t("gains") }}
+        value={view}
+        onChange={setView}
+        label={t("backstopAction")}
+      />
       {view === "deposit" && (
         <AmountForm
           key="deposit"
-          verb="Deposit"
+          verb="deposit"
           decimals={6}
           max={least(context.usdg, depositor.maxDeposit)}
           sponsored={context.sponsored}
@@ -85,10 +92,10 @@ function BackstopActions({
             return (
               <div key={token} className="flex flex-wrap items-center gap-3">
                 <span className="min-w-[9rem] text-strong">
-                  {tokens(gained)} {asset}
+                  {f.tokens(gained)} {asset}
                 </span>
                 <SendButton
-                  label={`Claim ${asset}`}
+                  label={t("claim", { asset })}
                   quiet
                   disabled={gained === 0n}
                   sponsored={context.sponsored}
@@ -102,9 +109,9 @@ function BackstopActions({
             );
           })}
           <div className="flex flex-wrap items-center gap-3 border-t border-rule pt-3">
-            <span className="min-w-[9rem] text-strong">{usdg(b.premium.waiting)} USDG premium</span>
+            <span className="min-w-[9rem] text-strong">{t("premium", { amount: f.usdg(b.premium.waiting) })}</span>
             <SendButton
-              label="Claim it for the shares"
+              label={t("claimPremium")}
               quiet
               disabled={b.premium.waiting === 0n}
               sponsored={context.sponsored}
@@ -128,15 +135,18 @@ function Leave({
   window: bigint;
   context: PanelContext;
 }) {
+  const t = useTranslations("earn.desk");
+  const say = useMsg();
+  const f = useFormat();
   const phase = cooldown(depositor.cooldown, timestamp);
-  if (depositor.shares === 0n) return <p className="mt-5 text-[14px] text-body">You hold no shares of the backstop.</p>;
+  if (depositor.shares === 0n) return <p className="mt-5 text-[14px] text-body">{t("noShares")}</p>;
   if (phase.kind === "window" && depositor.maxRedeem > 0n)
     return (
       <>
-        <p className="mt-5 text-[14px] text-body">Your window is open for {span(phase.closesIn)} more.</p>
+        <p className="mt-5 text-[14px] text-body">{say(msg("earn.cooldown.windowOpen", { closes: span(phase.closesIn) }))}</p>
         <AmountForm
           key="redeem"
-          verb="Redeem"
+          verb="redeem"
           decimals={6}
           max={depositor.maxWithdraw}
           sponsored={context.sponsored}
@@ -152,18 +162,18 @@ function Leave({
     <div className="mt-5 grid gap-3 text-[14px] text-body">
       <p className="max-w-[60ch]">
         {phase.kind === "cooling"
-          ? `Your cooldown runs: your shares may leave in ${span(phase.opensIn)}, for ${span(window)}. Starting again moves that later.`
+          ? say(msg("earn.cooldown.cooling", { opens: span(phase.opensIn), window: span(window) }))
           : phase.kind === "window"
-            ? `${
-                depositor.cooldown?.shares === 0n
-                  ? `Your window is open for ${span(phase.closesIn)} more, but its shares have left; shares you deposited since need a cooldown of their own.`
-                  : `Your window is open for ${span(phase.closesIn)} more, but redemptions are shut now: the market is closed, a coming close is recorded or a closure is settling, or USDG is paused.`
-              } Starting again gives up this window.`
-            : `Start a cooldown and your ${usdg(depositor.assets)} USDG of shares may leave in a week, for ${span(window)}.`}
+            ? say(
+                msg(depositor.cooldown?.shares === 0n ? "earn.cooldown.windowSpent" : "earn.cooldown.windowShut", {
+                  closes: span(phase.closesIn),
+                }),
+              )
+            : say(msg("earn.cooldown.start", { assets: f.usdg(depositor.assets), window: span(window) }))}
       </p>
       <div>
         <SendButton
-          label={phase.kind === "none" || phase.kind === "lapsed" ? "Start cooldown" : "Start again"}
+          label={phase.kind === "none" || phase.kind === "lapsed" ? t("startCooldown") : t("startAgain")}
           quiet={phase.kind === "cooling" || phase.kind === "window"}
           sponsored={context.sponsored}
           intent={{ kind: "cooldown" }}
@@ -174,7 +184,6 @@ function Leave({
 }
 
 type LendAction = "lend" | "unlend";
-const LEND_VERB: Record<LendAction, string> = { lend: "Lend", unlend: "Take back" };
 
 function LendActions({
   lending,
@@ -185,6 +194,7 @@ function LendActions({
   positions: AccountState | undefined;
   context: PanelContext;
 }) {
+  const t = useTranslations("earn.desk");
   const { asset, token } = lending;
   const [action, setAction] = useState<LendAction>("lend");
   const holders = (positions?.positions ?? []).filter((p) =>
@@ -195,11 +205,16 @@ function LendActions({
   const stock = position?.stocks.find((s) => s.asset === asset);
   return (
     <div>
-      <Choice options={LEND_VERB} value={action} onChange={setAction} label="Lending action" />
+      <Choice
+        options={{ lend: t("verb.lend"), unlend: t("verb.unlend") }}
+        value={action}
+        onChange={setAction}
+        label={t("lendingAction")}
+      />
       {position && stock ? (
         <AmountForm
           key={`${action}-${position.id}`}
-          verb={LEND_VERB[action]}
+          verb={action}
           unit={asset}
           decimals={18}
           max={action === "lend" ? stock.held : stock.lent}
@@ -209,52 +224,59 @@ function LendActions({
             holders.length > 1 ? (
               <select
                 className="picker"
-                aria-label="Position"
+                aria-label={t("position")}
                 value={position.id}
                 onChange={(e) => setChosen(e.target.value as Hex)}
               >
                 {holders.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name === "Cross" ? "Cross" : `${p.name} isolated`}
+                    {p.name === "Cross" ? t("cross") : t("isolated", { name: p.name })}
                   </option>
                 ))}
               </select>
             ) : (
-              <span className="text-body">{position.name === "Cross" ? "from cross" : `from ${position.name} isolated`}</span>
+              <span className="text-body">{position.name === "Cross" ? t("fromCross") : t("fromIsolated", { name: position.name })}</span>
             )
           }
         />
       ) : (
         <p className="mt-5 text-[14px] text-body">
-          {action === "lend" ? `Deposit ${asset} into your account to lend it from there.` : `Your account has no ${asset} lent.`}{" "}
+          {action === "lend" ? t("lendEmpty", { asset }) : t("unlendEmpty", { asset })}{" "}
           <Link href="/" prefetch={false} className="text-strong underline underline-offset-4">
-            Open your account
+            {t("openAccount")}
           </Link>
         </p>
       )}
       <p className="mt-3 text-[13px] text-muted">
-        Recalls and their tickets are on{" "}
-        <Link href="/" prefetch={false} className="underline underline-offset-4">
-          your account&apos;s positions
-        </Link>
-        .
+        {t.rich("recalls", {
+          link: (positions) => (
+            <Link href="/" prefetch={false} className="underline underline-offset-4">
+              {positions}
+            </Link>
+          ),
+        })}
       </p>
     </div>
   );
 }
 
 type VaultAction = "deposit" | "withdraw";
-const VAULT_VERB: Record<VaultAction, string> = { deposit: "Deposit", withdraw: "Withdraw" };
 
 function VaultComposer({ vault, holding, context }: { vault: Vault; holding: Holding | undefined; context: PanelContext }) {
+  const t = useTranslations("earn.desk");
   const [action, setAction] = useState<VaultAction>("deposit");
   if (!holding) return null;
   return (
     <div>
-      <Choice options={VAULT_VERB} value={action} onChange={setAction} label="Action" />
+      <Choice
+        options={{ deposit: t("verb.deposit"), withdraw: t("verb.withdraw") }}
+        value={action}
+        onChange={setAction}
+        label={t("action")}
+      />
       <AmountForm
         key={action}
-        verb={VAULT_VERB[action]}
+        verb={action}
         decimals={6}
         max={action === "deposit" ? least(context.usdg, holding.maxDeposit) : holding.maxWithdraw}
         sponsored={context.sponsored}
@@ -279,7 +301,7 @@ function AmountForm({
   intent,
   from,
 }: {
-  verb: string;
+  verb: "deposit" | "withdraw" | "redeem" | "lend" | "unlend";
   unit?: string;
   decimals: number;
   max: bigint;
@@ -287,9 +309,12 @@ function AmountForm({
   intent: (amount: bigint, all: boolean) => Intent;
   from?: React.ReactNode;
 }) {
+  const t = useTranslations("earn.desk");
+  const f = useFormat();
+  const say = useMsg();
   const send = useSend();
   const [typed, setTyped] = useState("");
-  const amount = parseAmount(typed, decimals);
+  const amount = f.parseAmount(typed, decimals);
   const over = amount !== undefined && amount > max;
   return (
     <>
@@ -300,29 +325,29 @@ function AmountForm({
           if (amount !== undefined && !over) send.send(intent(amount, amount === max), { onSuccess: () => setTyped("") });
         }}
       >
-        <span>{verb}</span>
+        <span>{t(`verb.${verb}`)}</span>
         <input
           className="amount"
           inputMode="decimal"
           autoComplete="off"
           placeholder="0"
-          aria-label={`Amount to ${verb.toLowerCase()}`}
+          aria-label={t(`amountTo.${verb}`)}
           aria-invalid={typed !== "" && (amount === undefined || over)}
           value={typed}
           onChange={(e) => {
-            setTyped(e.target.value);
+            setTyped(f.normalize(e.target.value));
             if (!send.pending) send.reset();
           }}
         />
         <span>{unit}</span>
         {from}
         <button type="submit" className="btn ml-auto" disabled={send.pending || amount === undefined || over}>
-          {send.phase ? PHASE[send.phase] : `${verb}${sponsored ? ", free" : ""}`}
+          {send.phase ? say(PHASE[send.phase]) : sponsored ? t("free", { label: t(`verb.${verb}`) }) : t(`verb.${verb}`)}
         </button>
       </form>
       <p className="mt-2 text-[13px] text-muted num">
-        <button type="button" className="underline-offset-4 hover:underline" onClick={() => setTyped(unparse(max, decimals))}>
-          Max {decimals === 6 ? usdg(max) : tokens(max)}
+        <button type="button" className="underline-offset-4 hover:underline" onClick={() => setTyped(f.unparse(max, decimals))}>
+          {t("max", { amount: decimals === 6 ? f.usdg(max) : f.tokens(max) })}
         </button>
       </p>
       <Outcome send={send} />
@@ -343,6 +368,8 @@ function SendButton({
   quiet?: boolean;
   disabled?: boolean;
 }) {
+  const t = useTranslations("earn.desk");
+  const say = useMsg();
   const send = useSend();
   return (
     <>
@@ -352,7 +379,7 @@ function SendButton({
         disabled={disabled || send.pending}
         onClick={() => send.send(intent)}
       >
-        {send.phase ? PHASE[send.phase] : `${label}${sponsored ? ", free" : ""}`}
+        {send.phase ? say(PHASE[send.phase]) : sponsored ? t("free", { label }) : label}
       </button>
       <Outcome send={send} />
     </>
@@ -360,6 +387,8 @@ function SendButton({
 }
 
 function Outcome({ send }: { send: ReturnType<typeof useSend> }) {
+  const t = useTranslations("earn.desk");
+  const explain = useExplain();
   if (send.error)
     return (
       <p role="alert" className="mt-3 max-w-[60ch] text-[14px] text-[var(--error)]">
@@ -369,7 +398,7 @@ function Outcome({ send }: { send: ReturnType<typeof useSend> }) {
   if (send.succeeded && !send.pending)
     return (
       <p role="status" className="mt-3 text-[14px] text-[var(--gain)]">
-        Done. Every figure is read again from the chain.
+        {t("done")}
       </p>
     );
   return null;

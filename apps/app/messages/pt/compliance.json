@@ -1,0 +1,9 @@
+{
+  "sanctioned": "Este endereço está na lista de sanções da OFAC. A Tapehouse não pode ser usada com ele e não envia nada por ele.",
+  "blocked": "O emissor bloqueou o seu endereço de movimentar {asset}.",
+  "restricted": {
+    "title": "Indisponível",
+    "body": "A Tapehouse não é oferecida onde você está, porque a lei dos Estados Unidos restringe negociar com esse local.",
+    "hint": "O bloqueio segue a localização que a sua conexão informa. Se estiver errada, conecte-se de onde você está."
+  }
+}

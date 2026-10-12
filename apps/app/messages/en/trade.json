@@ -1,0 +1,202 @@
+{
+  "countdown": {
+    "now": "now",
+    "underMinute": "under a minute",
+    "daysHours": "{days}d {hours}h",
+    "hoursMinutes": "{hours}h {minutes}m",
+    "minutes": "{minutes}m"
+  },
+  "saleFloor": {
+    "lowEdge": "the band's low edge",
+    "centre": "the band's centre"
+  },
+  "term": {
+    "restricted": "Restricted",
+    "isolated": "Isolated",
+    "lendingFee": "Lending fee",
+    "pool": "Pool",
+    "recalls": "Recalls",
+    "liquidation": "Liquidation",
+    "pays": "Pays",
+    "layer": "Layer",
+    "holding": "Holding",
+    "target": "Target",
+    "pending": "Pending",
+    "rebalance": "Rebalance",
+    "frozen": "Frozen",
+    "margin": "Margin"
+  },
+  "notes": {
+    "short": {
+      "restricted": "{asset} fell 10% from its last close: a short sells only at no less than the band's centre until the next UTC day ends.",
+      "isolated": "One short per account and Stock Token, on USDG alone, margined at the band's high edge; it nets against nothing in your margin account.",
+      "lendingFee": "{rate} a year on what you borrow, paid in {asset} to its lenders.",
+      "pool": "The sale and the buy-back trade through {asset}'s pool with USDG, at its {tier} fee tier.",
+      "recalls": "When {asset}'s lenders recall what the shorts borrowed and the notice runs out, every short of {asset} buys its part back through the pool, in proportion.",
+      "liquidation": "Once a short falls short at the band's high edge, anyone may buy it back, at no more than 1% above the band's centre and never above its high edge, for 0.5% of what it cost; while the market is not open, only once it falls short at both edges. What its USDG cannot buy back falls on {asset}'s lenders."
+    },
+    "cover": {
+      "pays": "The fall of {asset} from its Chainlink feed's last round before the market closes to its first round once it reopens, when that round lands inside the band within fifteen minutes; otherwise the median of the band's centre over those minutes. A series that cannot settle so is void and refunds its premium.",
+      "layer": "It pays falls only, the layer between the deductible and the limit, on a notional in USDG, and nothing if the price rises or falls less than the deductible.",
+      "holding": "The cover is not transferable and is settled in cash: you hold no token. Your account claims a payout once its series settles, and the premium back if it is void."
+    },
+    "basket": {
+      "target": "The target is {holds} per share: it prices the first mint and steers rebalances, while a share holds its part of what {basket} holds.",
+      "pending": "The owner proposed {holds} from {date}, seven days after the proposal, so a holder who disagrees redeems first.",
+      "rebalance": "Anyone may trade with {basket} toward its target, only when what comes in at the bands' low edges is worth at least what goes out at their high edges.",
+      "frozen": "A paused token, or a blocklist on the accounts or on {basket} itself, freezes {basket} in the accounts (BasketFrozen); a blocklisted address can neither send nor receive its shares; a burn by the issuer falls on every holder at once.",
+      "margin": "Shares enter the cross position only, never an isolated one nor while the account holds one of its tokens in an isolated position, and are margined as the Stock Tokens they hold, which count against their assets' caps (AssetCapExceeded). A margin position that falls short has its baskets unwrapped and their tokens sold as any other."
+    }
+  },
+  "page": {
+    "title": "Trade · shorts, gap cover and baskets",
+    "ticket": "Ticket",
+    "kind": {
+      "short": "Short",
+      "cover": "Gap cover",
+      "basket": "Baskets"
+    }
+  },
+  "connect": {
+    "wrongNetwork": "Your wallet is on another network. Tapehouse runs on <b>{chain}</b>.",
+    "visitor": "Every line of the ticket is read from the chain. Connect a wallet to sign it.",
+    "waiting": "Waiting for your wallet…",
+    "switch": "Switch to {chain}"
+  },
+  "block": "Read at block {block}",
+  "send": {
+    "free": "{label}, free",
+    "done": "Done. Every line is read again from the chain."
+  },
+  "short": {
+    "none": "No Stock Token can be shorted on this chain yet.",
+    "you": "You",
+    "action": {
+      "aria": "Short action",
+      "sell": "Sell",
+      "buyBack": "Buy back",
+      "marginIn": "Add margin",
+      "marginOut": "Take out"
+    },
+    "verb": {
+      "sell": "sell",
+      "buyBack": "buy back",
+      "marginIn": "add",
+      "marginOut": "take out"
+    },
+    "submit": "Sell short",
+    "amountAria": "Amount, {action, select, sell {sell} buyBack {buy back} marginIn {add margin} other {take out}}",
+    "marginIn": "USDG to your",
+    "marginOut": "USDG from your",
+    "suffix": "short",
+    "stockToken": "Stock Token",
+    "poolPays": "The pool pays",
+    "poolAsks": "The pool asks",
+    "atLeast": "At least",
+    "atMost": "At most",
+    "noQuote": "No quote",
+    "at": "at",
+    "slippageAria": "Slippage, in percent",
+    "floor": "A token fetches no less than",
+    "floorValue": "{price}, {floor}",
+    "cost": "A token costs no more than",
+    "fullLimit": "your limit alone, a full buy-back",
+    "highEdge": "{price}, the band's high edge",
+    "lendingFee": "Lending fee",
+    "lendingFeeValue": "{rate} a year, in {asset}",
+    "lenders": "Lenders can lend now",
+    "feeTier": "Pool fee tier",
+    "source": "From",
+    "to": "To",
+    "wallet": "your wallet",
+    "marginNow": "Margin now",
+    "marginAfter": "Margin after",
+    "against": "{equity} against {requirement}",
+    "revert": "It would revert",
+    "max": "Max {amount}",
+    "maxBuyBack": "All it owes, with room for the interest until it lands",
+    "belowFloor": "The pool pays less than {floor} for each token, so the sale would revert: a short never sells below it.",
+    "earlierTerm": "Earlier book",
+    "earlier": "This short is of an earlier book: it owes nothing and holds only its {held} USDG to take out.",
+    "deficitTerm": "Deficit",
+    "deficit": "This short's USDG cannot buy back what it owes: only a liquidation closes it (Insolvent)."
+  },
+  "cover": {
+    "none": "Gap cover is not deployed on this chain yet.",
+    "you": "You cover",
+    "notionalAria": "Notional, in USDG",
+    "usdgOf": "USDG of",
+    "paysBetween": "Pays the fall between",
+    "deductibleAria": "Deductible, in percent",
+    "limitAria": "Limit, in percent",
+    "percentAnd": "% and",
+    "percent": "%",
+    "sales": "Sales",
+    "closeIn": "close in {time}",
+    "closed": "closed until the market reopens with a close ahead",
+    "premium": "Premium",
+    "atMost": "at most {max}, as the feed moves it",
+    "reserves": "Writers' USDG it reserves",
+    "reserveValue": "{reserve} of {capacity} free",
+    "free": "{capacity} free",
+    "gap": "Priced at a weekend gap of",
+    "gapValue": "{gap}",
+    "gapFrom": "{gap}, from last week's move of {week}",
+    "minDeductible": "Smallest deductible now",
+    "submit": "Buy cover"
+  },
+  "basket": {
+    "none": "No basket is deployed on this chain yet.",
+    "you": "You",
+    "aria": "Basket",
+    "action": {
+      "aria": "Basket action",
+      "mint": "Mint",
+      "redeem": "Redeem",
+      "unwrap": "Unwrap"
+    },
+    "verb": {
+      "mint": "mint",
+      "redeem": "redeem",
+      "unwrap": "unwrap"
+    },
+    "sharesAria": "Shares to {action, select, mint {mint} redeem {redeem} other {unwrap}}",
+    "sharesOf": "{one, select, true {share} other {shares}} of",
+    "takes": "It takes from your wallet",
+    "receives": "Your wallet receives",
+    "unwrapHolds": "Your cross position holds",
+    "into": "Into",
+    "source": "From",
+    "cross": "your cross position",
+    "held": "Your cross position holds",
+    "shares": "{shares} shares",
+    "atMost": "at most {assets}, as other mints and redemptions move it",
+    "marginNow": "Cross margin now",
+    "against": "{equity} against {requirement}",
+    "marginedAs": "margined as {assets} through baskets",
+    "nothing": "nothing held through baskets yet"
+  },
+  "book": {
+    "title": "Your trades",
+    "cover": "Cover {asset} #{id}",
+    "coverDetail": "{notional} USDG, {deductible} to {limit} · series {status, select, open {open} settled {settled} other {void}}",
+    "coverSettled": "{notional} USDG, {deductible} to {limit} · series {status, select, open {open} settled {settled} other {void}} at {price} from {reference}, pays {payout}",
+    "waits": "Waits on its reopen",
+    "release": "Release",
+    "unreadTerm": "Your covers",
+    "unread": "The node would not return the cover's logs; reload to read them again",
+    "credited": "Credited to your account",
+    "amountUsdg": "{amount} USDG",
+    "claim": "Claim to your wallet",
+    "short": "Short {asset}",
+    "shortEarlier": "of an earlier book: owes nothing",
+    "shortOwes": "owes {debt} {asset} · margin {equity} against {requirement}",
+    "buyBack": "Buy back",
+    "takeOut": "Take out",
+    "basket": "Basket {key}",
+    "inCross": "in your cross position",
+    "shares": "{shares} shares",
+    "redeem": "Redeem"
+  },
+  "notesAria": "Before you sign"
+}

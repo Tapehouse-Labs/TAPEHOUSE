@@ -1,0 +1,11 @@
+{
+  "phase": {
+    "wrapping": "Embrulhando o seu ether…",
+    "stock": "Embrulhando o seu Stock Token…",
+    "permit": "Assine a permissão na sua carteira…",
+    "checking": "Conferindo com a cadeia…",
+    "signing": "Aguardando a sua carteira…",
+    "sending": "Enviando…"
+  },
+  "plain": "{text}"
+}

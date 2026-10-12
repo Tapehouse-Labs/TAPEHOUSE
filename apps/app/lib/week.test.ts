@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import { describe, expect, test } from "vitest";
+import { say } from "./say";
 import { capacity, premiumOver, regimeWord, week, weekendPlan } from "./week";
 
 const D = 10n ** 18n;
@@ -9,7 +10,7 @@ const base = { open: 3_200n * D, closed: 5_000n * D, gross: 20_000n * D, weekend
 
 describe("regimeWord", () => {
   test("names each regime the engine reports, an unknown one counted as closed", () => {
-    expect([0, 1, 2, 3, 9].map(regimeWord)).toEqual([
+    expect([0, 1, 2, 3, 9].map((r) => say(regimeWord(r)))).toEqual([
       "Session unknown, counted as closed",
       "Closed",
       "Open, with a 25% buffer",

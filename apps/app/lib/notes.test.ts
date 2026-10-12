@@ -2,7 +2,12 @@
 import { CROSS } from "@tapehouse/sdk";
 import { describe, expect, test } from "vitest";
 import type { AccountState, Position } from "./accountRead";
-import { borrowNotes, depositNotes, issuerNotes, positionNotes, weekendAhead } from "./notes";
+import { formatters } from "./format";
+import { borrowNotes, depositNotes, issuerNotes, type Note, positionNotes, weekendAhead } from "./notes";
+import { say } from "./say";
+
+const f = formatters("en");
+const words = (notes: Note[]) => notes.map((n) => say(n.message));
 
 const D = 10n ** 18n;
 const NVDA = "0x525c2aBA45F66987217323E8a05EA400C65D06DC";
@@ -70,17 +75,15 @@ describe("weekendAhead", () => {
 
 describe("positionNotes", () => {
   test("before a close, says what keeps the position within 5×", () => {
-    const notes = positionNotes(state({ session: { ...state().session, boundaryMs: 1n } }), position);
-    expect(notes).toContainEqual({
-      text: "To stay within 5× at the close, add $2,000.00 of equity or reduce the exposure by $10,000.00.",
-      tone: "warning",
-    });
+    const notes = positionNotes(f, state({ session: { ...state().session, boundaryMs: 1n } }), position);
+    expect(words(notes)).toContain("To stay within 5× at the close, add $2,000.00 of equity or reduce the exposure by $10,000.00.");
+    expect(notes.find((n) => n.message.key === "account.notes.weekendPlan")?.tone).toBe("warning");
   });
 
   test("names a halted asset, a missing pool and an unknown session", () => {
     const s = state();
     s.markets[0]!.state = 0;
-    const texts = positionNotes(s, { ...position, regime: 0, missing: 1 }).map((n) => n.text);
+    const texts = words(positionNotes(f, s, { ...position, regime: 0, missing: 1 }));
     expect(texts.slice(0, 3)).toEqual([
       "The band cannot tell whether the market is open, so the requirement counts as closed and borrowing stops at the price above.",
       "NVDA is halted and counts for nothing.",
@@ -90,13 +93,13 @@ describe("positionNotes", () => {
   });
 
   test("on an ordinary open day the weekend rules wait", () => {
-    expect(positionNotes(state(), position).some((n) => n.text.startsWith("From the close"))).toBe(false);
+    expect(words(positionNotes(f, state(), position)).some((t) => t.startsWith("From the close"))).toBe(false);
   });
 });
 
 describe("borrowNotes", () => {
   test("states the premium over a 48-hour closure and the caps", () => {
-    expect(borrowNotes(state(), position, 2_000_000_000n).map((n) => n.text)).toEqual([
+    expect(words(borrowNotes(f, state(), position, 2_000_000_000n))).toEqual([
       "While the market is closed, 5% a year is added on top of interest: this loan would owe 1.10 USDG over a 48-hour closure. A repayment pays the debt first, then the premium.",
       "All loans together owe 412,000.00 of their 1,000,000.00 USDG cap.",
     ]);
@@ -104,7 +107,7 @@ describe("borrowNotes", () => {
 
   test("before a closure names the weekend cap, and the guardian's pause first", () => {
     const s = state({ session: { ...state().session, boundaryMs: 1n }, limits: { ...state().limits, borrowingPaused: true } });
-    const texts = borrowNotes(s, position, 0n).map((n) => n.text);
+    const texts = words(borrowNotes(f, s, position, 0n));
     expect(texts[0]).toMatch(/^The guardian has paused new loans/);
     expect(texts.at(-1)).toBe(
       "All loans together owe 412,000.00 of their 1,000,000.00 USDG cap; until the reopen, new loans stop at 500,000.00.",
@@ -117,7 +120,7 @@ describe("depositNotes", () => {
     const s = state();
     s.markets[0]!.holding = { units: 61n * D, scale: D, quantity: 61n * D, cap: 100n * D, balance: 60n * D };
     s.markets[0]!.issuer = { paused: true, blocked: { [accounts]: false, [account]: false, [owner]: true } };
-    expect(depositNotes(s, NVDA, account, owner, true).map((n) => n.text)).toEqual([
+    expect(words(depositNotes(f, s, NVDA, account, owner, true))).toEqual([
       "Your wallet signs a permit for free and Tapehouse pays the gas.",
       "NVDA deposits: 61 of their 100 cap.",
       "A write-down by the issuer is pending: the accounts hold 60 of the 61 NVDA they count.",
@@ -127,7 +130,7 @@ describe("depositNotes", () => {
   });
 
   test("ether is wrapped by the wallet first", () => {
-    expect(depositNotes(state(), "ETH", account, owner, true)[0]?.text).toBe(
+    expect(words(depositNotes(f, state(), "ETH", account, owner, true))[0]).toBe(
       "Your wallet wraps the ether into WETH for your account and pays that gas; the deposit follows.",
     );
   });
@@ -135,8 +138,23 @@ describe("depositNotes", () => {
 
 describe("issuerNotes", () => {
   test("a block on the accounts is told apart from one on the user", () => {
-    expect(issuerNotes("NVDA", { paused: false, blocked: { [accounts]: true } }, account, owner)).toEqual([
-      { text: "The issuer has blocked the accounts from moving NVDA.", tone: "warning" },
-    ]);
+    const notes = issuerNotes("NVDA", { paused: false, blocked: { [accounts]: true } }, account, owner);
+    expect(words(notes)).toEqual(["The issuer has blocked the accounts from moving NVDA."]);
+    expect(notes[0]?.tone).toBe("warning");
+  });
+});
+
+describe("in Spanish and Portuguese", () => {
+  test("a note says the same with the language's own words and separators", () => {
+    const es = formatters("es");
+    const pt = formatters("pt");
+    const notes = positionNotes(es, state({ session: { ...state().session, boundaryMs: 1n } }), position);
+    expect(say(notes.find((n) => n.message.key === "account.notes.weekendPlan")!.message, "es")).toBe(
+      "Para mantenerte dentro de 5× al cierre, agrega $2000,00 de capital o reduce la exposición en $10.000,00.",
+    );
+    const loan = borrowNotes(pt, state(), position, 2_000_000_000n);
+    expect(say(loan[0]!.message, "pt")).toBe(
+      "Enquanto o mercado está fechado, soma-se 5% ao ano aos juros: este empréstimo passaria a dever 1,10 USDG em um fechamento de 48 horas. Um pagamento quita primeiro a dívida e depois o prêmio.",
+    );
   });
 });

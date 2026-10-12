@@ -1,0 +1,25 @@
+{
+  "default": {
+    "description": "Margem de portfólio para Stock Tokens."
+  },
+  "earn": {
+    "title": "Ganhar",
+    "description": "Forneça USDG, sustente as contas de margem, empreste Stock Tokens ou emita cobertura de gap, com cada condição lida primeiro da cadeia."
+  },
+  "risk": {
+    "title": "Risco",
+    "description": "Cada banda, a exposição do backstop de gap e as últimas rodadas de reabertura, lidas da cadeia."
+  },
+  "simulator": {
+    "title": "Simulador",
+    "description": "Calcule a margem de qualquer portfólio de Stock Tokens com o motor da Tapehouse, ao vivo da cadeia."
+  },
+  "trade": {
+    "title": "Operar",
+    "description": "Venda a descoberto um Stock Token, compre cobertura de gap para o fim de semana e mantenha cestas, com cada linha do ticket lida primeiro da cadeia."
+  },
+  "notFound": {
+    "title": "404 · Esta página não existe",
+    "back": "Voltar à sua conta"
+  }
+}

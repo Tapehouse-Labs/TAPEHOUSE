@@ -10,6 +10,7 @@ import { createBundlerClient, createPaymasterClient } from "viem/account-abstrac
 import { useConnection, usePublicClient } from "wagmi";
 import { useDeployments, useSmartAccountUrls } from "@/app/providers";
 import { REFRESH_MS } from "./hooks";
+import { MessageError, msg } from "./messages";
 
 /**
  * The visitor's smart account: a SimpleAccount v0.7 their wallet owns, whether it exists yet, and how many of its
@@ -48,7 +49,7 @@ export function useSmartAccount() {
         owner!,
       );
       if (!isAddressEqual(viaWallet, account.address))
-        throw new Error("Your wallet and the app's node disagree on your smart account's address.");
+        throw new MessageError(msg("errors.smartAccountMismatch"));
       return account;
     },
     enabled: enabled && client !== undefined && connector !== undefined && owner !== undefined,
@@ -93,7 +94,7 @@ export function useSmartAccount() {
       const hash = await client.sendUserOperation({ callData: "0x" });
       setSubmitted(true);
       const { success } = await client.waitForUserOperationReceipt({ hash });
-      if (!success) throw new Error("The account's creation reverted.");
+      if (!success) throw new MessageError(msg("errors.accountCreationReverted"));
     },
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: ["smartAccountStanding", deployments.chainId, address] });

@@ -1,68 +1,70 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import { decodeRevert, type Revert } from "@tapehouse/sdk";
 import { BaseError, type Hex, hexToString, RpcRequestError, UserRejectedRequestError } from "viem";
-import { tokens, usd, usdg } from "./amounts";
+import type { Formatters } from "./format";
+import { MessageError, type Msg, msg } from "./messages";
 
 const asset = (symbol: unknown) => hexToString(symbol as Hex, { size: 32 });
 
-/** What the accounts' and the issuer's refusals mean, in words, by error name. */
-const WORDS: Record<string, (args: readonly unknown[]) => string> = {
-  InsufficientMargin: ([equity, requirement]) =>
-    `This leaves the position short of its requirement: ${usd(equity as bigint)} of equity against ${usd(requirement as bigint)} required.`,
-  WeekendLeverageExceeded: ([gross, equity]) =>
-    `Before the close the position may hold at most 5× its equity: ${usd(gross as bigint)} against ${usd(equity as bigint)} of equity.`,
-  BorrowingIsPaused: () =>
-    "The guardian has paused new loans and withdrawals from positions in debt. Deposits and repayments stay open.",
-  DebtCapExceeded: ([debt, cap]) =>
-    `All loans together would owe ${usdg(debt as bigint)} USDG, past the cap of ${usdg(cap as bigint)}.`,
-  WeekendDebtCapExceeded: ([debt, cap]) =>
-    `All loans together would owe ${usdg(debt as bigint)} USDG, past the cap of ${usdg(cap as bigint)} that holds until the reopen.`,
-  AssetCapExceeded: ([symbol, cap]) =>
-    `The accounts may hold at most ${tokens(cap as bigint)} ${asset(symbol)}, through baskets included.`,
-  BasketFrozen: () => "A basket the position holds is frozen: it backs no new loan or withdrawal until it moves again.",
-  AssetFrozen: ([symbol]) =>
-    `${asset(symbol)} is frozen by its lending vault or its issuer: the position borrows nothing and withdraws nothing while in debt.`,
-  AssetHalted: ([symbol]) => `${asset(symbol)} is halted: it backs nothing until trading resumes.`,
-  OutOfReach: (args) =>
+/** What the accounts' and the issuer's refusals mean, by error name. */
+const WORDS: Record<string, (f: Formatters, args: readonly unknown[]) => Msg> = {
+  InsufficientMargin: (f, [equity, requirement]) =>
+    msg("errors.revert.InsufficientMargin", { equity: f.usd(equity as bigint), requirement: f.usd(requirement as bigint) }),
+  WeekendLeverageExceeded: (f, [gross, equity]) =>
+    msg("errors.revert.WeekendLeverageExceeded", { gross: f.usd(gross as bigint), equity: f.usd(equity as bigint) }),
+  BorrowingIsPaused: () => msg("errors.revert.BorrowingIsPaused"),
+  DebtCapExceeded: (f, [debt, cap]) =>
+    msg("errors.revert.DebtCapExceeded", { debt: f.usdg(debt as bigint), cap: f.usdg(cap as bigint) }),
+  WeekendDebtCapExceeded: (f, [debt, cap]) =>
+    msg("errors.revert.WeekendDebtCapExceeded", { debt: f.usdg(debt as bigint), cap: f.usdg(cap as bigint) }),
+  AssetCapExceeded: (f, [symbol, cap]) =>
+    msg("errors.revert.AssetCapExceeded", { cap: f.tokens(cap as bigint), asset: asset(symbol) }),
+  BasketFrozen: () => msg("errors.revert.BasketFrozen"),
+  AssetFrozen: (_, [symbol]) => msg("errors.revert.AssetFrozen", { asset: asset(symbol) }),
+  AssetHalted: (_, [symbol]) => msg("errors.revert.AssetHalted", { asset: asset(symbol) }),
+  OutOfReach: (f, args) =>
     args.length === 3
-      ? `The ${asset(args[0])} lending vault can return ${tokens(args[2] as bigint)} of the ${tokens(args[1] as bigint)} asked now; recall the rest.`
-      : `The lending vault can return ${tokens(args[1] as bigint)} of the ${tokens(args[0] as bigint)} asked now.`,
-  RecallTooSmall: ([amount]) =>
-    `A recall must queue at least a hundredth of a token; this one would queue ${tokens(amount as bigint)}.`,
-  TooManyRecalls: ([symbol]) => `The position already has 3 ${asset(symbol)} recalls open, the most an owner may.`,
-  NothingToSettle: () => "Nothing has come back for this recall yet.",
-  InsufficientCollateral: () => "The position holds less than that.",
-  BorrowingAgainstUsdg: () => "A position holding USDG repays with it before it borrows.",
-  AssetInOtherPosition: ([symbol]) => `Your ${asset(symbol)} sits in another of your positions.`,
-  SessionUnknown: () => "The band cannot tell whether the market is open, so new loans wait.",
-  SequencerNotSettled: () => "The chain's sequencer has just restarted; new loans wait a moment.",
-  CorporateActionPending: ([symbol]) => `${asset(symbol)} has a corporate action pending; new loans against it wait.`,
-  LiquidityUnknown: ([symbol]) => `${asset(symbol)}'s pool cannot be read, so it backs no new loan.`,
-  AssetWrittenOff: ([symbol]) => `${asset(symbol)} has been written off by its issuer.`,
-  Blocked: () => "The issuer has blocked this address from moving the token.",
-  IsPaused: () => "The issuer has paused the token's transfers.",
-  AddressFrozen: () => "USDG's issuer has frozen this address.",
-  ZeroAmount: () => "Enter an amount above zero.",
+      ? msg("errors.revert.OutOfReachOfAsset", {
+          asset: asset(args[0]),
+          returned: f.tokens(args[2] as bigint),
+          asked: f.tokens(args[1] as bigint),
+        })
+      : msg("errors.revert.OutOfReach", { returned: f.tokens(args[1] as bigint), asked: f.tokens(args[0] as bigint) }),
+  RecallTooSmall: (f, [amount]) => msg("errors.revert.RecallTooSmall", { amount: f.tokens(amount as bigint) }),
+  TooManyRecalls: (_, [symbol]) => msg("errors.revert.TooManyRecalls", { asset: asset(symbol) }),
+  NothingToSettle: () => msg("errors.revert.NothingToSettle"),
+  InsufficientCollateral: () => msg("errors.revert.InsufficientCollateral"),
+  BorrowingAgainstUsdg: () => msg("errors.revert.BorrowingAgainstUsdg"),
+  AssetInOtherPosition: (_, [symbol]) => msg("errors.revert.AssetInOtherPosition", { asset: asset(symbol) }),
+  SessionUnknown: () => msg("errors.revert.SessionUnknown"),
+  SequencerNotSettled: () => msg("errors.revert.SequencerNotSettled"),
+  CorporateActionPending: (_, [symbol]) => msg("errors.revert.CorporateActionPending", { asset: asset(symbol) }),
+  LiquidityUnknown: (_, [symbol]) => msg("errors.revert.LiquidityUnknown", { asset: asset(symbol) }),
+  AssetWrittenOff: (_, [symbol]) => msg("errors.revert.AssetWrittenOff", { asset: asset(symbol) }),
+  Blocked: () => msg("errors.revert.Blocked"),
+  IsPaused: () => msg("errors.revert.IsPaused"),
+  AddressFrozen: () => msg("errors.revert.AddressFrozen"),
+  ZeroAmount: () => msg("errors.revert.ZeroAmount"),
 };
 
 /** A revert in words where the app knows its meaning, else by its error's name and arguments. */
-export function describeRevert({ errorName, args }: Revert): string {
-  return WORDS[errorName]?.(args) ?? `${errorName}(${args.map(String).join(", ")})`;
+export function describeRevert(f: Formatters, { errorName, args }: Revert): Msg {
+  return WORDS[errorName]?.(f, args) ?? msg("errors.unknownRevert", { name: errorName, args: args.map(String).join(", ") });
 }
 
 /**
- * What went wrong, for the visitor: a revert in words, a declined request, a service's refusal in its own words, or
- * viem's short message.
+ * What went wrong, for the visitor: a revert in words, one of the app's own messages, a declined request, a service's
+ * refusal in its own words, or viem's short message.
  */
-export function explain(error: unknown): string {
+export function explain(f: Formatters, error: unknown): Msg {
   const revert = decodeRevert(error);
-  if (revert) return describeRevert(revert);
+  if (revert) return describeRevert(f, revert);
+  if (error instanceof MessageError) return error.msg;
   if (error instanceof BaseError) {
-    if (error.walk((cause) => cause instanceof UserRejectedRequestError))
-      return "You declined the request in your wallet.";
+    if (error.walk((cause) => cause instanceof UserRejectedRequestError)) return msg("errors.declined");
     const refused = error.walk((cause) => cause instanceof RpcRequestError);
-    if (refused instanceof RpcRequestError && refused.details) return `Refused: ${refused.details}.`;
-    return error.shortMessage;
+    if (refused instanceof RpcRequestError && refused.details) return msg("errors.refused", { details: refused.details });
+    return msg("errors.text", { text: error.shortMessage });
   }
-  return error instanceof Error ? error.message : String(error);
+  return msg("errors.text", { text: error instanceof Error ? error.message : String(error) });
 }

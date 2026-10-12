@@ -1,0 +1,189 @@
+{
+  "span": {
+    "days": "{days, plural, one {# día} other {# días}}",
+    "daysHours": "{days, plural, one {# día} other {# días}}, {hours, plural, one {# hora} other {# horas}}",
+    "hours": "{hours, plural, one {# hora} other {# horas}}"
+  },
+  "usdgAmount": "{amount} USDG",
+  "tokenAmount": "{amount} {asset}",
+  "exposure": {
+    "cross": "Posiciones cruzadas",
+    "isolated": "{asset} aislado",
+    "change": "{limit} para cierres desde el {date} UTC"
+  },
+  "ledger": {
+    "atOnce": "De inmediato",
+    "supply": {
+      "place": "Suministro",
+      "earnsNote": "al año ahora, {utilization} prestado",
+      "leavesNote": "hasta {idle} USDG sin prestar",
+      "bears": "La última pérdida",
+      "bearsNote": "después del colateral y del backstop"
+    },
+    "backstop": {
+      "place": "Backstop",
+      "earns": "Prima del fin de semana",
+      "earnsNote": "{share} de {rate} al año, a medida que se pagan los préstamos",
+      "leaves": "{cooldown}, luego {window}",
+      "leavesNote": "nunca mientras el mercado está cerrado",
+      "bears": "La segunda pérdida",
+      "bearsNote": "hasta su límite por cierre"
+    },
+    "lend": {
+      "place": "Prestar {asset}",
+      "what": "desde tu cuenta",
+      "nothingNow": "Nada por ahora",
+      "earnsNoteNone": "nadie vende {asset} en corto",
+      "earnsNote": "al año, solo mientras los cortos pagan",
+      "leaves": "{notice} de aviso",
+      "leavesNote": "la cola de reclamos, luego una compra forzosa",
+      "bears": "El faltante de los cortos",
+      "bearsNote": "más allá de su USDG, y quemas del emisor"
+    },
+    "cover": {
+      "place": "Suscribir cobertura",
+      "what": "USDG, aparte del backstop",
+      "earns": "Primas",
+      "earnsNote": "al liberarse, menos lo que pagan las coberturas",
+      "afterSettlement": "Tras la resolución",
+      "leavesNote": "bloqueado mientras haya una cobertura vigente",
+      "bears": "Los pagos de las coberturas",
+      "bearsNote": "cada uno reservado por completo hasta su liberación"
+    }
+  },
+  "term": {
+    "closed": "Cerrado",
+    "lossOrder": "Orden de pérdidas",
+    "timing": "Momento",
+    "exit": "Salida",
+    "limit": "Límite",
+    "auction": "Subasta",
+    "premium": "Prima",
+    "seed": "Capital semilla",
+    "recalls": "Reclamos",
+    "lent": "Prestado",
+    "earnings": "Ganancias",
+    "losses": "Pérdidas",
+    "issuer": "Emisor",
+    "reserve": "Reserva",
+    "premiums": "Primas"
+  },
+  "notes": {
+    "supply": {
+      "closed": "La bóveda no recibe depósitos ahora: los depósitos esperan a su prestatario, y los depósitos y retiros se detienen mientras USDG está pausado, la bóveda congelada o su USDG borrado.",
+      "lossOrder": "Los prestamistas son los últimos en la cascada de pérdidas: lo que una liquidación deja sin pagar recae primero en el colateral del prestatario, luego en el backstop de brecha, y solo lo que el backstop no puede cubrir se da de baja contra cada participación. Un borrado del USDG de la bóveda por su emisor también es una pérdida para cada participación, una vez que alguien lo sincroniza.",
+      "timing": "Una pérdida se da de baja cuando ocurre: quien retiró antes no pierde nada, y quienes se quedan la soportan toda. Las comisiones de liquidación de la reserva no son tu cobertura.",
+      "exit": "Puedes retirar como máximo el USDG que tiene la bóveda, {idle} ahora; los {debt} prestados regresan a medida que los prestatarios pagan."
+    },
+    "backstop": {
+      "closed": "Los depósitos están cerrados ahora: desde el momento en que se registra un cierre hasta un día después de su reapertura, y mientras USDG está pausado, el backstop congelado o su USDG borrado.",
+      "lossOrder": "El backstop es subordinado a los prestamistas: cuando una liquidación deja una posición vacía y aún con deuda, paga lo que puede antes de dar de baja nada contra ellos, y perdona la prima de esa posición, una pérdida propia.",
+      "limit": "Cubre como máximo su límite por cierre para las posiciones cruzadas en conjunto y para las posiciones aisladas de cada Stock Token, y nunca más que el USDG que tiene; pasado cualquiera de los dos, los prestamistas soportan el resto. El mismo límite acota lo que compra en la subasta de reapertura, contado como una cobertura.",
+      "auction": "En la compensación de la subasta compra lo que las ofertas dejan de cada lote al precio de compensación. Esos Stock Tokens son de sus depositantes, en proporción a sus participaciones en la compra, no cuentan en el valor de las participaciones y nunca se venden de nuevo; cada depositante reclama los suyos.",
+      "premium": "Mientras el mercado está cerrado los prestatarios deben una prima de {rate} al año; {share} de cada prima pagada llega aquí y {reserve} a la reserva de comisiones. Llega solo a medida que los prestatarios pagan, a golpes, y se suma a las participaciones de inmediato cuando alguien la reclama, no de forma continua: hay {waiting} USDG esperando.",
+      "exit": "Las participaciones salen solo tras un periodo de espera: {cooldown} después de iniciarlo puedes canjearlas durante {window}, nunca mientras el mercado está cerrado ni desde el momento en que se registra un cierre próximo hasta {settlement} después de su reapertura. Las participaciones enviadas a otra dirección salen del periodo de espera. Los depósitos y canjes se detienen mientras USDG está pausado, el backstop congelado o su USDG borrado.",
+      "seed": "El capital semilla del equipo es un depósito común: las participaciones del dueño valen {assets} USDG y salen igual."
+    },
+    "lending": {
+      "recalls": "Un reclamo toma de inmediato los tokens libres de la bóveda; luego los préstamos y pagos nuevos atienden los tickets de la cola en su orden antes de que algo quede libre; luego el prestatario dentro de {notice}, en tiempo calendario; luego una compra forzosa que cualquiera puede llamar. Nadie toma los tokens ociosos por orden de llegada, y un ticket que sigue en turno y que nadie resuelve retiene a los de atrás hasta que alguien lo haga, lo cual cualquiera puede.",
+      "lent": "{utilization} del {asset} de la bóveda está prestado, {locked} está reservado para reclamos y pueden pedirse prestados {borrowable} más: como máximo {max}, nunca lo que esperan los reclamos.",
+      "earnings": "El prestatario son las posiciones cortas de Tapehouse, así que los prestamistas ganan solo lo que pagan los cortos: {rate} al año ahora, tras el {share} de la comisión del dueño. La comisión se paga en {asset}; los dividendos y los splits pasan de largo.",
+      "earningsNone": "El prestatario son las posiciones cortas de Tapehouse, así que los prestamistas ganan solo lo que pagan los cortos: nadie vende {asset} en corto ahora, así que prestarlo no rinde nada.",
+      "losses": "La pérdida de un corto más allá de su USDG se da de baja en la bóveda, una pérdida para sus prestamistas a través de sus participaciones, reclamadas o no, hasta donde los cortos de {asset} aún se la deban. Una compra forzosa compra por el pool de {asset} a no más de 1 % sobre el centro de la banda; la que el pool no pueda atender espera mientras corre el aviso.",
+      "issuer": "Una quema desde la bóveda recae solo en sus prestamistas, en proporción: primero los tokens libres, luego los reservados para los últimos tickets. Mientras {asset} está pausado o la bóveda en la lista de bloqueo nada sale y no corre ninguna compra forzosa, aunque pueden hacerse reclamos y los avisos siguen corriendo. Si el emisor falla, recupera y retira a tu propia dirección, donde reclamas al emisor tú mismo."
+    },
+    "cover": {
+      "closed": "Los depósitos están cerrados ahora: mientras hay una cobertura vigente sobre el próximo cierre solo siguen abiertos mientras la sesión está abierta y antes de que terminen sus ventas, nunca mientras haya coberturas de otro cierre, y nunca mientras USDG está pausado, la cobertura congelada o su USDG borrado.",
+      "reserve": "Esta es la bóveda propia de la cobertura de brecha, aparte del backstop. Cada cobertura reserva todo su pago del USDG de los suscriptores hasta que se libera: {reserved} reservados, {free} libres.",
+      "premiums": "Las primas se suman al USDG de los suscriptores solo al liberarse, menos lo que paga cada cobertura: {premiums} USDG espera por {covers, plural, one {# cobertura} other {# coberturas}}.",
+      "exit": "Los canjes abren solo cuando todas las coberturas están liberadas, así que desde la primera cobertura vendida quedas bloqueado hasta que las series del cierre se resuelvan o se anulen; una serie que nadie resuelve se anula tras una semana, y una cobertura anulada devuelve su prima a su comprador, así que los suscriptores no ganan nada con ella. Un borrado del USDG de la cobertura recae sobre los suscriptores después de las primas y los créditos que tenga."
+    }
+  },
+  "page": {
+    "title": "Ganancias · suministro, backstop y cobertura",
+    "none": "Aún nada",
+    "wrongNetwork": "Tu wallet está en otra red. Tapehouse funciona en <b>{chain}</b>.",
+    "connect": "Conecta una wallet para depositar. Cada término de abajo se lee de la cadena, antes de que lo necesites.",
+    "worth": "Lo que valen ahora las participaciones de tu cuenta. Los retiros y los Stock Tokens reclamados van a tu wallet.",
+    "worthLent": "Lo que valen ahora las participaciones de tu cuenta, además de {lent} prestados desde ella. Los retiros y los Stock Tokens reclamados van a tu wallet.",
+    "open": "Abre un lugar de abajo y lee sus términos antes de depositar. Los retiros vuelven a tu wallet.",
+    "switch": "Cambiar a {chain}",
+    "block": "Leído en el bloque {block}",
+    "ledgerTitle": "Dónde puede trabajar tu dinero",
+    "caption": "Cada lugar donde puede trabajar tu dinero: qué gana, cómo sale, qué asume y qué tiene tu cuenta allí",
+    "place": "Lugar",
+    "earns": "Gana",
+    "leaves": "Salida",
+    "bears": "Asume",
+    "hold": "Tienes",
+    "absent": "La cobertura de brecha aún no está desplegada en esta cadena.",
+    "borrowersPay": "Los prestatarios pagan",
+    "aYear": "{rate} al año",
+    "lent": "Prestado",
+    "notLent": "Sin prestar",
+    "vaultHolds": "La bóveda tiene",
+    "freeForCovers": "Libre para coberturas",
+    "reserved": "Reservado",
+    "premiumsWaiting": "Primas en espera",
+    "coversOutstanding": "Coberturas vigentes",
+    "exposureCaption": "Exposición de este cierre, USDG",
+    "positions": "Posiciones",
+    "limit": "Límite",
+    "covered": "Cubierto",
+    "left": "Restante",
+    "then": "luego {change}",
+    "held": "Lo que queda nunca supera los {amount} USDG que tiene el backstop.",
+    "recallNotice": "Aviso de retiro",
+    "heldForRecalls": "Reservado para retiros",
+    "lentOfVault": "Prestado de la bóveda",
+    "borrowable": "Prestable",
+    "beforeDeposit": "Antes de depositar"
+  },
+  "desk": {
+    "backstopAction": "Acción del backstop",
+    "deposit": "Depositar",
+    "leave": "Salir",
+    "gains": "Ganancias y prima",
+    "claim": "Reclamar {asset}",
+    "premium": "{amount} USDG de prima",
+    "claimPremium": "Reclamarla para las participaciones",
+    "noShares": "No tienes participaciones del backstop.",
+    "startCooldown": "Iniciar enfriamiento",
+    "startAgain": "Iniciar de nuevo",
+    "lendingAction": "Acción de préstamo",
+    "action": "Acción",
+    "position": "Posición",
+    "cross": "Cruzada",
+    "isolated": "{name} aislado",
+    "fromCross": "desde cruzada",
+    "fromIsolated": "desde {name} aislado",
+    "lendEmpty": "Deposita {asset} en tu cuenta para prestarlo desde allí.",
+    "unlendEmpty": "Tu cuenta no tiene {asset} prestado.",
+    "openAccount": "Abre tu cuenta",
+    "recalls": "Los retiros solicitados y sus tickets están en <link>las posiciones de tu cuenta</link>.",
+    "verb": {
+      "deposit": "Depositar",
+      "withdraw": "Retirar",
+      "redeem": "Canjear",
+      "lend": "Prestar",
+      "unlend": "Recuperar"
+    },
+    "amountTo": {
+      "deposit": "Monto a depositar",
+      "withdraw": "Monto a retirar",
+      "redeem": "Monto a canjear",
+      "lend": "Monto a prestar",
+      "unlend": "Monto a recuperar"
+    },
+    "free": "{label}, gratis",
+    "max": "Máx. {amount}",
+    "done": "Listo. Cada cifra se lee de nuevo desde la cadena."
+  },
+  "cooldown": {
+    "windowOpen": "Tu ventana sigue abierta {closes} más.",
+    "cooling": "Tu enfriamiento está en marcha: tus participaciones podrán salir en {opens}, durante {window}. Iniciarlo de nuevo lo retrasa.",
+    "windowSpent": "Tu ventana sigue abierta {closes} más, pero sus participaciones ya salieron; las que depositaste desde entonces necesitan su propio enfriamiento. Iniciarlo de nuevo renuncia a esta ventana.",
+    "windowShut": "Tu ventana sigue abierta {closes} más, pero los canjes están cerrados ahora: el mercado está cerrado, hay un cierre próximo registrado o un cierre se está liquidando, o USDG está en pausa. Iniciarlo de nuevo renuncia a esta ventana.",
+    "start": "Inicia un enfriamiento y tus {assets} USDG en participaciones podrán salir en una semana, durante {window}."
+  }
+}

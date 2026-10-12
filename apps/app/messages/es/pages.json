@@ -1,0 +1,25 @@
+{
+  "default": {
+    "description": "Margen de portafolio para Stock Tokens."
+  },
+  "earn": {
+    "title": "Ganar",
+    "description": "Aporta USDG, respalda las cuentas de margen, presta Stock Tokens o emite cobertura de brecha, con cada condición leída primero de la cadena."
+  },
+  "risk": {
+    "title": "Riesgo",
+    "description": "Cada banda, la exposición del backstop de brecha y las últimas rondas de reapertura, leídas de la cadena."
+  },
+  "simulator": {
+    "title": "Simulador",
+    "description": "Calcula el margen de cualquier portafolio de Stock Tokens con el motor de Tapehouse, en vivo desde la cadena."
+  },
+  "trade": {
+    "title": "Operar",
+    "description": "Vende en corto un Stock Token, compra cobertura de brecha para el fin de semana y mantén cestas, con cada línea del ticket leída primero de la cadena."
+  },
+  "notFound": {
+    "title": "404 · Esta página no existe",
+    "back": "Volver a tu cuenta"
+  }
+}

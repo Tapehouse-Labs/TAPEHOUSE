@@ -1,0 +1,25 @@
+{
+  "default": {
+    "description": "Portfolio margin for Stock Tokens."
+  },
+  "earn": {
+    "title": "Earn",
+    "description": "Supply USDG, back the margin accounts, lend Stock Tokens or write gap cover, with every term read from the chain first."
+  },
+  "risk": {
+    "title": "Risk",
+    "description": "Every band, the gap backstop's exposure and the latest reopening rounds, read from the chain."
+  },
+  "simulator": {
+    "title": "Simulator",
+    "description": "Margin any portfolio of Stock Tokens with Tapehouse's engine, live from the chain."
+  },
+  "trade": {
+    "title": "Trade",
+    "description": "Short a Stock Token, buy gap cover over the weekend and hold baskets, every line of the ticket read from the chain first."
+  },
+  "notFound": {
+    "title": "404 · This page does not exist",
+    "back": "Back to your account"
+  }
+}

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import { describe, expect, test } from "vitest";
 import { isSanctioned, notices, restrictedLocation, SANCTIONS } from "./compliance";
+import { msg } from "./messages";
 import sanctions from "./sanctions.json";
 
 const alice = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
@@ -49,7 +50,7 @@ describe("notices", () => {
 
   test("an issuer's block on the owner or the account is named by asset", () => {
     expect(notices([alice, smart], blocks)).toEqual([
-      { text: "The issuer has blocked your address from moving TSLA.", tone: "warning" },
+      { message: msg("compliance.blocked", { asset: "TSLA" }), tone: "warning" },
     ]);
     expect(notices([alice, smart.toLowerCase()], blocks)).toHaveLength(1);
     expect(notices([alice], blocks)).toEqual([]);

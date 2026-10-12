@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { Header } from "../components/Header";
 import { Risk } from "../components/Risk";
 
-export const metadata: Metadata = {
-  title: "Risk",
-  description: "Every band, the gap backstop's exposure and the latest reopening rounds, read from the chain.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("pages.risk");
+  return { title: t("title"), description: t("description") };
+}
 
 export default function RiskPage() {
   return (

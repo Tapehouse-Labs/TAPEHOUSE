@@ -2,16 +2,17 @@
 "use client";
 
 import { CROSS, toBytes32 } from "@tapehouse/sdk";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { type Address, type Hex, zeroAddress } from "viem";
 import { useDeployments } from "@/app/providers";
 import { type AccountState, leadAsset, type Position, positionName } from "@/lib/accountRead";
 import { PHASE, useAccountState, useLiquidationPreview, useMarginAccount, useSend, useWalletBalances } from "@/lib/accountHook";
-import { parseAmount, tokens, unparse, usdg } from "@/lib/amounts";
-import { explain } from "@/lib/errors";
-import { price } from "@/lib/format";
+import type { Formatters } from "@/lib/format";
 import { useMinute } from "@/lib/hooks";
+import { useExplain, useFormat, useMsg } from "@/lib/i18n";
 import type { Intent } from "@/lib/intent";
+import { msg } from "@/lib/messages";
 import { borrowNotes, depositNotes, issuerNotes, type Note, positionNotes, weekendAhead } from "@/lib/notes";
 import { capacity, regimeWord, week } from "@/lib/week";
 import { Positions } from "./Positions";
@@ -20,10 +21,13 @@ import { Week } from "./Week";
 
 type Action = "deposit" | "borrow" | "repay" | "withdraw";
 const ACTIONS: readonly Action[] = ["deposit", "borrow", "repay", "withdraw"];
-const VERB: Record<Action, string> = { deposit: "Deposit", borrow: "Borrow", repay: "Repay", withdraw: "Withdraw" };
 
 /** The connected account: its liquidation price at the crossing, the composer, its week down the stem, its positions. */
 export function Desk() {
+  const t = useTranslations("account.desk");
+  const f = useFormat();
+  const say = useMsg();
+  const explain = useExplain();
   const deployments = useDeployments();
   const { account, owner, smart } = useMarginAccount();
   const state = useAccountState(account, owner);
@@ -45,7 +49,7 @@ export function Desk() {
   const tokenChoices = data ? choices(deployments, data, action, selected, position) : [];
   const chosen = tokenChoices.find((c) => c.value === token) ?? tokenChoices[0];
   const decimals = action === "borrow" || action === "repay" || chosen?.value === deployments.tokens.USDG ? 6 : 18;
-  const amount = parseAmount(typed, decimals);
+  const amount = f.parseAmount(typed, decimals);
   const borrowing = action === "borrow" ? (amount ?? 0n) : 0n;
   const preview = useLiquidationPreview(account, position?.id, lead?.asset, borrowing);
   const sponsored = smart.enabled && (smart.standing?.left ?? 0n) > 0n;
@@ -72,11 +76,11 @@ export function Desk() {
     : 0n;
   const intent = buildIntent(action, selected, chosen?.value, amount);
   const notes: Note[] = [
-    ...(action === "borrow" && position ? borrowNotes(data, position, borrowing) : []),
-    ...(action === "deposit" && chosen ? depositNotes(data, chosen.value, account, owner, sponsored) : []),
-    ...(action === "repay" ? [{ text: "A repayment pays the debt first, then the premium." }] : []),
+    ...(action === "borrow" && position ? borrowNotes(f, data, position, borrowing) : []),
+    ...(action === "deposit" && chosen ? depositNotes(f, data, chosen.value, account, owner, sponsored) : []),
+    ...(action === "repay" ? [{ message: msg("account.desk.notes.repayOrder") }] : []),
     ...(action === "withdraw" && chosen && chosen.value !== "ETH" ? withdrawNotes(data, position, chosen.value, account, owner) : []),
-    ...(position ? positionNotes(data, position) : []),
+    ...(position ? positionNotes(f, data, position) : []),
   ];
 
   const figure = preview.data ?? lead?.liquidationPrice;
@@ -87,42 +91,44 @@ export function Desk() {
       <div className="relative pt-14">
         <span className="bar" aria-hidden="true" />
         <h1 className="label">
-          {regime === 0 ? "Borrowing stops at" : "Liquidation price"}
-          {borrowing > 0n && " with this loan"}
-          {lead && ` · ${lead.asset}, ${position?.name === "Cross" ? "cross" : "isolated"}`}
+          {regime === 0 ? t("borrowingStops") : t("liquidationPrice")}
+          {borrowing > 0n && ` ${t("withLoan")}`}
+          {lead && ` · ${t(position?.name === "Cross" ? "leadCross" : "leadIsolated", { asset: lead.asset })}`}
         </h1>
         {lead && figure !== undefined ? (
           <p key={String(figure)} className="figure num swap mt-3" data-live="" aria-live="polite">
-            {figure === 0n ? "None" : `$${price(figure)}`}
+            {figure === 0n ? t("none") : `$${f.price(figure)}`}
           </p>
         ) : (
           <p className="figure mt-3" data-empty>
-            None yet
+            {t("noneYet")}
           </p>
         )}
         <p className="mt-3 text-[14px] text-muted num">
           {lead ? (
             <>
               {borrowing > 0n && (
-                <>{lead.liquidationPrice === 0n ? "None" : `$${price(lead.liquidationPrice)}`} without it · </>
+                <>
+                  {t("without", { value: lead.liquidationPrice === 0n ? t("none") : `$${f.price(lead.liquidationPrice)}` })} ·{" "}
+                </>
               )}
-              {lead.asset}&apos;s band low edge ${price(data.markets.find((m) => m.asset === lead.asset)?.low ?? 0n)}
+              {t("bandLow", { asset: lead.asset, price: `$${f.price(data.markets.find((m) => m.asset === lead.asset)?.low ?? 0n)}` })}
               {figure !== undefined && figure > 0n && (
-                <> · {dropBelow(figure, data.markets.find((m) => m.asset === lead.asset)?.low ?? 0n)} below it</>
+                <> · {t("below", { drop: dropBelow(f, figure, data.markets.find((m) => m.asset === lead.asset)?.low ?? 0n) })}</>
               )}
-              <span className="text-faint"> · {regimeWord(regime)}</span>
+              <span className="text-faint"> · {say(regimeWord(regime))}</span>
             </>
           ) : (
-            "Deposit Stock Tokens and your liquidation price appears here before you borrow."
+            t("empty")
           )}
         </p>
-        <p className="label mt-2 num">Read at block {data.blockNumber.toLocaleString("en-US")}</p>
+        <p className="label mt-2 num">{t("block", { block: Number(data.blockNumber) })}</p>
       </div>
 
       <SmartAccount />
 
-      <section aria-label="Act on your account" className="mt-8">
-        <div className="choice" role="group" aria-label="Action">
+      <section aria-label={t("actAria")} className="mt-8">
+        <div className="choice" role="group" aria-label={t("actionAria")}>
           {ACTIONS.map((a) => (
             <button
               key={a}
@@ -135,7 +141,7 @@ export function Desk() {
                 send.reset();
               }}
             >
-              {VERB[a]}
+              {t(`verb.${a}`)}
             </button>
           ))}
         </div>
@@ -146,24 +152,24 @@ export function Desk() {
             if (intent) send.send(intent);
           }}
         >
-          <span>{VERB[action]}</span>
+          <span>{t(`verb.${action}`)}</span>
           <input
             className="amount"
             inputMode="decimal"
             autoComplete="off"
             placeholder="0"
-            aria-label={`Amount to ${action}`}
+            aria-label={t(`amountAria.${action}`)}
             aria-invalid={typed !== "" && (amount === undefined || (max !== undefined && amount > max))}
             value={typed}
             onChange={(e) => {
-              setTyped(e.target.value);
+              setTyped(f.normalize(e.target.value));
               if (!send.pending) send.reset();
             }}
           />
           {tokenChoices.length > 1 ? (
             <select
               className="picker"
-              aria-label="Token"
+              aria-label={t("tokenAria")}
               value={String(chosen?.value)}
               onChange={(e) => setToken(e.target.value as Address | "ETH")}
             >
@@ -176,17 +182,16 @@ export function Desk() {
           ) : (
             <span>{chosen?.label ?? "USDG"}</span>
           )}
-          <span className="text-body">{action === "deposit" || action === "repay" ? "into" : "from"}</span>
+          <span className="text-body">{action === "deposit" || action === "repay" ? t("into") : t("from")}</span>
           <select
             className="picker"
-            aria-label="Position"
+            aria-label={t("positionAria")}
             value={selected}
             onChange={(e) => setSelected(e.target.value as Hex)}
           >
             {positionChoices(data, action).map((id) => (
               <option key={id} value={id}>
-                {positionName(id, data.markets)}
-                {id === CROSS ? "" : " isolated"}
+                {id === CROSS ? positionName(id, data.markets) : t("isolatedOption", { name: positionName(id, data.markets) })}
               </option>
             ))}
           </select>
@@ -195,14 +200,19 @@ export function Desk() {
             className="btn ml-auto"
             disabled={send.pending || !intent || (max !== undefined && amount !== undefined && amount > max)}
           >
-            {send.phase ? PHASE[send.phase] : `${VERB[action]}${sponsored && !(action === "deposit" && chosen?.value === "ETH") ? ", free" : ""}`}
+            {send.phase
+              ? say(PHASE[send.phase])
+              : sponsored && !(action === "deposit" && chosen?.value === "ETH")
+                ? t("free", { verb: t(`verb.${action}`) })
+                : t(`verb.${action}`)}
           </button>
         </form>
         <p className="mt-2 text-[13px] text-muted num">
           {max !== undefined && (
-            <button type="button" className="underline-offset-4 hover:underline" onClick={() => setTyped(unparse(max, decimals))}>
-              {action === "borrow" ? "Up to" : "Max"} {decimals === 6 ? usdg(max) : tokens(max)}
-              {action === "borrow" && " USDG you can borrow now"}
+            <button type="button" className="underline-offset-4 hover:underline" onClick={() => setTyped(f.unparse(max, decimals))}>
+              {action === "borrow"
+                ? t("upTo", { amount: f.usdg(max) })
+                : t("max", { amount: decimals === 6 ? f.usdg(max) : f.tokens(max) })}
             </button>
           )}
         </p>
@@ -213,14 +223,14 @@ export function Desk() {
         )}
         {send.succeeded && !send.pending && (
           <p role="status" className="mt-3 text-[14px] text-[var(--gain)]">
-            Done. Every figure below is read again from the chain.
+            {t("done")}
           </p>
         )}
       </section>
 
       {position && (position.open > 0n || position.requirement > 0n) && (
         <Week
-          label={`${position.name} position's requirement against its equity through the week`}
+          label={t("weekAria", { name: position.name })}
           equity={equityAfter}
           marks={week({
             regime: position.regime,
@@ -236,12 +246,15 @@ export function Desk() {
       )}
 
       {notes.length > 0 && (
-        <ul aria-label="Before you sign" className="notes mt-8 max-w-[62ch]">
-          {notes.map((n) => (
-            <li key={n.text} data-tone={n.tone}>
-              {n.text}
-            </li>
-          ))}
+        <ul aria-label={t("notesAria")} className="notes mt-8 max-w-[62ch]">
+          {notes.map((n) => {
+            const text = say(n.message);
+            return (
+              <li key={text} data-tone={n.tone}>
+                {text}
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -338,17 +351,17 @@ function withdrawNotes(
 ): Note[] {
   const notes: Note[] = [];
   if (position && position.debt + position.premium > 0n) {
-    notes.push({ text: "The position is in debt, so what it keeps must still meet its requirement." });
+    notes.push({ message: msg("account.desk.notes.withdrawDebt") });
     if (state.limits.borrowingPaused)
-      notes.push({ text: "The guardian has paused withdrawals from positions in debt.", tone: "warning" });
+      notes.push({ message: msg("account.desk.notes.withdrawPaused"), tone: "warning" });
   }
   const market = state.markets.find((m) => m.token === token);
   if (market?.issuer) notes.push(...issuerNotes(market.asset, market.issuer, account, owner));
   return notes;
 }
 
-function dropBelow(price: bigint, low: bigint): string {
-  if (low === 0n || price >= low) return "0.0%";
+function dropBelow(f: Formatters, price: bigint, low: bigint): string {
+  if (low === 0n || price >= low) return `0${f.decimal}0%`;
   const tenths = ((low - price) * 1_000n) / low;
-  return `${tenths / 10n}.${tenths % 10n}%`;
+  return `${tenths / 10n}${f.decimal}${tenths % 10n}%`;
 }

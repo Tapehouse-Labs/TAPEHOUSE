@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useChains } from "wagmi";
-import { usdg } from "@/lib/amounts";
 import { exposureName } from "@/lib/earn";
-import { explain } from "@/lib/errors";
-import { price } from "@/lib/format";
+import { useExplain, useFormat, useMsg } from "@/lib/i18n";
 import { exposureUsed, premiumWords, roundStatus, twapWords } from "@/lib/risk";
 import { useRiskState } from "@/lib/riskHook";
 import type { RiskState } from "@/lib/riskRead";
@@ -13,6 +12,9 @@ import { Bands } from "./Bands";
 
 /** The risk surface: each band, the backstop's exposure and the latest reopening rounds, read at one block. */
 export function Risk() {
+  const t = useTranslations("risk.page");
+  const f = useFormat();
+  const explain = useExplain();
   const [chain] = useChains();
   const state = useRiskState();
   const data = state.data;
@@ -22,11 +24,11 @@ export function Risk() {
       <div className="pt-[2.5rem] sm:pt-[3.5rem]">
         <div className="relative pt-14">
           <span className="bar" aria-hidden="true" />
-          <h1 className="label">Risk · bands, backstop and reopening</h1>
+          <h1 className="label">{t("title")}</h1>
           <p className="mt-6 max-w-[40ch] text-[19px] leading-snug text-body">
-            What stands between a weekend gap and a loss on {chain.name}, every figure read from the chain.
+            {t("intro", { chain: chain.name })}
           </p>
-          {data && <p className="label mt-3 num">Read at block {data.blockNumber.toLocaleString("en-US")}</p>}
+          {data && <p className="label mt-3 num">{t("block", { block: new Intl.NumberFormat(f.locale).format(data.blockNumber) })}</p>}
         </div>
         <Bands />
         {!data ? (
@@ -52,21 +54,24 @@ export function Risk() {
 }
 
 function Reference({ bands }: { bands: RiskState["bands"] }) {
+  const t = useTranslations("risk.reference");
+  const f = useFormat();
+  const say = useMsg();
   return (
     <section aria-labelledby="reference-title" className="mt-10">
       <h2 id="reference-title" className="label">
-        Reference price
+        {t("title")}
       </h2>
       <table className="ledger num">
-        <caption className="sr-only">Each asset&apos;s TWAP and the premium of its token&apos;s market over the band</caption>
+        <caption className="sr-only">{t("caption")}</caption>
         <thead>
           <tr>
-            <th scope="col">Asset</th>
+            <th scope="col">{t("asset")}</th>
             <th scope="col" className="r">
-              TWAP
+              {t("twap")}
             </th>
             <th scope="col" className="r">
-              Premium
+              {t("premium")}
             </th>
           </tr>
         </thead>
@@ -74,8 +79,8 @@ function Reference({ bands }: { bands: RiskState["bands"] }) {
           {bands.map(({ asset, band }) => (
             <tr key={asset}>
               <th scope="row">{asset}</th>
-              <td className="r">{twapWords(band.twapValid, band.twap)}</td>
-              <td className="r">{band.mid > 0n ? premiumWords(band.premiumBps) : "—"}</td>
+              <td className="r">{say(twapWords(f, band.twapValid, band.twap))}</td>
+              <td className="r">{band.mid > 0n ? premiumWords(f, band.premiumBps) : "—"}</td>
             </tr>
           ))}
         </tbody>
@@ -85,48 +90,51 @@ function Reference({ bands }: { bands: RiskState["bands"] }) {
 }
 
 function Exposure({ state }: { state: RiskState["backstop"] }) {
+  const t = useTranslations("risk.exposure");
+  const f = useFormat();
+  const say = useMsg();
   return (
     <section aria-labelledby="exposure-title" className="mt-10">
       <h2 id="exposure-title" className="label">
-        Backstop exposure
+        {t("title")}
       </h2>
       {!state ? (
-        <p className="mt-4 text-[15px] text-body">The gap backstop is not deployed on this chain yet.</p>
+        <p className="mt-4 text-[15px] text-body">{t("absent")}</p>
       ) : (
         <>
           <table className="ledger num">
-            <caption className="sr-only">The gap backstop&apos;s exposure limit, what the current closure covered and what is left</caption>
+            <caption className="sr-only">{t("caption")}</caption>
             <thead>
               <tr>
-                <th scope="col">Position</th>
+                <th scope="col">{t("position")}</th>
                 <th scope="col" className="r">
-                  Limit
+                  {t("limit")}
                 </th>
                 <th scope="col" className="r">
-                  Covered
+                  {t("covered")}
                 </th>
                 <th scope="col" className="r">
-                  Used
+                  {t("used")}
                 </th>
                 <th scope="col" className="r">
-                  Left
+                  {t("left")}
                 </th>
               </tr>
             </thead>
             <tbody>
               {state.exposures.map((e) => (
                 <tr key={e.position}>
-                  <th scope="row">{exposureName(e.position)}</th>
-                  <td className="r">{usdg(e.limit)}</td>
-                  <td className="r">{usdg(e.covered)}</td>
-                  <td className="r">{exposureUsed(e.covered, e.limit)}</td>
-                  <td className="r">{usdg(e.left)}</td>
+                  <th scope="row">{say(exposureName(e.position))}</th>
+                  <td className="r">{f.usdg(e.limit)}</td>
+                  <td className="r">{f.usdg(e.covered)}</td>
+                  <td className="r">{say(exposureUsed(f, e.covered, e.limit))}</td>
+                  <td className="r">{f.usdg(e.left)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           <p className="mt-2 text-[13px] text-muted num">
-            The backstop holds {usdg(state.held)} USDG; what is left is never more than that.
+            {t("held", { amount: f.usdg(state.held) })}
           </p>
         </>
       )}
@@ -135,31 +143,34 @@ function Exposure({ state }: { state: RiskState["backstop"] }) {
 }
 
 function Reopening({ auction }: { auction: RiskState["auction"] }) {
+  const t = useTranslations("risk.reopening");
+  const r = useTranslations("risk.round");
+  const f = useFormat();
   const rounds = auction?.rounds.filter((r) => r.round.sealMs > 0n) ?? [];
   return (
     <section aria-labelledby="reopening-title" className="mt-10 pb-16">
       <h2 id="reopening-title" className="label">
-        Reopening auction
+        {t("title")}
       </h2>
       {!auction ? (
-        <p className="mt-4 text-[15px] text-body">The reopening auction is not deployed on this chain yet.</p>
+        <p className="mt-4 text-[15px] text-body">{t("absent")}</p>
       ) : rounds.length === 0 ? (
-        <p className="mt-4 text-[15px] text-body">No reopening round yet.</p>
+        <p className="mt-4 text-[15px] text-body">{t("none")}</p>
       ) : (
         <table className="ledger num">
-          <caption className="sr-only">The latest reopening round of each asset</caption>
+          <caption className="sr-only">{t("caption")}</caption>
           <thead>
             <tr>
-              <th scope="col">Asset</th>
-              <th scope="col">Status</th>
+              <th scope="col">{t("asset")}</th>
+              <th scope="col">{t("status")}</th>
               <th scope="col" className="r">
-                Floor
+                {t("floor")}
               </th>
               <th scope="col" className="r">
-                Lots
+                {t("lots")}
               </th>
               <th scope="col" className="r">
-                Clearing
+                {t("clearing")}
               </th>
             </tr>
           </thead>
@@ -167,10 +178,10 @@ function Reopening({ auction }: { auction: RiskState["auction"] }) {
             {rounds.map(({ asset, openMs, round }) => (
               <tr key={asset}>
                 <th scope="row">{asset}</th>
-                <td>{roundStatus(round, auction.phase, openMs)}</td>
-                <td className="r">{price(round.floor)}</td>
+                <td>{r(roundStatus(round, auction.phase, openMs))}</td>
+                <td className="r">{f.price(round.floor)}</td>
                 <td className="r">{round.lots}</td>
-                <td className="r">{round.cleared ? price(round.price) : "—"}</td>
+                <td className="r">{round.cleared ? f.price(round.price) : "—"}</td>
               </tr>
             ))}
           </tbody>

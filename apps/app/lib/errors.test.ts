@@ -11,6 +11,11 @@ import {
 } from "viem";
 import { describe, expect, test } from "vitest";
 import { explain } from "./errors";
+import { formatters } from "./format";
+import { MessageError, msg } from "./messages";
+import { say } from "./say";
+
+const tell = (error: unknown, locale: "en" | "es" | "pt" = "en") => say(explain(formatters(locale), error), locale);
 
 function reverted(data: `0x${string}`) {
   const cause = new ContractFunctionRevertedError({ abi: errorsAbi, data, functionName: "quote" });
@@ -24,14 +29,14 @@ describe("explain", () => {
       errorName: "UnknownAsset",
       args: ["0x4d53465400000000000000000000000000000000000000000000000000000000"],
     });
-    expect(explain(reverted(data))).toBe(
+    expect(tell(reverted(data))).toBe(
       "UnknownAsset(0x4d53465400000000000000000000000000000000000000000000000000000000)",
     );
   });
 
   test("says what the accounts' refusals mean, in words, with their figures", () => {
     const say = (errorName: string, args: readonly unknown[]) =>
-      explain(reverted(encodeErrorResult({ abi: errorsAbi, errorName, args } as never)));
+      tell(reverted(encodeErrorResult({ abi: errorsAbi, errorName, args } as never)));
     expect(say("InsufficientMargin", [9_000n * 10n ** 18n, 9_500n * 10n ** 18n])).toBe(
       "This leaves the position short of its requirement: $9,000.00 of equity against $9,500.00 required.",
     );
@@ -56,20 +61,37 @@ describe("explain", () => {
   });
 
   test("a request the wallet's owner declined", () => {
-    expect(explain(new UserRejectedRequestError(new Error("denied")))).toBe(
+    expect(tell(new UserRejectedRequestError(new Error("denied")))).toBe(
       "You declined the request in your wallet.",
     );
   });
 
   test("a service's refusal over JSON-RPC is told in its own words", () => {
     const refusal = new InvalidParamsRpcError(new RpcRequestError({ body: {}, url: "http://127.0.0.1:4338", error: { code: -32000, message: "the call gas limit is above 1000000" } }));
-    expect(explain(refusal)).toBe("Refused: the call gas limit is above 1000000.");
+    expect(tell(refusal)).toBe("Refused: the call gas limit is above 1000000.");
   });
 
   test("any other error keeps viem's short message, or the error's own", () => {
-    expect(explain(new BaseError("The request took too long to respond.", { details: "timeout" }))).toBe(
+    expect(tell(new BaseError("The request took too long to respond.", { details: "timeout" }))).toBe(
       "The request took too long to respond.",
     );
-    expect(explain(new Error("socket hang up"))).toBe("socket hang up");
+    expect(tell(new Error("socket hang up"))).toBe("socket hang up");
+  });
+
+  test("in Spanish and Portuguese, with their own separators", () => {
+    const data = encodeErrorResult({ abi: errorsAbi, errorName: "InsufficientMargin", args: [9_000n * 10n ** 18n, 12_500n * 10n ** 18n] } as never);
+    expect(tell(reverted(data), "es")).toBe(
+      "Esto deja la posición por debajo de su requerimiento: $9000,00 de capital frente a $12.500,00 requeridos.",
+    );
+    expect(tell(reverted(data), "pt")).toBe(
+      "Isso deixa a posição abaixo do seu requisito: $9.000,00 de patrimônio contra $12.500,00 exigidos.",
+    );
+    expect(tell(new UserRejectedRequestError(new Error("denied")), "es")).toBe("Rechazaste la solicitud en tu wallet.");
+  });
+
+  test("one of the app's own messages is told as it is, in the language asked for", () => {
+    const own = new MessageError(msg("errors.connectFirst"));
+    expect(tell(own)).toBe("Connect your wallet first.");
+    expect(tell(own, "pt")).toBe("Conecte primeiro a sua carteira.");
   });
 });

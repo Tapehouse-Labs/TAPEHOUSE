@@ -32,6 +32,9 @@ import { useDeployments } from "@/app/providers";
 import { readAccount } from "./accountRead";
 import { isSanctioned } from "./compliance";
 import { describeRevert } from "./errors";
+import { type Formatters } from "./format";
+import { useFormat } from "./i18n";
+import { MessageError, type Msg, msg } from "./messages";
 import { REFRESH_MS, useSettled } from "./hooks";
 import { asCall, type Call, direct, type Intent, shortfall, smartAccountPlan, vaultAddress } from "./intent";
 import { useSmartAccount } from "./smartAccountHook";
@@ -121,13 +124,13 @@ export function useLiquidationPreview(
 export type SendPhase = "wrapping" | "stock" | "permit" | "checking" | "signing" | "sending";
 
 /** What the primary button says while a send is in each phase. */
-export const PHASE: Record<SendPhase, string> = {
-  wrapping: "Wrapping your ether…",
-  stock: "Wrapping your Stock Token…",
-  permit: "Sign the permit in your wallet…",
-  checking: "Checking it against the chain…",
-  signing: "Waiting for your wallet…",
-  sending: "Sending…",
+export const PHASE: Record<SendPhase, Msg> = {
+  wrapping: msg("common.phase.wrapping"),
+  stock: msg("common.phase.stock"),
+  permit: msg("common.phase.permit"),
+  checking: msg("common.phase.checking"),
+  signing: msg("common.phase.signing"),
+  sending: msg("common.phase.sending"),
 };
 
 type Sender = {
@@ -137,6 +140,7 @@ type Sender = {
   account: Address;
   owner: Address;
   bundler: ReturnType<typeof useSmartAccount>["bundler"];
+  format: Formatters;
   phase: (phase: SendPhase) => void;
 };
 
@@ -153,16 +157,17 @@ export function useSend() {
   const { data: wallet } = useWalletClient();
   const { account, owner, smart } = useMarginAccount();
   const queryClient = useQueryClient();
+  const format = useFormat();
   const [phase, setPhase] = useState<SendPhase>();
   const mutation = useMutation({
     mutationKey: ["send"],
     mutationFn: async (request: Intent | (() => Promise<Intent>)) => {
       const intent = typeof request === "function" ? await request() : request;
-      if (!client || !wallet || !account || !owner) throw new Error("Connect your wallet first.");
+      if (!client || !wallet || !account || !owner) throw new MessageError(msg("errors.connectFirst"));
       if (isSanctioned(owner) || isSanctioned(account)) {
-        throw new Error("This address is on OFAC's sanctions list, so Tapehouse sends nothing for it.");
+        throw new MessageError(msg("errors.sanctioned"));
       }
-      const sender = { deployments, client, wallet, account, owner, bundler: smart.bundler, phase: setPhase };
+      const sender = { deployments, client, wallet, account, owner, bundler: smart.bundler, format, phase: setPhase };
       await wrapStock(sender, intent);
       if (smart.enabled) await sendFromSmartAccount(sender, intent);
       else await sendFromWallet(sender, intent);
@@ -274,7 +279,7 @@ async function sendFromSmartAccount(s: Sender, intent: Intent) {
   const { success, reason } = await bundler.waitForUserOperationReceipt({ hash });
   if (!success) {
     const revert = reason?.startsWith("0x") ? decodeRevertData(reason as Hex) : undefined;
-    throw new Error(revert ? describeRevert(revert) : "The operation reverted on chain.");
+    throw new MessageError(revert ? describeRevert(s.format, revert) : msg("errors.operationReverted"));
   }
 }
 
@@ -323,7 +328,7 @@ async function sendFromWallet(s: Sender, intent: Intent) {
 async function confirm(s: Sender, hash: Hex) {
   s.phase("sending");
   const receipt = await s.client.waitForTransactionReceipt({ hash });
-  if (receipt.status !== "success") throw new Error("The transaction reverted.");
+  if (receipt.status !== "success") throw new MessageError(msg("errors.transactionReverted"));
 }
 
 /**

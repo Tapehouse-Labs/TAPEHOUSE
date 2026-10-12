@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import { describe, expect, test } from "vitest";
+import { say } from "./say";
 import { freeActions, notches } from "./smartAccount";
 
 describe("notches", () => {
@@ -12,12 +13,19 @@ describe("notches", () => {
 
 describe("freeActions", () => {
   test("before the account exists, its creation and the first three actions are free", () => {
-    expect(freeActions({ deployed: false, left: 3n })).toBe("Creating it costs you nothing, and so do your first 3 actions.");
+    expect(say(freeActions({ deployed: false, left: 3n }))).toBe("Creating it costs you nothing, and so do your first 3 actions.");
   });
 
   test("a live account counts what is left", () => {
-    expect(freeActions({ deployed: true, left: 2n })).toBe("2 free actions left");
-    expect(freeActions({ deployed: true, left: 1n })).toBe("1 free action left");
-    expect(freeActions({ deployed: true, left: 0n })).toBe("Free actions used. You pay gas from here.");
+    expect(say(freeActions({ deployed: true, left: 2n }))).toBe("2 free actions left");
+    expect(say(freeActions({ deployed: true, left: 1n }))).toBe("1 free action left");
+    expect(say(freeActions({ deployed: true, left: 0n }))).toBe("Free actions used. You pay gas from here.");
+  });
+
+  test("in Spanish and Portuguese too, with their plurals", () => {
+    expect(say(freeActions({ deployed: true, left: 1n }), "es")).toBe("Queda 1 acción gratis");
+    expect(say(freeActions({ deployed: true, left: 2n }), "es")).toBe("Quedan 2 acciones gratis");
+    expect(say(freeActions({ deployed: true, left: 1n }), "pt")).toBe("Resta 1 ação gratuita");
+    expect(say(freeActions({ deployed: false, left: 3n }), "pt")).toBe("Criá-la não custa nada, nem as suas primeiras 3 ações.");
   });
 });

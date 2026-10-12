@@ -1,0 +1,45 @@
+{
+  "noLimit": "No limit set",
+  "twapInvalid": "Not yet valid",
+  "page": {
+    "title": "Risk · bands, backstop and reopening",
+    "intro": "What stands between a weekend gap and a loss on {chain}, every figure read from the chain.",
+    "block": "Read at block {block}"
+  },
+  "reference": {
+    "title": "Reference price",
+    "caption": "Each asset's TWAP and the premium of its token's market over the band",
+    "asset": "Asset",
+    "twap": "TWAP",
+    "premium": "Premium"
+  },
+  "exposure": {
+    "title": "Backstop exposure",
+    "absent": "The gap backstop is not deployed on this chain yet.",
+    "caption": "The gap backstop's exposure limit, what the current closure covered and what is left",
+    "position": "Position",
+    "limit": "Limit",
+    "covered": "Covered",
+    "used": "Used",
+    "left": "Left",
+    "held": "The backstop holds {amount} USDG; what is left is never more than that."
+  },
+  "reopening": {
+    "title": "Reopening auction",
+    "absent": "The reopening auction is not deployed on this chain yet.",
+    "none": "No reopening round yet.",
+    "caption": "The latest reopening round of each asset",
+    "asset": "Asset",
+    "status": "Status",
+    "floor": "Floor",
+    "lots": "Lots",
+    "clearing": "Clearing"
+  },
+  "round": {
+    "none": "No round",
+    "committing": "Committing",
+    "revealing": "Revealing",
+    "awaiting": "Awaiting clearing",
+    "cleared": "Cleared"
+  }
+}

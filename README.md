@@ -250,7 +250,7 @@ make test-app-devnode          # the app, driven in Chromium against that deploy
 | Contracts | Solidity 0.8.37, Foundry, OpenZeppelin |
 | Oracles and pools | Chainlink Data Feeds, RedStone, Uniswap v3 |
 | Smart accounts | ERC-4337 (EntryPoint v0.7), Alto bundler, a signed sponsor paymaster |
-| App | Next.js, wagmi, viem, permissionless |
+| App | Next.js, wagmi, viem, permissionless, next-intl (English, Spanish, Portuguese) |
 | Services | Go, go-ethereum, SQLite |
 | Chains | Robinhood Chain (4663) and its testnet (46630), Arbitrum One (42161) |
 

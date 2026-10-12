@@ -1,0 +1,189 @@
+{
+  "span": {
+    "days": "{days, plural, one {# day} other {# days}}",
+    "daysHours": "{days, plural, one {# day} other {# days}}, {hours, plural, one {# hour} other {# hours}}",
+    "hours": "{hours, plural, one {# hour} other {# hours}}"
+  },
+  "usdgAmount": "{amount} USDG",
+  "tokenAmount": "{amount} {asset}",
+  "exposure": {
+    "cross": "Cross positions",
+    "isolated": "{asset} isolated",
+    "change": "{limit} for closures from {date} UTC"
+  },
+  "ledger": {
+    "atOnce": "At once",
+    "supply": {
+      "place": "Supply",
+      "earnsNote": "a year now, {utilization} lent",
+      "leavesNote": "up to {idle} USDG not lent",
+      "bears": "The last loss",
+      "bearsNote": "after the collateral and the backstop"
+    },
+    "backstop": {
+      "place": "Backstop",
+      "earns": "Weekend premium",
+      "earnsNote": "{share} of {rate} a year, as loans repay",
+      "leaves": "{cooldown}, then {window}",
+      "leavesNote": "never while the market is closed",
+      "bears": "The second loss",
+      "bearsNote": "up to its limit per closure"
+    },
+    "lend": {
+      "place": "Lend {asset}",
+      "what": "from your account",
+      "nothingNow": "Nothing now",
+      "earnsNoteNone": "no one shorts {asset}",
+      "earnsNote": "a year, only while shorts pay",
+      "leaves": "{notice} notice",
+      "leavesNote": "the recall queue, then a buy-in",
+      "bears": "Shorts' shortfall",
+      "bearsNote": "beyond their USDG, and issuer burns"
+    },
+    "cover": {
+      "place": "Write cover",
+      "what": "USDG, apart from the backstop",
+      "earns": "Premiums",
+      "earnsNote": "at release, less what covers pay",
+      "afterSettlement": "After settlement",
+      "leavesNote": "locked while a cover is out",
+      "bears": "Covers' payouts",
+      "bearsNote": "each reserved in full until release"
+    }
+  },
+  "term": {
+    "closed": "Closed",
+    "lossOrder": "Loss order",
+    "timing": "Timing",
+    "exit": "Exit",
+    "limit": "Limit",
+    "auction": "Auction",
+    "premium": "Premium",
+    "seed": "Seed",
+    "recalls": "Recalls",
+    "lent": "Lent",
+    "earnings": "Earnings",
+    "losses": "Losses",
+    "issuer": "Issuer",
+    "reserve": "Reserve",
+    "premiums": "Premiums"
+  },
+  "notes": {
+    "supply": {
+      "closed": "The vault takes no deposits now: deposits wait for its borrower, and deposits and withdrawals stop while USDG is paused, the vault frozen or its USDG wiped.",
+      "lossOrder": "Lenders are last in the loss cascade: what a liquidation leaves unpaid falls on the borrower's collateral, then on the gap backstop, and only what the backstop cannot cover is written off against every share. A wipe of the vault's USDG by its issuer is a loss to every share too, once anyone syncs it.",
+      "timing": "A loss is written off when it happens: a lender who withdrew before it loses nothing, and those who stay bear all of it. The reserve's liquidation fees are not your cover.",
+      "exit": "You may withdraw at most the USDG the vault holds, {idle} now; the {debt} lent returns as borrowers repay."
+    },
+    "backstop": {
+      "closed": "Deposits are closed now: from the moment a close is recorded until a day after its reopening, and while USDG is paused, the backstop frozen or its USDG wiped.",
+      "lossOrder": "The backstop is junior to lenders: when a liquidation leaves a position empty and still owing, it repays what it can before anything is written off to them, and forgives that position's premium, its own loss.",
+      "limit": "It covers at most its limit a closure for the cross positions together and for each Stock Token's isolated positions, and never more than the USDG it holds; past either, lenders bear the rest. The same limit bounds what it buys at the reopening auction, counted as a cover is.",
+      "auction": "At the auction's clearing it buys what the bids leave of each lot at the clearing price. Those Stock Tokens are its depositors', in proportion to their shares at the purchase, not counted in the shares' value and never sold again; each depositor claims its own.",
+      "premium": "While the market is closed borrowers owe a premium of {rate} a year; {share} of each premium paid comes here and {reserve} to the fee reserve. It arrives only as borrowers repay, in lumps, and joins the shares at once when anyone claims it, not streamed: {waiting} USDG is waiting.",
+      "exit": "Shares leave only through a cooldown: {cooldown} after you start it you may redeem them for {window}, never while the market is closed nor from the moment a coming close is recorded until {settlement} after its reopening. Shares sent away leave the cooldown. Deposits and redemptions stop while USDG is paused, the backstop frozen or its USDG wiped.",
+      "seed": "The team's seed is an ordinary deposit: the owner's shares are worth {assets} USDG and leave the same way."
+    },
+    "lending": {
+      "recalls": "A recall takes the vault's free tokens at once; then new lending and repayments meet the queue's tickets in their order before anything is free; then the borrower within {notice}, in calendar time; then a buy-in anyone may call. No one takes idle tokens first come, first served, and a ticket next in turn that no one settles holds the ones behind it until someone does, which anyone may.",
+      "lent": "{utilization} of the vault's {asset} is lent, {locked} is held for recalls and {borrowable} more may be borrowed: at most {max}, never what recalls wait for.",
+      "earnings": "The borrower is Tapehouse's short positions, so lenders earn only what the shorts pay: {rate} a year now, after the owner's {share} of the fee. The fee is paid in {asset}; dividends and splits pass through.",
+      "earningsNone": "The borrower is Tapehouse's short positions, so lenders earn only what the shorts pay: no one shorts {asset} now, so lending it earns nothing.",
+      "losses": "A short's loss beyond its USDG is written off on the vault, a loss to its lenders through their shares, recalled or not, as far as {asset}'s shorts still owe it. A buy-in buys through {asset}'s pool at no more than 1% above the band's centre; one the pool cannot meet waits while the notice runs.",
+      "issuer": "A burn from the vault falls on its lenders alone, in proportion: the free tokens first, then those held for the latest tickets. While {asset} is paused or the vault blocklisted nothing leaves and no buy-in runs, though recalls may be made and notices keep running. If the issuer fails, take back and withdraw to your own address, where you claim from the issuer yourself."
+    },
+    "cover": {
+      "closed": "Deposits are closed now: while a cover is out over the coming closure they stay open only while the session is open and before its sales end, never while another closure's covers are out, and never while USDG is paused, the cover frozen or its USDG wiped.",
+      "reserve": "This is the gap cover's own vault, apart from the backstop. Every cover reserves its whole payout from the writers' USDG until it is released: {reserved} reserved, {free} free.",
+      "premiums": "Premiums join the writers' USDG only at release, less what each cover pays: {premiums} USDG waits on {covers, plural, one {# cover} other {# covers}}.",
+      "exit": "Redemptions open only once every cover is released, so from the first cover sold you are locked until the closure's series settle or void; a series no one settles voids after a week, and a void cover refunds its premium to its buyer, so writers earn nothing on it. A wipe of the cover's USDG falls on the writers after the premiums and credits it holds."
+    }
+  },
+  "page": {
+    "title": "Earning · supply, backstop and cover",
+    "none": "None yet",
+    "wrongNetwork": "Your wallet is on another network. Tapehouse runs on <b>{chain}</b>.",
+    "connect": "Connect a wallet to deposit. Every term below is read from the chain, before you need it.",
+    "worth": "What your account's shares are worth now. Withdrawals and claimed Stock Tokens go to your wallet.",
+    "worthLent": "What your account's shares are worth now, besides {lent} lent from it. Withdrawals and claimed Stock Tokens go to your wallet.",
+    "open": "Open a place below and read its terms before you deposit. Withdrawals go back to your wallet.",
+    "switch": "Switch to {chain}",
+    "block": "Read at block {block}",
+    "ledgerTitle": "Where your money can work",
+    "caption": "Each place your money can work: what it earns, how it leaves, what it bears, and what your account holds there",
+    "place": "Place",
+    "earns": "Earns",
+    "leaves": "Leaves",
+    "bears": "Bears",
+    "hold": "You hold",
+    "absent": "Gap cover is not deployed on this chain yet.",
+    "borrowersPay": "Borrowers pay",
+    "aYear": "{rate} a year",
+    "lent": "Lent",
+    "notLent": "Not lent",
+    "vaultHolds": "Vault holds",
+    "freeForCovers": "Free for covers",
+    "reserved": "Reserved",
+    "premiumsWaiting": "Premiums waiting",
+    "coversOutstanding": "Covers outstanding",
+    "exposureCaption": "Exposure this closure, USDG",
+    "positions": "Positions",
+    "limit": "Limit",
+    "covered": "Covered",
+    "left": "Left",
+    "then": "then {change}",
+    "held": "What is left is never more than the {amount} USDG the backstop holds.",
+    "recallNotice": "Recall notice",
+    "heldForRecalls": "Held for recalls",
+    "lentOfVault": "Lent of the vault",
+    "borrowable": "Borrowable",
+    "beforeDeposit": "Before you deposit"
+  },
+  "desk": {
+    "backstopAction": "Backstop action",
+    "deposit": "Deposit",
+    "leave": "Leave",
+    "gains": "Gains and premium",
+    "claim": "Claim {asset}",
+    "premium": "{amount} USDG premium",
+    "claimPremium": "Claim it for the shares",
+    "noShares": "You hold no shares of the backstop.",
+    "startCooldown": "Start cooldown",
+    "startAgain": "Start again",
+    "lendingAction": "Lending action",
+    "action": "Action",
+    "position": "Position",
+    "cross": "Cross",
+    "isolated": "{name} isolated",
+    "fromCross": "from cross",
+    "fromIsolated": "from {name} isolated",
+    "lendEmpty": "Deposit {asset} into your account to lend it from there.",
+    "unlendEmpty": "Your account has no {asset} lent.",
+    "openAccount": "Open your account",
+    "recalls": "Recalls and their tickets are on <link>your account's positions</link>.",
+    "verb": {
+      "deposit": "Deposit",
+      "withdraw": "Withdraw",
+      "redeem": "Redeem",
+      "lend": "Lend",
+      "unlend": "Take back"
+    },
+    "amountTo": {
+      "deposit": "Amount to deposit",
+      "withdraw": "Amount to withdraw",
+      "redeem": "Amount to redeem",
+      "lend": "Amount to lend",
+      "unlend": "Amount to take back"
+    },
+    "free": "{label}, free",
+    "max": "Max {amount}",
+    "done": "Done. Every figure is read again from the chain."
+  },
+  "cooldown": {
+    "windowOpen": "Your window is open for {closes} more.",
+    "cooling": "Your cooldown runs: your shares may leave in {opens}, for {window}. Starting again moves that later.",
+    "windowSpent": "Your window is open for {closes} more, but its shares have left; shares you deposited since need a cooldown of their own. Starting again gives up this window.",
+    "windowShut": "Your window is open for {closes} more, but redemptions are shut now: the market is closed, a coming close is recorded or a closure is settling, or USDG is paused. Starting again gives up this window.",
+    "start": "Start a cooldown and your {assets} USDG of shares may leave in a week, for {window}."
+  }
+}

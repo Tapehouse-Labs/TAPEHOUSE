@@ -5,9 +5,11 @@ import { expect, test } from "@playwright/test";
 import { band, parseDeployments } from "@tapehouse/sdk";
 import { createPublicClient, http } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { bandPercent, price, shortAddress } from "../lib/format";
+import { formatters } from "../lib/format";
 import { bandState } from "../lib/session";
 import { installWallet, moveWallet } from "./wallet";
+
+const en = formatters("en");
 
 const registry = process.env.TAPEHOUSE_REGISTRY;
 if (!registry) throw new Error("Set TAPEHOUSE_REGISTRY to the dev node's registry, as make test-app-devnode does.");
@@ -23,8 +25,8 @@ test("with no wallet, the app says so and still shows every band as the chain re
     const q = await band.quote(client, deployments, asset);
     const row = page.getByRole("row", { name: new RegExp(`^${asset}\\b`) });
     if (q.mid > 0n) {
-      await expect(row).toContainText(price(q.mid));
-      await expect(row).toContainText(bandPercent(q.halfBps));
+      await expect(row).toContainText(en.price(q.mid));
+      await expect(row).toContainText(en.bandPercent(q.halfBps));
     } else {
       await expect(row).toContainText(bandState(q.state));
     }
@@ -42,7 +44,7 @@ test("a wallet connects on the app's chain", async ({ page }) => {
   await installWallet(page, { account, chainId: deployments.chainId, rpcUrl });
   await page.goto("/");
   await page.getByRole("button", { name: "Connect wallet" }).first().click();
-  await expect(page.getByRole("button", { name: shortAddress(account) })).toBeVisible();
+  await expect(page.getByRole("button", { name: en.shortAddress(account) })).toBeVisible();
   await expect(page.getByText("your liquidation price appears here before you borrow")).toBeVisible();
 });
 
@@ -94,7 +96,7 @@ test("a disconnect returns to the connect state", async ({ page }) => {
   await installWallet(page, { account, chainId: deployments.chainId, rpcUrl });
   await page.goto("/");
   await page.getByRole("button", { name: "Connect wallet" }).first().click();
-  await page.getByRole("button", { name: shortAddress(account) }).click();
+  await page.getByRole("button", { name: en.shortAddress(account) }).click();
   await page.getByRole("button", { name: "Disconnect" }).click();
   await expect(page.getByRole("button", { name: "Connect wallet" }).first()).toBeVisible();
 });

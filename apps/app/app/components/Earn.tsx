@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Fragment, lazy, type ReactNode, Suspense, useState } from "react";
 import type { Address } from "viem";
 import { useChains } from "wagmi";
 import type { AccountState } from "@/lib/accountRead";
-import { tokens, usdg } from "@/lib/amounts";
-import { backstopNotes, coverNotes, exposures, ledger, lendingNotes, percent, span, supplyNotes } from "@/lib/earn";
+import { backstopNotes, coverNotes, exposures, ledger, lendingNotes, span, supplyNotes } from "@/lib/earn";
 import { useEarnState } from "@/lib/earnHook";
 import type { EarnState, Holding } from "@/lib/earnRead";
-import { explain } from "@/lib/errors";
 import { useWallet } from "@/lib/hooks";
+import { useExplain, useFormat, useMsg } from "@/lib/i18n";
 import type { Vault } from "@/lib/intent";
 import type { Note } from "@/lib/notes";
 import { Wallets } from "./Wallets";
@@ -57,6 +57,12 @@ export function EarnView({
   actions?: Actions;
   account?: ReactNode;
 }) {
+  const t = useTranslations("earn.page");
+  const e = useTranslations("earn");
+  const w = useTranslations("wallet");
+  const say = useMsg();
+  const f = useFormat();
+  const explain = useExplain();
   const wallet = useWallet();
   const [chain] = useChains();
   const connected = wallet.state === "connected";
@@ -66,13 +72,13 @@ export function EarnView({
   const lent: Record<string, bigint> = {};
   for (const p of positions?.positions ?? [])
     for (const s of p.stocks) lent[s.asset] = (lent[s.asset] ?? 0n) + s.lent;
-  const rows = data ? ledger(data, positions ? lent : {}) : [];
+  const rows = data ? ledger(f, data, positions ? lent : {}) : [];
   const worth = data
     ? [data.supply?.lender, data.backstop?.depositor, data.cover?.writer].reduce((sum, h) => sum + (h?.assets ?? 0n), 0n)
     : 0n;
   const lentWords = Object.entries(lent)
     .filter(([, amount]) => amount > 0n)
-    .map(([asset, amount]) => `${tokens(amount)} ${asset}`);
+    .map(([asset, amount]) => `${f.tokens(amount)} ${asset}`);
 
   return (
     <main className="column">
@@ -80,35 +86,40 @@ export function EarnView({
       <div className="pt-[2.5rem] sm:pt-[3.5rem]">
         <div className="relative pt-14">
           <span className="bar" aria-hidden="true" />
-          <h1 className="label">Earning · supply, backstop and cover</h1>
+          <h1 className="label">{t("title")}</h1>
           {connected && data && worth > 0n ? (
             <p key={String(worth)} className="figure figure-earn num swap mt-3" aria-live="polite">
-              ${usdg(worth)}
+              ${f.usdg(worth)}
             </p>
           ) : (
             <p className="figure mt-3" data-empty>
-              None yet
+              {t("none")}
             </p>
           )}
           <div key={wallet.state} className="swap" aria-live="polite">
             <p className="mt-6 max-w-[40ch] text-[19px] leading-snug text-body">
               {wallet.state === "wrong-network" ? (
-                <>
-                  Your wallet is on another network. Tapehouse runs on <span className="text-strong">{chain.name}</span>.
-                </>
+                t.rich("wrongNetwork", {
+                  chain: chain.name,
+                  b: (name) => <span className="text-strong">{name}</span>,
+                })
               ) : !connected ? (
-                "Connect a wallet to deposit. Every term below is read from the chain, before you need it."
+                t("connect")
               ) : worth > 0n ? (
-                `What your account's shares are worth now${lentWords.length > 0 ? `, besides ${lentWords.join(" and ")} lent from it` : ""}. Withdrawals and claimed Stock Tokens go to your wallet.`
+                lentWords.length > 0 ? (
+                t("worthLent", { lent: f.list(lentWords) })
               ) : (
-                "Open a place below and read its terms before you deposit. Withdrawals go back to your wallet."
+                t("worth")
+              )
+              ) : (
+                t("open")
               )}
             </p>
             {!connected && (
               <div className="mt-8 flex min-h-[44px] flex-wrap items-center gap-3">
                 {wallet.state === "wrong-network" ? (
                   <button type="button" onClick={wallet.switchChain} disabled={wallet.pending} className="btn">
-                    {wallet.pending ? "Waiting for your wallet…" : `Switch to ${chain.name}`}
+                    {wallet.pending ? w("waiting") : t("switch", { chain: chain.name })}
                   </button>
                 ) : (
                   (wallet.state === "disconnected" || wallet.state === "no-wallet") && <Wallets />
@@ -116,14 +127,14 @@ export function EarnView({
               </div>
             )}
           </div>
-          {data && <p className="label mt-3 num">Read at block {data.blockNumber.toLocaleString("en-US")}</p>}
+          {data && <p className="label mt-3 num">{t("block", { block: new Intl.NumberFormat(f.locale).format(data.blockNumber) })}</p>}
         </div>
 
         {account}
 
         <section aria-labelledby="ledger-title" className="mt-10">
           <h2 id="ledger-title" className="label">
-            Where your money can work
+            {t("ledgerTitle")}
           </h2>
           {!data ? (
             <div aria-busy="true" className="mt-4">
@@ -138,16 +149,16 @@ export function EarnView({
           ) : (
             <table className="ledger num">
               <caption className="sr-only">
-                Each place your money can work: what it earns, how it leaves, what it bears, and what your account holds there
+                {t("caption")}
               </caption>
               <thead>
                 <tr>
-                  <th scope="col">Place</th>
-                  <th scope="col">Earns</th>
-                  <th scope="col">Leaves</th>
-                  <th scope="col">Bears</th>
+                  <th scope="col">{t("place")}</th>
+                  <th scope="col">{t("earns")}</th>
+                  <th scope="col">{t("leaves")}</th>
+                  <th scope="col">{t("bears")}</th>
                   <th scope="col" className="r">
-                    You hold
+                    {t("hold")}
                   </th>
                 </tr>
               </thead>
@@ -164,24 +175,24 @@ export function EarnView({
                             aria-controls={`panel-${row.id}`}
                             onClick={() => setOpen(isOpen ? undefined : row.id)}
                           >
-                            {row.place}
+                            {say(row.place)}
                           </button>
-                          <small>{row.what}</small>
+                          <small>{say(row.what)}</small>
                         </th>
-                        <td data-label="Earns">
-                          {row.earns}
-                          <small>{row.earnsNote}</small>
+                        <td data-label={t("earns")}>
+                          {say(row.earns)}
+                          <small>{say(row.earnsNote)}</small>
                         </td>
-                        <td data-label="Leaves" data-closed={row.closed ? "" : undefined}>
-                          {row.leaves}
-                          <small>{row.leavesNote}</small>
+                        <td data-label={t("leaves")} data-closed={row.closed ? "" : undefined}>
+                          {say(row.leaves)}
+                          <small>{say(row.leavesNote)}</small>
                         </td>
-                        <td data-label="Bears">
-                          {row.bears}
-                          <small>{row.bearsNote}</small>
+                        <td data-label={t("bears")}>
+                          {say(row.bears)}
+                          <small>{say(row.bearsNote)}</small>
                         </td>
-                        <td data-label="You hold" className="r">
-                          {row.holds ?? "—"}
+                        <td data-label={t("hold")} className="r">
+                          {row.holds ? say(row.holds) : "—"}
                         </td>
                       </tr>
                       {isOpen && (
@@ -197,10 +208,10 @@ export function EarnView({
                 {!data.cover && (
                   <tr data-absent="">
                     <th scope="row">
-                      <span>Write cover</span>
-                      <small>USDG, apart from the backstop</small>
+                      <span>{e("ledger.cover.place")}</span>
+                      <small>{e("ledger.cover.what")}</small>
                     </th>
-                    <td colSpan={4}>Gap cover is not deployed on this chain yet.</td>
+                    <td colSpan={4}>{t("absent")}</td>
                   </tr>
                 )}
               </tbody>
@@ -213,17 +224,22 @@ export function EarnView({
 }
 
 function Panel({ id, state, actions }: { id: string; state: EarnState; actions: Actions | undefined }) {
+  const t = useTranslations("earn");
+  const p = useTranslations("earn.page");
+  const say = useMsg();
+  const f = useFormat();
+  const amount = (value: bigint) => t("usdgAmount", { amount: f.usdg(value) });
   if (id === "supply" && state.supply) {
     const { market, lender } = state.supply;
     return (
       <div className="panel">
         <dl className="facts">
-          <Fact term="Borrowers pay" value={`${percent(market.borrowRate)} a year`} />
-          <Fact term="Lent" value={`${usdg(market.debt)} USDG`} />
-          <Fact term="Not lent" value={`${usdg(market.idle)} USDG`} />
-          <Fact term="Vault holds" value={`${usdg(market.totalAssets)} USDG`} />
+          <Fact term={p("borrowersPay")} value={p("aYear", { rate: f.percent(market.borrowRate) })} />
+          <Fact term={p("lent")} value={amount(market.debt)} />
+          <Fact term={p("notLent")} value={amount(market.idle)} />
+          <Fact term={p("vaultHolds")} value={amount(market.totalAssets)} />
         </dl>
-        <Notes notes={supplyNotes(state.supply)} />
+        <Notes notes={supplyNotes(f, state.supply)} />
         {actions?.vault("supply", lender)}
       </div>
     );
@@ -233,12 +249,12 @@ function Panel({ id, state, actions }: { id: string; state: EarnState; actions: 
     return (
       <div className="panel">
         <dl className="facts">
-          <Fact term="Free for covers" value={`${usdg(writers.capacity)} USDG`} />
-          <Fact term="Reserved" value={`${usdg(writers.reserved)} USDG`} />
-          <Fact term="Premiums waiting" value={`${usdg(writers.premiums)} USDG`} />
-          <Fact term="Covers outstanding" value={writers.outstanding.toString()} />
+          <Fact term={p("freeForCovers")} value={amount(writers.capacity)} />
+          <Fact term={p("reserved")} value={amount(writers.reserved)} />
+          <Fact term={p("premiumsWaiting")} value={amount(writers.premiums)} />
+          <Fact term={p("coversOutstanding")} value={new Intl.NumberFormat(f.locale).format(writers.outstanding)} />
         </dl>
-        <Notes notes={coverNotes(state.cover)} />
+        <Notes notes={coverNotes(f, state.cover)} />
         {actions?.vault("cover", writer)}
       </div>
     );
@@ -248,27 +264,27 @@ function Panel({ id, state, actions }: { id: string; state: EarnState; actions: 
     return (
       <div className="panel">
         <table className="exposure num">
-          <caption className="label">Exposure this closure, USDG</caption>
+          <caption className="label">{p("exposureCaption")}</caption>
           <thead>
             <tr>
-              <th scope="col">Positions</th>
+              <th scope="col">{p("positions")}</th>
               <th scope="col" className="r">
-                Limit
+                {p("limit")}
               </th>
               <th scope="col" className="r">
-                Covered
+                {p("covered")}
               </th>
               <th scope="col" className="r">
-                Left
+                {p("left")}
               </th>
             </tr>
           </thead>
           <tbody>
-            {exposures(b, state.timestamp).map((e) => (
-              <tr key={e.name}>
+            {exposures(f, b, state.timestamp).map((e, i) => (
+              <tr key={i}>
                 <th scope="row">
-                  {e.name}
-                  {e.change && <small>then {e.change}</small>}
+                  {say(e.name)}
+                  {e.change && <small>{p("then", { change: say(e.change) })}</small>}
                 </th>
                 <td className="r">{e.limit}</td>
                 <td className="r">{e.covered}</td>
@@ -277,8 +293,8 @@ function Panel({ id, state, actions }: { id: string; state: EarnState; actions: 
             ))}
           </tbody>
         </table>
-        <p className="mt-2 text-[13px] text-muted num">What is left is never more than the {usdg(b.held)} USDG the backstop holds.</p>
-        <Notes notes={backstopNotes(state.backstop)} />
+        <p className="mt-2 text-[13px] text-muted num">{p("held", { amount: f.usdg(b.held) })}</p>
+        <Notes notes={backstopNotes(f, state.backstop)} />
         {actions?.backstop(state.backstop, state.timestamp)}
       </div>
     );
@@ -289,24 +305,26 @@ function Panel({ id, state, actions }: { id: string; state: EarnState; actions: 
   return (
     <div className="panel">
       <dl className="facts">
-        <Fact term="Recall notice" value={span(terms.notice)} />
-        <Fact term="Held for recalls" value={`${tokens(terms.locked)} ${asset}`} />
-        <Fact term="Lent of the vault" value={percent(terms.utilization)} />
-        <Fact term="Borrowable" value={`${tokens(terms.borrowable)} ${asset}`} />
+        <Fact term={p("recallNotice")} value={say(span(terms.notice))} />
+        <Fact term={p("heldForRecalls")} value={t("tokenAmount", { amount: f.tokens(terms.locked), asset })} />
+        <Fact term={p("lentOfVault")} value={f.percent(terms.utilization)} />
+        <Fact term={p("borrowable")} value={t("tokenAmount", { amount: f.tokens(terms.borrowable), asset })} />
       </dl>
-      <Notes notes={lendingNotes(asset, terms)} />
+      <Notes notes={lendingNotes(f, asset, terms)} />
       {actions?.lend(lending)}
     </div>
   );
 }
 
 function Notes({ notes }: { notes: Note[] }) {
+  const t = useTranslations("earn.page");
+  const say = useMsg();
   return (
-    <ul aria-label="Before you deposit" className="notes mt-5 max-w-[62ch]">
+    <ul aria-label={t("beforeDeposit")} className="notes mt-5 max-w-[62ch]">
       {notes.map((n) => (
-        <li key={n.text} data-tone={n.tone}>
-          {n.term && <b className="font-semibold text-strong">{n.term}. </b>}
-          {n.text}
+        <li key={n.message.key} data-tone={n.tone}>
+          {n.term && <b className="font-semibold text-strong">{say(n.term)}. </b>}
+          {say(n.message)}
         </li>
       ))}
     </ul>

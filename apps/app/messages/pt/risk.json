@@ -1,0 +1,45 @@
+{
+  "noLimit": "Nenhum limite definido",
+  "twapInvalid": "Ainda não é válido",
+  "page": {
+    "title": "Risco · bandas, backstop e reabertura",
+    "intro": "O que fica entre um gap de fim de semana e uma perda em {chain}, com cada número lido da rede.",
+    "block": "Lido no bloco {block}"
+  },
+  "reference": {
+    "title": "Preço de referência",
+    "caption": "O TWAP de cada ativo e o prêmio do mercado do seu token sobre a banda",
+    "asset": "Ativo",
+    "twap": "TWAP",
+    "premium": "Prêmio"
+  },
+  "exposure": {
+    "title": "Exposição do backstop",
+    "absent": "O backstop de gap ainda não foi implantado nesta rede.",
+    "caption": "O limite de exposição do backstop de gap, o que o fechamento atual cobriu e o que resta",
+    "position": "Posição",
+    "limit": "Limite",
+    "covered": "Coberto",
+    "used": "Usado",
+    "left": "Restante",
+    "held": "O backstop tem {amount} USDG; o que resta nunca é mais que isso."
+  },
+  "reopening": {
+    "title": "Leilão de reabertura",
+    "absent": "O leilão de reabertura ainda não foi implantado nesta rede.",
+    "none": "Ainda não há rodada de reabertura.",
+    "caption": "A última rodada de reabertura de cada ativo",
+    "asset": "Ativo",
+    "status": "Status",
+    "floor": "Mínimo",
+    "lots": "Lotes",
+    "clearing": "Liquidação"
+  },
+  "round": {
+    "none": "Sem rodada",
+    "committing": "Em compromisso",
+    "revealing": "Em revelação",
+    "awaiting": "Aguardando liquidação",
+    "cleared": "Liquidada"
+  }
+}

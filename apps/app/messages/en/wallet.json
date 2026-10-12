@@ -1,0 +1,17 @@
+{
+  "getWallet": "Get a wallet",
+  "opensInNewTab": "(opens in a new tab)",
+  "connect": "Connect wallet",
+  "waiting": "Waiting for your wallet…",
+  "list": "Wallets in this browser",
+  "smart": {
+    "aria": "Smart account",
+    "live": "LIVE",
+    "notCreated": "NOT CREATED",
+    "creating": "Creating your account…",
+    "create": "Create account",
+    "freeFirst": "Creating it costs you nothing, and so do your first {left, number} actions.",
+    "freeUsed": "Free actions used. You pay gas from here.",
+    "freeLeft": "{left, plural, one {# free action left} other {# free actions left}}"
+  }
+}

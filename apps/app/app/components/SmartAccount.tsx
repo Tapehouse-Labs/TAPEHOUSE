@@ -1,22 +1,27 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 "use client";
 
-import { explain } from "@/lib/errors";
-import { shortAddress } from "@/lib/format";
-import { useSmartAccount } from "@/lib/smartAccountHook";
+import { useTranslations } from "next-intl";
+import { useExplain, useFormat, useMsg } from "@/lib/i18n";
 import { freeActions, notches } from "@/lib/smartAccount";
+import { useSmartAccount } from "@/lib/smartAccountHook";
 
 /**
  * The visitor's smart account under the figure: its address in a seal, and its free actions drawn as notches across
  * the stem at the bar's angle, each going out as it is spent.
  */
 export function SmartAccount() {
+  const t = useTranslations("wallet.smart");
+  const w = useTranslations("wallet");
+  const f = useFormat();
+  const say = useMsg();
+  const explain = useExplain();
   const smart = useSmartAccount();
   if (!smart.enabled) return null;
   const { address, standing } = smart;
   const left = standing?.left ?? 0n;
   return (
-    <section aria-label="Smart account" className="relative mt-6">
+    <section aria-label={t("aria")} className="relative mt-6">
       <span className="notches" data-pending={standing ? undefined : ""} aria-hidden="true">
         {notches(left).map((lit, i) => (
           <i key={i} data-spent={lit ? undefined : ""} />
@@ -27,14 +32,14 @@ export function SmartAccount() {
           <p className="seal num">
             <span aria-hidden="true">[</span>
             <span className="addr" title={address}>
-              {shortAddress(address)}
+              {f.shortAddress(address)}
             </span>
             <span aria-hidden="true">]</span>
             <span className={standing.deployed ? "text-[var(--gain)]" : "text-muted"}>
-              · {standing.deployed ? "LIVE" : "NOT CREATED"}
+              · {standing.deployed ? t("live") : t("notCreated")}
             </span>
           </p>
-          <p className="mt-2 max-w-[44ch] text-[14px] text-body">{freeActions(standing)}</p>
+          <p className="mt-2 max-w-[44ch] text-[14px] text-body">{say(freeActions(standing))}</p>
         </>
       ) : (
         <>
@@ -46,11 +51,7 @@ export function SmartAccount() {
         <div className="mt-6 flex min-h-[44px] items-center">
           {standing && (
             <button type="button" onClick={smart.create} disabled={smart.phase !== undefined} className="btn">
-              {smart.phase === "signing"
-                ? "Waiting for your wallet…"
-                : smart.phase === "creating"
-                  ? "Creating your account…"
-                  : "Create account"}
+              {smart.phase === "signing" ? w("waiting") : smart.phase === "creating" ? t("creating") : t("create")}
             </button>
           )}
         </div>

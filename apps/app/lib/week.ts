@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+import { type Msg, msg } from "./messages";
 
 /** How long before a weekend or holiday close the requirement starts rising to the closed one, in milliseconds. */
 export const RAMP_MS = 25_200_000n;
@@ -8,9 +9,8 @@ const HOUR_MS = 3_600_000n;
 const YEAR_HOURS = 8_760n;
 
 /** The regime the engine reports, in words: 0 unknown, 1 closed, 2 open, 3 closing. */
-export function regimeWord(regime: number): string {
-  return ["Session unknown, counted as closed", "Closed", "Open, with a 25% buffer", "Closing"][regime] ??
-    "Session unknown, counted as closed";
+export function regimeWord(regime: number): Msg {
+  return msg((["account.regime.unknown", "account.regime.closed", "account.regime.open", "account.regime.closing"] as const)[regime] ?? "account.regime.unknown");
 }
 
 export type Mark = {

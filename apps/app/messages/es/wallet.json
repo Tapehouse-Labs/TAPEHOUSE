@@ -1,0 +1,17 @@
+{
+  "getWallet": "Obtener una wallet",
+  "opensInNewTab": "(se abre en una pestaña nueva)",
+  "connect": "Conectar wallet",
+  "waiting": "Esperando tu wallet…",
+  "list": "Wallets en este navegador",
+  "smart": {
+    "aria": "Cuenta inteligente",
+    "live": "ACTIVA",
+    "notCreated": "NO CREADA",
+    "creating": "Creando tu cuenta…",
+    "create": "Crear cuenta",
+    "freeFirst": "Crearla no te cuesta nada, ni tus primeras {left, number} acciones.",
+    "freeUsed": "Acciones gratis agotadas. Desde aquí pagas el gas.",
+    "freeLeft": "{left, plural, one {Queda # acción gratis} other {Quedan # acciones gratis}}"
+  }
+}

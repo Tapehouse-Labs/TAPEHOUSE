@@ -1,0 +1,14 @@
+{
+  "title": "Você poderia tomar emprestado agora",
+  "any": "Qualquer portfólio",
+  "required": "{required} de requisito contra {equity} de patrimônio · {regime}",
+  "hint": "Digite um portfólio. O motor da Tapehouse calcula a margem dele na borda inferior de cada banda, como faria com a sua conta.",
+  "lendable": "O cofre de suprimento tem {amount} USDG para emprestar agora.",
+  "portfolio": "Portfólio",
+  "lowEdge": "${price} na borda inferior",
+  "halted": "suspenso, não conta",
+  "tokens": "Tokens de {asset}",
+  "owed": "Dívida",
+  "owedAria": "USDG devidos",
+  "week": "O requisito do portfólio contra o patrimônio dele ao longo da semana"
+}

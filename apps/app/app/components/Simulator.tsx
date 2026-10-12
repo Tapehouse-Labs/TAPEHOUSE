@@ -2,13 +2,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { usePublicClient } from "wagmi";
 import { useDeployments } from "@/app/providers";
-import { parseAmount, usd, usdg } from "@/lib/amounts";
-import { explain } from "@/lib/errors";
-import { price } from "@/lib/format";
 import { REFRESH_MS, useMinute, useSettled } from "@/lib/hooks";
+import { useExplain, useFormat, useMsg } from "@/lib/i18n";
 import { readMarket, simulate } from "@/lib/simulation";
 import { capacity, regimeWord, week } from "@/lib/week";
 import { Week } from "./Week";
@@ -20,6 +19,10 @@ const PRICE_UNIT = 10n ** 8n;
  * the engine itself, with what it could borrow now and its week down the stem. No wallet needed.
  */
 export function Simulator() {
+  const t = useTranslations("simulator");
+  const f = useFormat();
+  const say = useMsg();
+  const explain = useExplain();
   const deployments = useDeployments();
   const client = usePublicClient();
   const now = useMinute();
@@ -32,9 +35,9 @@ export function Simulator() {
     refetchInterval: REFRESH_MS,
   });
   const assets = market.data?.assets ?? [];
-  const quantities = assets.map((a) => parseAmount(typed[a.asset] ?? "", 18) ?? 0n);
+  const quantities = assets.map((a) => f.parseAmount(typed[a.asset] ?? "", 18) ?? 0n);
   const prices = assets.map((a) => a.low);
-  const debt = parseAmount(typedDebt, 6) ?? 0n;
+  const debt = f.parseAmount(typedDebt, 6) ?? 0n;
   const settled = useSettled(quantities.join(","));
   const result = useQuery({
     queryKey: ["simulation", deployments.chainId, market.data?.blockNumber.toString(), settled],
@@ -69,33 +72,31 @@ export function Simulator() {
       <div className="pt-[2.5rem] sm:pt-[3.5rem]">
         <div className="relative pt-14">
           <span className="bar" aria-hidden="true" />
-          <h1 className="label">Could borrow now</h1>
+          <h1 className="label">{t("title")}</h1>
           {room !== undefined ? (
             <p className="figure num mt-3 !text-strong" aria-live="polite">
-              {usdg(room)} <span className="text-[0.32em] font-medium tracking-normal text-muted">USDG</span>
+              {f.usdg(room)} <span className="text-[0.32em] font-medium tracking-normal text-muted">USDG</span>
             </p>
           ) : (
             <p className="figure mt-3" data-empty>
-              Any portfolio
+              {t("any")}
             </p>
           )}
           <p className="mt-3 max-w-[52ch] text-[14px] text-muted num">
             {sim ? (
-              <>
-                {usd(sim.current)} required against {usd(equity)} of equity · {regimeWord(sim.regime)}
-              </>
+              t("required", { required: f.usd(sim.current), equity: f.usd(equity), regime: say(regimeWord(sim.regime)) })
             ) : (
-              "Type a portfolio. Tapehouse's engine margins it at each band's low edge, as it would your account."
+              t("hint")
             )}
           </p>
           {data && (
             <p className="mt-2 max-w-[52ch] text-[14px] text-muted num">
-              The supply vault has {usdg(data.lendable)} USDG to lend now.
+              {t("lendable", { amount: f.usdg(data.lendable) })}
             </p>
           )}
         </div>
 
-        <section aria-label="Portfolio" className="mt-10">
+        <section aria-label={t("portfolio")} className="mt-10">
           {market.isError && (
             <p role="alert" className="text-[14px] text-[var(--error)]">
               {explain(market.error)}
@@ -106,30 +107,30 @@ export function Simulator() {
               <label key={a.asset} className="row flex min-h-[52px] items-center justify-between gap-4 border-t border-rule">
                 <span className="font-semibold text-strong">{a.asset}</span>
                 <span className="flex items-center gap-3 text-[13px] text-muted num">
-                  {a.low > 0n ? `$${price(a.low)} low edge` : "halted, counts for nothing"}
+                  {a.low > 0n ? t("lowEdge", { price: f.price(a.low) }) : t("halted")}
                   <input
                     className="amount !text-[19px]"
                     inputMode="decimal"
                     placeholder="0"
-                    aria-label={`${a.asset} tokens`}
+                    aria-label={t("tokens", { asset: a.asset })}
                     value={typed[a.asset] ?? ""}
-                    onChange={(e) => setTyped({ ...typed, [a.asset]: e.target.value })}
+                    onChange={(e) => setTyped({ ...typed, [a.asset]: f.normalize(e.target.value) })}
                   />
                 </span>
               </label>
             ))}
             {data && (
               <label className="row flex min-h-[52px] items-center justify-between gap-4 border-t border-rule">
-                <span className="font-semibold text-strong">Owed</span>
+                <span className="font-semibold text-strong">{t("owed")}</span>
                 <span className="flex items-center gap-3 text-[13px] text-muted num">
                   USDG
                   <input
                     className="amount !text-[19px]"
                     inputMode="decimal"
                     placeholder="0"
-                    aria-label="USDG owed"
+                    aria-label={t("owedAria")}
                     value={typedDebt}
-                    onChange={(e) => setTypedDebt(e.target.value)}
+                    onChange={(e) => setTypedDebt(f.normalize(e.target.value))}
                   />
                 </span>
               </label>
@@ -139,7 +140,7 @@ export function Simulator() {
 
         {sim && data && (
           <Week
-            label="The portfolio's requirement against its equity through the week"
+            label={t("week")}
             equity={equity}
             marks={week({
               regime: sim.regime,

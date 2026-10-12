@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import type { Metadata, Viewport } from "next";
 import { Archivo, Inter_Tight, Spline_Sans_Mono } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getTranslations } from "next-intl/server";
 import { loadRegistry } from "@/lib/registry";
 import { SITE_URL } from "@/lib/site";
 import { Providers } from "./providers";
@@ -10,13 +12,16 @@ const archivo = Archivo({ variable: "--font-archivo", subsets: ["latin"], displa
 const interTight = Inter_Tight({ variable: "--font-inter-tight", subsets: ["latin"], display: "swap" });
 const splineMono = Spline_Sans_Mono({ variable: "--font-spline-mono", subsets: ["latin"], display: "swap" });
 
-export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
-  title: { default: "Tapehouse", template: "%s — Tapehouse" },
-  description: "Portfolio margin for Stock Tokens.",
-  openGraph: { siteName: "Tapehouse", type: "website" },
-  twitter: { card: "summary_large_image" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("pages.default");
+  return {
+    metadataBase: new URL(SITE_URL),
+    title: { default: "Tapehouse", template: "%s — Tapehouse" },
+    description: t("description"),
+    openGraph: { siteName: "Tapehouse", type: "website" },
+    twitter: { card: "summary_large_image" },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: [
@@ -29,9 +34,10 @@ const THEME = `(function(){try{var t=localStorage.getItem("theme");if(t==="light
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const { deployments, rpcUrl, bundlerUrl, sponsorUrl } = await loadRegistry(process.env);
+  const locale = await getLocale();
   return (
     <html
-      lang="en"
+      lang={locale}
       className={`${archivo.variable} ${interTight.variable} ${splineMono.variable} antialiased`}
       suppressHydrationWarning
     >
@@ -39,9 +45,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: THEME }} />
       </head>
       <body>
-        <Providers deployments={deployments} rpcUrl={rpcUrl} bundlerUrl={bundlerUrl} sponsorUrl={sponsorUrl}>
-          {children}
-        </Providers>
+        <NextIntlClientProvider>
+          <Providers deployments={deployments} rpcUrl={rpcUrl} bundlerUrl={bundlerUrl} sponsorUrl={sponsorUrl}>
+            {children}
+          </Providers>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

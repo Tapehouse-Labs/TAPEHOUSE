@@ -1,0 +1,14 @@
+{
+  "title": "Podrías pedir prestado ahora",
+  "any": "Cualquier cartera",
+  "required": "{required} de requerimiento frente a {equity} de capital · {regime}",
+  "hint": "Escribe una cartera. El motor de Tapehouse calcula su margen en el borde inferior de cada banda, como lo haría con tu cuenta.",
+  "lendable": "La bóveda de suministro tiene {amount} USDG para prestar ahora.",
+  "portfolio": "Cartera",
+  "lowEdge": "${price} en el borde inferior",
+  "halted": "suspendido, no cuenta",
+  "tokens": "Tokens de {asset}",
+  "owed": "Deuda",
+  "owedAria": "USDG adeudados",
+  "week": "El requerimiento de la cartera frente a su capital durante la semana"
+}

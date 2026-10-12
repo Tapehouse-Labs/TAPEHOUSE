@@ -1,0 +1,14 @@
+{
+  "title": "Could borrow now",
+  "any": "Any portfolio",
+  "required": "{required} required against {equity} of equity · {regime}",
+  "hint": "Type a portfolio. Tapehouse's engine margins it at each band's low edge, as it would your account.",
+  "lendable": "The supply vault has {amount} USDG to lend now.",
+  "portfolio": "Portfolio",
+  "lowEdge": "${price} low edge",
+  "halted": "halted, counts for nothing",
+  "tokens": "{asset} tokens",
+  "owed": "Owed",
+  "owedAria": "USDG owed",
+  "week": "The portfolio's requirement against its equity through the week"
+}

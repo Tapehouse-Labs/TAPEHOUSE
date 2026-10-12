@@ -4,9 +4,10 @@ import { expect, type Page, test } from "@playwright/test";
 import { accounts, band, CROSS, engine, parseDeployments, sponsorship } from "@tapehouse/sdk";
 import { createPublicClient, createWalletClient, erc20Abi, type Hex, http, parseAbi } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { usd } from "../lib/amounts";
-import { price } from "../lib/format";
+import { formatters } from "../lib/format";
 import { installWallet } from "./wallet";
+
+const en = formatters("en");
 
 const registry = process.env.TAPEHOUSE_REGISTRY;
 const funderKey = process.env.PRIVATE_KEY as Hex | undefined;
@@ -69,7 +70,7 @@ test("a holder with Stock Tokens and no ether deposits and borrows for free, kno
   await act.getByLabel("Amount to borrow").fill("1000");
   const account = (await page.getByRole("region", { name: "Smart account" }).locator(".addr").getAttribute("title")) as Hex;
   const expected = await accounts.liquidationPrice(client, deployments, account, CROSS, "NVDA", 1_000_000_000n);
-  await expect(figure).toHaveText(`$${price(expected)}`);
+  await expect(figure).toHaveText(`$${en.price(expected)}`);
   await expect(page.getByRole("list", { name: /requirement against its equity/ })).toBeVisible();
   await act.getByRole("button", { name: "Borrow, free" }).click();
   await expect(act.getByRole("status")).toContainText("Done", { timeout: 60_000 });
@@ -140,6 +141,6 @@ test("the simulator margins any portfolio with the engine, no wallet needed", as
   const prices = await Promise.all(assets.map(async (a) => (await band.quote(client, deployments, a.asset)).low));
   const { margin } = await engine.currentRequirement(client, deployments, { quantities, prices });
   const equity = 20n * low * 10n ** 10n;
-  await expect(page.getByText(`${usd(margin)} required against ${usd(equity)} of equity`)).toBeVisible();
+  await expect(page.getByText(`${en.usd(margin)} required against ${en.usd(equity)} of equity`)).toBeVisible();
   await expect(page.getByRole("list", { name: /requirement against its equity through the week/ })).toBeVisible();
 });

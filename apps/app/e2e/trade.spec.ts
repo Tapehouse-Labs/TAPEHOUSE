@@ -5,8 +5,10 @@ import { expect, type Page, test } from "@playwright/test";
 import { accounts, CROSS, gapCover, parseDeployments, shorts, sponsorship } from "@tapehouse/sdk";
 import { createPublicClient, createWalletClient, erc20Abi, type Hex, http, parseAbi } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { usdg as usdgWords } from "../lib/amounts";
+import { formatters } from "../lib/format";
 import { installWallet } from "./wallet";
+
+const en = formatters("en");
 
 const registry = process.env.TAPEHOUSE_REGISTRY;
 const funderKey = process.env.PRIVATE_KEY as Hex | undefined;
@@ -76,8 +78,8 @@ test("a visitor reads every line of a short's ticket before connecting a wallet"
   await page.getByLabel("Stock Token").selectOption("SPY");
   await page.getByLabel("Amount, sell").fill("1");
   const { proceeds, minProceeds } = await shorts.quoteSale(client, deployments, { asset: "SPY", amount: ONE, slippageBps: 50n });
-  await expect(page.getByText(`$${usdgWords(proceeds)}`, { exact: true })).toBeVisible();
-  await expect(page.getByText(`$${usdgWords(minProceeds)}`, { exact: true })).toBeVisible();
+  await expect(page.getByText(`$${en.usdg(proceeds)}`, { exact: true })).toBeVisible();
+  await expect(page.getByText(`$${en.usdg(minProceeds)}`, { exact: true })).toBeVisible();
   await expect(page.getByRole("list", { name: "Before you sign" })).toContainText("only once it falls short at both edges");
   await page.getByRole("button", { name: "Gap cover" }).click();
   await expect(page.getByText(/last round before the market closes/)).toBeVisible();
@@ -102,7 +104,7 @@ test("a short of SPY takes its margin from the wallet, sells at the quote and bu
   await page.getByLabel("Short action").selectOption("sell");
   await page.getByLabel("Amount, sell").fill("1");
   const { minProceeds } = await shorts.quoteSale(client, deployments, { asset: "SPY", amount: ONE, slippageBps: 50n });
-  await expect(page.getByText(`$${usdgWords(minProceeds)}`, { exact: true })).toBeVisible();
+  await expect(page.getByText(`$${en.usdg(minProceeds)}`, { exact: true })).toBeVisible();
   await expect(page.getByRole("term").filter({ hasText: "Margin after" }).locator("..")).toContainText("against");
   await page.getByRole("button", { name: "Sell short, free" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Done" })).toBeVisible({ timeout: 60_000 });

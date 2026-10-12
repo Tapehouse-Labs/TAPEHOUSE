@@ -1,0 +1,11 @@
+{
+  "phase": {
+    "wrapping": "Wrapping your ether…",
+    "stock": "Wrapping your Stock Token…",
+    "permit": "Sign the permit in your wallet…",
+    "checking": "Checking it against the chain…",
+    "signing": "Waiting for your wallet…",
+    "sending": "Sending…"
+  },
+  "plain": "{text}"
+}
