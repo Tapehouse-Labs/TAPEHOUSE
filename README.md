@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://app.tapehouse.xyz">Live app</a> · <a href="#how-it-works">How It Works</a> · <a href="#judge-walkthrough">Judge Walkthrough</a> · <a href="#stylus-versus-solidity">Stylus</a> · <a href="#deployed-contracts">Contracts</a> · <a href="#getting-started">Run Locally</a>
+  <a href="https://app.tapehouse.xyz">Live app</a> · <a href="#how-it-works">How It Works</a> · <a href="JUDGES.md">For the judges</a> · <a href="#stylus-versus-solidity">Stylus</a> · <a href="#deployed-contracts">Contracts</a> · <a href="#getting-started">Run Locally</a>
 </p>
 
 ---
@@ -93,6 +93,8 @@ Test USDG comes from [Paxos' faucet](https://faucet.paxos.com/?network=robinhood
 ---
 
 ## Judge Walkthrough
+
+[`JUDGES.md`](JUDGES.md) is the five-minute path, with commands that read the live testnet, and states what is live, what is tested and what is not. The table below says where each claim is verified.
 
 | Claim | Where to verify it |
 |---|---|
