@@ -43,6 +43,9 @@
     "TSLA": "0xf725e77cB02029267f38355074Da70aC8Ea2CE87",
     "AMZN": "0xdAFc2dDAe8D5815468Ae2cc470bbD8674D988D2f"
   },
+  "references": {
+    "Margin": "0x68B73e2c70cd61B9d94cCF7c0F3502F9DE93749c"
+  },
   "erc4337": {
     "EntryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
     "SimpleAccountFactory": "0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985"

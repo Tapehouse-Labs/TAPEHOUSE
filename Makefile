@@ -72,7 +72,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	bindings check-bindings test-sdks-devnode test-mcp-devnode test-app-devnode test-indexer-devnode run-indexer backtest test-backtest-devnode test-keeper-devnode run-keeper test-bidder-devnode run-bidder test-alerts-devnode run-alerts calibrate calibrate-snapshot test-calibrate-devnode \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus clone-stylus verify-stylus \
-	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table \
+	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table compare-margin \
 	deploy-uniswap-pools deploy-band-feeds verify-band-feeds simulate-supply-vault deploy-supply-vault verify-supply-vault \
 	deploy-margin-accounts verify-margin-accounts deploy-liquidator verify-liquidator deploy-gap-backstop verify-gap-backstop deploy-reopening-auction verify-reopening-auction deploy-stock-lending verify-stock-lending deploy-short-positions verify-short-positions deploy-morpho-oracles verify-morpho-oracles deploy-basket verify-baskets deploy-round-feeds deploy-gap-cover verify-gap-cover deploy-sponsor-paymaster verify-sponsor-paymaster deploy-contracts-devnode test-contracts-devnode \
 	bundler bundler-stop sponsor sponsor-stop run-sponsor test-sponsorship-devnode lint-scripts lint-licenses
@@ -302,6 +302,10 @@ gas-stylus-devnode:
 snapshot-stylus-devnode:
 	@test -s stylus/target/devnode-gas.txt || { echo "No dev-node gas report. Run: make test-stylus-devnode"; exit 1; }
 	@LC_ALL=C sort stylus/target/devnode-gas.txt > stylus/.gas-devnode && cat stylus/.gas-devnode
+
+compare-margin: check-foundry
+	@test -n "$(RPC_URL_$(CHAIN))" || { echo "Usage: make compare-margin CHAIN=<4663|46630|42161>"; exit 1; }
+	@stylus/scripts/compare-margin.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
 
 gas-table:
 	@test -s stylus/target/devnode-gas.txt || { echo "No dev-node gas report. Run: make test-stylus-devnode"; exit 1; }

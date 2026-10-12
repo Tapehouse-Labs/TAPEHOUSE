@@ -52,7 +52,13 @@ make verify-stylus CHAIN=46630 TX=0x7f003392328803b2fd7331f6dcc2d96f387e8e9b811c
 
 The testnet's band and margin engine are second instances of programs verified this way (`0xa70118d3…5641` and `0x9B2DB813…D6B0`), cloned while Arbitrum pauses new Stylus activations.
 
-**7. See why Stylus.** The margin engine against a bit-exact Solidity reference, on the same calls, measured in L2 gas: 13.1× cheaper for the requirement of three assets, 16.7× for six, up to 20.5× for the full launch scenario set ([README](README.md#stylus-versus-solidity)). Reproduce it with `make devnode deploy-stylus-devnode test-stylus-devnode gas-table`.
+**7. See why Stylus, live.** The margin engine is also written in Solidity, bit for bit, and deployed beside the program (`0x68B73e2c70cd61B9d94cCF7c0F3502F9DE93749c`). One command, which reads the chain and needs no key, calls both with the same arguments, stops at the first answer that differs by a single bit, and prints the L2 gas of each:
+
+```bash
+make compare-margin CHAIN=46630
+```
+
+On the testnet's two assets it compares 32 calls (the views, scenarios, the digest of every lattice size and the requirement at three horizons) and the Stylus program is 12.3× cheaper for the requirement and 13.5× for the 256-point scenario set. On the dev node the same suite gives 13.1× for three assets, 16.7× for six and up to 20.5× for the full launch set ([README](README.md#stylus-versus-solidity)); `make devnode deploy-stylus-devnode test-stylus-devnode gas-table` reproduces it. To call one yourself: `cast call $MARGIN "requirement(int256[],uint256[],uint64,bool)(uint256,uint8)" "[1000000000000000000,-500000000000000000]" "[37800000000,26000000000]" 172800 false`, once on the program (`0x85cbe267eF0c5dEC5Fc2aFc0b439cc62caB94982`) and once on the reference.
 
 **8. Run the tests.** `make test`. Fork tests need an archive RPC for each chain (`ROBINHOOD_RPC_URL`, `ROBINHOOD_TESTNET_RPC_URL`, `ARBITRUM_RPC_URL`; see the [reference](docs/REFERENCE.md#networks)).
 

@@ -130,6 +130,7 @@ Test USDG comes from [Paxos' faucet](https://faucet.paxos.com/?network=robinhood
 - **Stylus wins wherever the scenario set is walked**: 13.1× cheaper for the requirement of three assets and 16.7× for six, and up to 20.5× for the six launch assets' full set.
 - **Stylus loses the small views**, at about twice the gas: entering an uncached program costs about 95,000, more than reading a few words. Net of that entry cost the three-asset requirement is about 20× cheaper.
 - The method, the compiler settings and the cost of a real pool read are in the [reference](docs/REFERENCE.md#stylus-versus-solidity).
+- **Check it live.** The Solidity reference is deployed on the testnet, and `make compare-margin CHAIN=46630` calls it and the margin program with the same arguments, fails if a single bit differs, and prints the gas of each.
 
 ---
 
@@ -148,6 +149,7 @@ Robinhood Chain testnet (46630). Each address links to its page on the [explorer
 | Reopening auction | [`0x58F39a807ea6CFbeBCBd71995b1dA2E0608BF642`](https://explorer.testnet.chain.robinhood.com/address/0x58F39a807ea6CFbeBCBd71995b1dA2E0608BF642) |
 | Stock lending, TSLA | [`0xf281f0051bEC503F507d6b9Df10535e4787B610e`](https://explorer.testnet.chain.robinhood.com/address/0xf281f0051bEC503F507d6b9Df10535e4787B610e) |
 | Stock lending, AMZN | [`0x46acce332E1D390c3E4E43bE16665Dd005a09EB5`](https://explorer.testnet.chain.robinhood.com/address/0x46acce332E1D390c3E4E43bE16665Dd005a09EB5) |
+| Margin engine, Solidity reference | [`0x68B73e2c70cd61B9d94cCF7c0F3502F9DE93749c`](https://explorer.testnet.chain.robinhood.com/address/0x68B73e2c70cd61B9d94cCF7c0F3502F9DE93749c) |
 | Short positions | [`0x5d0eA334b512be35Bb6CE6949956c7E03589845B`](https://explorer.testnet.chain.robinhood.com/address/0x5d0eA334b512be35Bb6CE6949956c7E03589845B) |
 | Basket `thPAIR` (TSLA and AMZN) | [`0x7c51c996ad7B049D4A57Af9387c3Fee297E3d45F`](https://explorer.testnet.chain.robinhood.com/address/0x7c51c996ad7B049D4A57Af9387c3Fee297E3d45F) |
 | Gap cover | [`0x482434d135eeA48797c1d960DF0f3A01E434ad17`](https://explorer.testnet.chain.robinhood.com/address/0x482434d135eeA48797c1d960DF0f3A01E434ad17) |

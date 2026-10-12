@@ -65,6 +65,7 @@ make test
 | `make check-bindings` | Regenerates the bindings and fails if they differ from what is committed |
 | `make devnode deploy-stylus-devnode test-stylus-devnode` | Deploys `band` and `margin` to a local dev node, writes live RedStone prices through the band, reads it through a `BandFeed`, margins a portfolio against stub pools and the band's session, checks the margin engine's Solidity reference against it, and updates the margin engine's parameters |
 | `make gas-stylus-devnode` · `snapshot-stylus-devnode` | Compares the dev-node suite's L2 gas with `stylus/.gas-devnode`, failing on a move over 0.5%, or regenerates it |
+| `make compare-margin CHAIN=<id>` | Calls the margin program and its deployed Solidity reference, `.references.Margin`, with the same arguments, fails on the first answer that differs by a bit, and prints the L2 gas of each call from the node's own estimate; reads the chain only, so it needs no key |
 | `make gas-table` | Prints the L2 gas of the margin program and of its Solidity reference on the same calls, from the last dev-node run |
 | `make deploy-stylus CHAIN=<id> SIGNER='<flags>' [CONTRACT=margin]` | Deploys `band`, or the program `CONTRACT` names, reproducibly, configured from `deployments/<id>.json`, and prints the transaction and address |
 | `make clone-stylus CHAIN=<id> SOURCE=<address> SIGNER='--account <name> --password-file <file>' [CONTRACT=margin]` | Deploys a new instance of a program that is already active, with its own constructor arguments from `deployments/<id>.json`, through StylusDeployer, and prints the transaction and address. The instance runs the code `SOURCE` runs and needs no activation, so it works while a chain pauses new activations |
@@ -431,13 +432,15 @@ stylus/scripts/check-margin.sh <rpc> <address> deployments/<chainId>.json
 
 ### Stylus versus Solidity
 
-`contracts/test/reference/MarginReference.sol` is the margin engine in Solidity: the same scenario set, requirement, pool reads, session and weekend cap, over the same configuration, with Uniswap's own `TickMath` and `FullMath`. It is a test double for Solidity tests, not a deployment: it holds its configuration without the program's checks, parameter updates or ownership transfers.
+`contracts/test/reference/MarginReference.sol` is the margin engine in Solidity: the same scenario set, requirement, pool reads, session and weekend cap, over the same configuration, with Uniswap's own `TickMath` and `FullMath`. It is a reference for tests: it holds its configuration without the program's checks, parameter updates or ownership transfers, and nothing in Tapehouse depends on it. One instance is deployed on the testnet, as `.references.Margin`, with the arguments `margin-args.sh` gives the margin program, so the comparison below can be run by anyone.
 
 It answers every view of the program to the bit. Its tests reproduce the 144 scenario digests and 14 launch scenarios in `stylus/contracts/margin/testdata`, the 120 requirements against Robinhood Chain's pools at block 75,093,578 in a fork test, the band's 38 sessions and a month of real ones. On the dev node it is deployed with the program's constructor arguments, and every view is compared call by call. Pools and feeds that answer as Uniswap and Chainlink do give the same result in both; malformed return data, which no real pool or feed gives, reverts the reference where the program reads no answer.
 
 It is compiled with this repository's settings, solc 0.8.37 and the optimizer at 200 runs, and its hot loops are `unchecked`, as the program's release build is. Checked arithmetic would nearly double its gas, and `via_ir` at 10,000 runs costs 11% more on the requirement than these settings.
 
 The dev-node suite measures both on the same calls, in L2 gas. `make devnode deploy-stylus-devnode test-stylus-devnode gas-table` prints the run's table; this one is from `stylus/.gas-devnode`, and `make gas` fails if they differ:
+
+`make compare-margin CHAIN=46630` does the same on the testnet, on its two assets and with no key: it compares 32 calls (the views, four scenarios, the digest of every lattice size at two horizons, and the requirement at three horizons with and without a closure) and prints the L2 gas of each from the node's estimate.
 
 _The table of gas measurements is in the [README](../README.md#stylus-versus-solidity); `make gas` fails when it differs from the dev-node run._
 
