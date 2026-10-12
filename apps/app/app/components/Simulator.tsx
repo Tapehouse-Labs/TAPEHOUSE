@@ -59,6 +59,7 @@ export function Simulator() {
           debt: data.limits.debt,
           debtCap: data.limits.debtCap,
           weekendDebtCap: data.limits.weekendDebtCap,
+          lendable: data.lendable,
         })
       : undefined;
 
@@ -87,6 +88,11 @@ export function Simulator() {
               "Type a portfolio. Tapehouse's engine margins it at each band's low edge, as it would your account."
             )}
           </p>
+          {data && (
+            <p className="mt-2 max-w-[52ch] text-[14px] text-muted num">
+              The supply vault has {usdg(data.lendable)} USDG to lend now.
+            </p>
+          )}
         </div>
 
         <section aria-label="Portfolio" className="mt-10">

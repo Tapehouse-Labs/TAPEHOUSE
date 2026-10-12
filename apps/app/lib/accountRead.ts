@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-import { accounts, band, CROSS, type Deployments, engine, toBytes32 } from "@tapehouse/sdk";
+import { accounts, band, CROSS, type Deployments, engine, supply, toBytes32 } from "@tapehouse/sdk";
 import { type Address, type Client, type Hex, maxUint256, zeroAddress } from "viem";
 import { getBlockNumber } from "viem/actions";
 
@@ -50,6 +50,7 @@ export type AccountState = {
   positions: Position[];
   limits: Awaited<ReturnType<typeof accounts.limits>>;
   session: Awaited<ReturnType<typeof band.session>>;
+  lendable: bigint;
 };
 
 const PRICE_UNIT = 10n ** 8n;
@@ -75,10 +76,11 @@ export async function readAccount(
   const at = { blockNumber };
   const assets = await accounts.stocks(client, deployments, at);
   const holders = [deployments.tapehouse.MarginAccounts as Address, account, owner];
-  const [quotes, limits, session, holdings, issuers] = await Promise.all([
+  const [quotes, limits, session, vault, holdings, issuers] = await Promise.all([
     Promise.all(assets.map(({ asset }) => band.quote(client, deployments, asset, at))),
     accounts.limits(client, deployments, at),
     band.session(client, deployments, at),
+    supply.market(client, deployments, at),
     Promise.all(
       assets.map(({ asset, token }) =>
         token === zeroAddress ? undefined : accounts.holding(client, deployments, asset, token, at),
@@ -100,7 +102,7 @@ export async function readAccount(
   const traded = markets.filter((m) => m.token !== zeroAddress);
   const ids = [CROSS, ...traded.map((m) => toBytes32(m.asset))];
   const positions = await Promise.all(ids.map((id) => readPosition(client, deployments, account, id, markets, at)));
-  return { blockNumber, markets, positions: positions.filter((p) => p !== undefined), limits, session };
+  return { blockNumber, markets, positions: positions.filter((p) => p !== undefined), limits, session, lendable: vault.idle };
 }
 
 async function readPosition(

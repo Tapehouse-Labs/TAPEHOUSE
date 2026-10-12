@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-import { accounts, band, type Deployments, engine } from "@tapehouse/sdk";
+import { accounts, band, type Deployments, engine, supply } from "@tapehouse/sdk";
 import type { Client } from "viem";
 import { getBlockNumber } from "viem/actions";
 
@@ -8,12 +8,19 @@ export async function readMarket(client: Client, deployments: Deployments) {
   const blockNumber = await getBlockNumber(client, { cacheTime: 0 });
   const at = { blockNumber };
   const assets = await accounts.stocks(client, deployments, at);
-  const [quotes, limits, session] = await Promise.all([
+  const [quotes, limits, session, vault] = await Promise.all([
     Promise.all(assets.map(({ asset }) => band.quote(client, deployments, asset, at))),
     accounts.limits(client, deployments, at),
     band.session(client, deployments, at),
+    supply.market(client, deployments, at),
   ]);
-  return { blockNumber, assets: assets.map(({ asset }, i) => ({ asset, low: quotes[i]!.low, state: quotes[i]!.state })), limits, session };
+  return {
+    blockNumber,
+    assets: assets.map(({ asset }, i) => ({ asset, low: quotes[i]!.low, state: quotes[i]!.state })),
+    limits,
+    session,
+    lendable: vault.idle,
+  };
 }
 
 /**

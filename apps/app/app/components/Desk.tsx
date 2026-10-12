@@ -260,6 +260,7 @@ function capacityInput(state: AccountState, position: Position) {
     debt: state.limits.debt,
     debtCap: state.limits.debtCap,
     weekendDebtCap: state.limits.weekendDebtCap,
+    lendable: state.lendable,
   };
 }
 

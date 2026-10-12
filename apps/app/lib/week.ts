@@ -68,7 +68,8 @@ export function week({
 
 /**
  * The most USDG a position may borrow now: what its equity holds above its requirement and, before a closure, above a
- * fifth of its gross exposure, within the debt cap and, before a closure, the weekend debt cap. Never below zero.
+ * fifth of its gross exposure, within the debt cap and, before a closure, the weekend debt cap, and within the USDG
+ * the supply vault has to lend, `lendable`, when it is given. Never below zero.
  */
 export function capacity({
   equity,
@@ -79,6 +80,7 @@ export function capacity({
   debt,
   debtCap,
   weekendDebtCap,
+  lendable,
 }: {
   equity: bigint;
   requirement: bigint;
@@ -88,8 +90,10 @@ export function capacity({
   debt: bigint;
   debtCap: bigint;
   weekendDebtCap: bigint;
+  lendable?: bigint;
 }): bigint {
   const room = [(equity - requirement) / 10n ** 12n, debtCap - debt];
+  if (lendable !== undefined) room.push(lendable);
   if (weekendAhead) {
     room.push((equity - ceil(gross * BPS, BigInt(weekendLeverage))) / 10n ** 12n, weekendDebtCap - debt);
   }

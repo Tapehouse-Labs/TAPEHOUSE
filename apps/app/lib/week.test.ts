@@ -96,6 +96,14 @@ describe("capacity", () => {
     ).toBe(1_000_000_000n);
   });
 
+  test("stops at what the supply vault has to lend, and is zero when it has none", () => {
+    const open = { equity: 9_812n * D, requirement: 3_940n * D, gross: 20_000n * D, weekendAhead: false, ...limits };
+    expect(capacity({ ...open, lendable: 150_000_000n })).toBe(150_000_000n);
+    expect(capacity({ ...open, lendable: 9_000_000_000n })).toBe(5_872_000_000n);
+    expect(capacity({ ...open, lendable: 0n })).toBe(0n);
+    expect(capacity(open)).toBe(5_872_000_000n);
+  });
+
   test("is never below zero, and stops at the debt cap", () => {
     expect(capacity({ equity: 1_000n * D, requirement: 3_940n * D, gross: 0n, weekendAhead: false, ...limits })).toBe(0n);
     expect(

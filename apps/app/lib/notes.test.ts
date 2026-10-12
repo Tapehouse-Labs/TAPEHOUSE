@@ -13,6 +13,7 @@ const accounts = "0xE85035F1145aC49333d105632a0d254E479a75bE";
 function state(over: Partial<AccountState> = {}): AccountState {
   return {
     blockNumber: 1n,
+    lendable: 1_000_000_000n,
     markets: [
       {
         asset: "NVDA",
