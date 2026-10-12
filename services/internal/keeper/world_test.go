@@ -52,6 +52,7 @@ type world struct {
 	time        uint64
 	block       uint64
 	nonce       uint64
+	staleNonce  bool
 	sent        []string
 	receipts    map[common.Hash]*types.Receipt
 	debts       []map[string]any
@@ -283,6 +284,9 @@ func (w *world) PendingCodeAt(context.Context, common.Address) ([]byte, error) {
 func (w *world) PendingNonceAt(context.Context, common.Address) (uint64, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.staleNonce && w.nonce > 0 {
+		return w.nonce - 1, nil
+	}
 	return w.nonce, nil
 }
 

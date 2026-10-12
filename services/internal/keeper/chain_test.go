@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -20,6 +21,7 @@ import (
 type endpoint struct {
 	*httptest.Server
 	calls  atomic.Int32
+	behind atomic.Int32
 	answer atomic.Value
 }
 
@@ -32,6 +34,11 @@ func newEndpoint(t *testing.T, answer string) *endpoint {
 			ID json.RawMessage `json:"id"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&request)
+		if e.behind.Add(-1) >= 0 {
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":` + string(request.ID) +
+				`,"error":{"code":-32000,"message":"unsupported block number 133749085"}}`))
+			return
+		}
 		switch answer := e.answer.Load().(string); answer {
 		case "down":
 			http.Error(w, "unavailable", http.StatusServiceUnavailable)
@@ -86,5 +93,33 @@ func TestAFailedEndpointMovesTheCallsToTheNextAndARevertIsAnAnswer(t *testing.T)
 	second.answer.Store("down")
 	if _, err := f.CallContract(context.Background(), call, nil); err == nil {
 		t.Fatal("every endpoint down answered")
+	}
+}
+
+func TestANodeBehindIsAskedAgainAfterAWaitAndOnlyAFewTimes(t *testing.T) {
+	behindWait = time.Millisecond
+	t.Cleanup(func() { behindWait = BehindWait })
+	e := newEndpoint(t, "0x01")
+	e.behind.Store(2)
+	f, err := Dial(context.Background(), []string{e.URL}, 1000, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	out, err := f.CallContract(context.Background(), ethereum.CallMsg{To: &common.Address{1}}, nil)
+	if err != nil || len(out) != 1 || out[0] != 1 || e.calls.Load() != 3 {
+		t.Fatalf("a node two blocks behind: %x, %v, %d calls", out, err, e.calls.Load())
+	}
+
+	always := newEndpoint(t, "0x01")
+	always.behind.Store(1000)
+	g, err := Dial(context.Background(), []string{always.URL}, 1000, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer g.Close()
+	if _, err := g.CallContract(context.Background(), ethereum.CallMsg{To: &common.Address{1}}, nil); err == nil ||
+		always.calls.Load() != BehindRetries+1 {
+		t.Fatalf("a node that never arrives: %v after %d calls", err, always.calls.Load())
 	}
 }

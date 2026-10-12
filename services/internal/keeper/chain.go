@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/v2"
@@ -28,9 +29,20 @@ type Chain interface {
 // limitExceeded is the JSON-RPC error code providers answer a client over its plan's rate with.
 const limitExceeded = -32005
 
+// BehindRetries is how many times a request is sent again when a node answers that it has not reached the block yet,
+// and BehindWait how long the first wait is; each wait is twice the one before.
+const (
+	BehindRetries = 5
+	BehindWait    = 250 * time.Millisecond
+)
+
+// behindWait is the first wait; a test shortens it.
+var behindWait = BehindWait
+
 // Failover is a Chain over several RPC endpoints of one chain, under one rate. Each request goes to the endpoint that
 // last answered; a failed connection, an HTTP error or a provider's rate limit moves it on to the next, while any
-// other JSON-RPC error, such as a revert, is the chain's answer.
+// other JSON-RPC error, such as a revert, is the chain's answer. A provider answers from nodes a block or two apart,
+// and one that has not reached the block asked for says so: that request is sent again, after a wait, not given up.
 type Failover struct {
 	clients []*ethclient.Client
 	limiter *rate.Limiter
@@ -73,8 +85,30 @@ func failed(err error) bool {
 	return true
 }
 
-// do runs call on the current endpoint and, while it fails, on each other in turn, once.
+// behind reports whether err is a node saying it has not reached the block asked for, which another node, or the same
+// one a moment later, has.
+func behind(err error) bool {
+	var answer rpc.Error
+	return errors.As(err, &answer) && strings.Contains(answer.Error(), "unsupported block number")
+}
+
+// do runs call on the current endpoint and, while it fails, on each other in turn, once; and again after a wait,
+// up to BehindRetries times, while the nodes are behind.
 func do[T any](ctx context.Context, f *Failover, call func(*ethclient.Client) (T, error)) (T, error) {
+	wait := behindWait
+	for attempt := 0; ; attempt++ {
+		out, err := each(ctx, f, call)
+		if !behind(err) || attempt == BehindRetries {
+			return out, err
+		}
+		if err := sleep(ctx, wait); err != nil {
+			return out, err
+		}
+		wait *= 2
+	}
+}
+
+func each[T any](ctx context.Context, f *Failover, call func(*ethclient.Client) (T, error)) (T, error) {
 	f.mu.Lock()
 	start := f.current
 	f.mu.Unlock()

@@ -24,7 +24,8 @@ import (
 )
 
 // Sender sends the keepers' transactions from one key: each simulated first and sent only if it would succeed, one at
-// a time so that their nonces follow, each awaited until mined.
+// a time so that their nonces follow, each awaited until mined. Its nonce is the greater of the chain's and the one after
+// its last, since a node a block behind answers with a nonce already used.
 type Sender struct {
 	client  *sdk.Client
 	chain   Chain
@@ -33,6 +34,7 @@ type Sender struct {
 	chainID *big.Int
 	log     *slog.Logger
 	mu      sync.Mutex
+	next    uint64
 }
 
 // NewSender returns a sender from key on chainID.
@@ -56,12 +58,21 @@ func (s *Sender) Act(ctx context.Context, action string, tx sdk.Tx) (*types.Rece
 	defer s.mu.Unlock()
 	opts := bind.NewKeyedTransactor(s.key, s.chainID)
 	opts.Context = ctx
-	sent, err := s.client.Send(opts, tx)
+	pending, err := s.chain.PendingNonceAt(ctx, s.from)
 	if err != nil {
 		return nil, err
 	}
+	nonce := max(pending, s.next)
+	opts.Nonce = new(big.Int).SetUint64(nonce)
+	sent, err := s.client.Send(opts, tx)
+	if err != nil {
+		s.next = 0
+		return nil, err
+	}
+	s.next = nonce + 1
 	receipt, err := bind.WaitMined(ctx, s.chain, sent.Hash())
 	if err != nil {
+		s.next = 0
 		return nil, err
 	}
 	if receipt.Status != types.ReceiptStatusSuccessful {
