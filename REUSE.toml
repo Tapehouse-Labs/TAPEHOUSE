@@ -14,6 +14,7 @@ path = [
     "services/Dockerfile.dockerignore",
     ".nvmrc",
     "apps/app/messages/**/*.json",
+    "apps/landing/messages/**/*.json",
     "package.json",
     "pnpm-lock.yaml",
     "deployments/*.json",

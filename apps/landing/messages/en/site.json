@@ -1,0 +1,27 @@
+{
+  "language": {
+    "aria": "Language"
+  },
+  "plain": {
+    "home": "Tapehouse, home",
+    "back": "Back to the overview"
+  },
+  "footer": {
+    "home": "Tapehouse, home",
+    "aria": "Footer",
+    "tagline": "Portfolio margin for Stock Tokens.",
+    "product": "Product",
+    "builders": "Builders",
+    "openApp": "Open the app",
+    "capacity": "How capacity works",
+    "weekend": "The weekend, measured",
+    "record": "The record",
+    "feed": "Integrate the feed",
+    "methodology": "Methodology",
+    "vulnerability": "Report a vulnerability",
+    "risk": "Risk disclosure",
+    "legal": "Tapehouse is software, not a broker or a bank, and it holds no licence to provide financial services. Nothing here is investment advice or an offer of credit, and today it runs on a test network, where assets have no value. A Stock Token is a debt security of its issuer, not a share: it follows the price and gives you no shareholder rights. Borrowing against a portfolio can lose you part or all of it, including while the underlying market is closed.",
+    "readRisk": "Read the full risk disclosure",
+    "network": "Runs on Robinhood Chain testnet"
+  }
+}

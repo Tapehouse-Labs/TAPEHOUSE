@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
-type Session = { state: "OPEN" | "CLOSED"; detail: string };
+type Session = { state: "OPEN" | "CLOSED"; hours: number | null };
 
 const OPEN_MIN = 9 * 60 + 30;
 const CLOSE_MIN = 16 * 60;
@@ -31,7 +32,7 @@ function readSession(now: Date): Session {
   const { day, minutes } = newYorkParts(now);
   const weekday = day >= 1 && day <= 5;
   if (weekday && minutes >= OPEN_MIN && minutes < CLOSE_MIN) {
-    return { state: "OPEN", detail: "LIVE" };
+    return { state: "OPEN", hours: null };
   }
   // Walk back to the most recent 16:00 close.
   let daysBack = 0;
@@ -43,11 +44,12 @@ function readSession(now: Date): Session {
     } while (d === 0 || d === 6);
   }
   const hours = Math.max(1, Math.round((daysBack * 1440 + minutes - CLOSE_MIN) / 60));
-  return { state: "CLOSED", detail: `${hours}h` };
+  return { state: "CLOSED", hours };
 }
 
 /** The session seal: the market's state, declared next to every money figure. */
 export function Seal({ tone = "night" }: { tone?: "night" | "paper" }) {
+  const t = useTranslations("seal");
   const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
@@ -58,15 +60,17 @@ export function Seal({ tone = "night" }: { tone?: "night" | "paper" }) {
   }, []);
 
   const night = tone === "night";
+  const state = session ? (session.state === "OPEN" ? t("open") : t("closed")) : "······";
+  const detail = session ? (session.hours === null ? t("live") : t("hours", { n: session.hours })) : "··";
   return (
     <span
       role="status"
       aria-label={
         session
           ? session.state === "OPEN"
-            ? "US equity market is open"
-            : `US equity market is closed, ${session.detail} since the close`
-          : "Reading the market session"
+            ? t("ariaOpen")
+            : t("ariaClosed", { detail })
+          : t("ariaReading")
       }
       className={[
         "inline-flex items-center gap-2 whitespace-nowrap rounded-[2px] px-2.5 py-1",
@@ -76,9 +80,9 @@ export function Seal({ tone = "night" }: { tone?: "night" | "paper" }) {
           : "bg-[#fff] text-[#1a1713] shadow-[inset_0_0_0_1px_#dcd6ca]",
       ].join(" ")}
     >
-      <span aria-hidden="true">[ {session?.state ?? "······"} ]</span>
+      <span aria-hidden="true">[ {state} ]</span>
       <span aria-hidden="true" className="opacity-50">·</span>
-      <span aria-hidden="true" className="opacity-75">{session?.detail ?? "··"}</span>
+      <span aria-hidden="true" className="opacity-75">{detail}</span>
     </span>
   );
 }

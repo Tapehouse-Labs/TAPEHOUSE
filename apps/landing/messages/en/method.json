@@ -1,0 +1,31 @@
+{
+  "title": "A number you can check. Not a promise.",
+  "lede": "If you lend, build a wallet, or run a protocol on this chain, you need a price for Stock Tokens on a Sunday. Here is ours, with everything required to prove us wrong.",
+  "art": "A plug with three pegs hovering just above the block it fits into.",
+  "folds": {
+    "band": {
+      "q": "How the band is built",
+      "a": "Three things widen it: live sources that disagree, a price that is moving fast, and fewer sources answering. A source that has gone quiet for the weekend is set aside, never averaged in. The parameters are public, so anyone can recompute last Sunday’s band and check it against ours."
+    },
+    "failure": {
+      "q": "What happens when a source fails",
+      "a": "The band widens and the seal says DEGRADED, with the count of sources still alive. It never fills the hole with a number it doesn’t have."
+    },
+    "integrate": {
+      "q": "How you integrate it",
+      "a": "Each feed answers the aggregator interface your contracts already read, and adds one call that returns the band, the session and the live-source count."
+    },
+    "changes": {
+      "q": "What changes, and when you hear about it",
+      "a": "Parameters change only with notice, on-chain, ahead of taking effect. You cannot build on something that moves without warning, so it doesn’t."
+    }
+  },
+  "preview": "Interface preview",
+  "code": {
+    "read": "// Read a Stock Token price together with its band.",
+    "interface": "// The interface your contracts already read.",
+    "band": "// One more call: the band, the session, the live sources.",
+    "lend": "// Lend against the conservative edge, not the midpoint."
+  },
+  "footnote": "The interface is a preview and may change before mainnet."
+}

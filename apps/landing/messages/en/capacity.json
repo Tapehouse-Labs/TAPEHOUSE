@@ -1,0 +1,21 @@
+{
+  "title": "They price one stock. We price the portfolio.",
+  "lede": "Most lenders here apply one flat limit to each Stock Token and add the results up. A rule like that cannot tell a spread portfolio from a single bet. Move the weights and see what it misses.",
+  "art": "Four blocks of different sizes standing on one beam, balanced level on a single fulcrum.",
+  "presetsLabel": "Example portfolios",
+  "presets": {
+    "hers": "Her portfolio",
+    "single": "All in one stock",
+    "index": "Mostly the index"
+  },
+  "valueText": "{value} percent of the portfolio",
+  "oneByOne": "Priced one by one",
+  "asPortfolio": "Priced as a portfolio",
+  "flatRule": "flat rule",
+  "verdict": {
+    "more": "Spread across holdings that don’t fall together, the portfolio carries more than its parts.",
+    "less": "Concentrated, it carries less than the flat rule would lend. It should: that is the loan that gets liquidated.",
+    "same": "About where the flat rule lands. Move a weight and watch the two part ways."
+  },
+  "note": "Illustrative model on a {amount} USD example portfolio. It is not an offer of credit. The parameters Tapehouse lends on are published with the backtest. <link>See the assumptions</link>."
+}

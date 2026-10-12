@@ -1,0 +1,49 @@
+{
+  "percent": "{value}%",
+  "date": "{day} {month} {year}",
+  "months": {
+    "jan": "Jan",
+    "feb": "Feb",
+    "mar": "Mar",
+    "apr": "Apr",
+    "may": "May",
+    "jun": "Jun",
+    "jul": "Jul",
+    "aug": "Aug",
+    "sep": "Sep",
+    "oct": "Oct",
+    "nov": "Nov",
+    "dec": "Dec"
+  },
+  "title": "We were wrong <num>{misses}</num> of <num>{total}</num> times. Here they are.",
+  "lede": "We gave our band the worst input we could find, the on-chain exchange price on its own, across <num>{weekends}</num> weekends, and graded it against the first fresh price when the market came back. It missed <num>{misses}</num> times. Anyone can rebuild every row from the chain.",
+  "artAlt": "A tall stack of sealed cards with one pulled out of line.",
+  "live": {
+    "title": "The live record",
+    "body": "The band as the product runs it, fed by an around-the-clock source that answers every ten seconds. It is one weekend old: <num>{inside}</num> of <num>{total}</num> reopenings inside.",
+    "caption": "Live record of weekend reopenings",
+    "note": "This first weekend was graded after the fact, from our own minute-by-minute capture: the band at 23:59 UTC against the price published at 00:00. Later entries are sealed and timestamped before the market reopens, and marked as sealed."
+  },
+  "stress": {
+    "title": "The stress test",
+    "body": "The same band, fed only a thirty-minute average of on-chain trades. At a weekend that price drifts away from the real one, because few people are trading. These are the <num>{misses}</num> times it left the band.",
+    "captionMisses": "Reopenings where the band was wrong",
+    "showAll": "Show all <num>{count}</num> reopenings",
+    "captionAll": "Every reopening in the stress test"
+  },
+  "baseline": "For scale: doing nothing, and carrying Friday’s price through the weekend, was off by <strong>{median}</strong> at the median and as much as <strong>{max}</strong>, over <num>{reopenings}</num> reopenings. <link>How to rebuild these tables</link>.",
+  "table": {
+    "reopening": "Reopening",
+    "token": "Token",
+    "weekendMove": "Weekend move",
+    "offBy": "Off by",
+    "band": "Band",
+    "result": "Result"
+  },
+  "result": {
+    "insideShort": "Inside",
+    "wrongShort": "Wrong",
+    "inside": "Inside the band",
+    "wrong": "We were wrong"
+  }
+}

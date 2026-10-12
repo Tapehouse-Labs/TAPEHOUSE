@@ -1,0 +1,14 @@
+{
+  "aria": "Example Tapehouse account",
+  "liquidationLabel": "Your liquidation price, stated before you sign",
+  "ifFalls": "If NVDA falls to <n>{price}</n> we sell <n>{share}</n> of your SPY, not your whole position.",
+  "borrowed": "<big>{amount}</big> <unit>USDG</unit> borrowed, backed by all four holdings as one position.",
+  "caption": "Holdings backing the loan",
+  "token": "Token",
+  "price": "Price",
+  "band": "Band",
+  "change": "24h",
+  "value": "Value",
+  "total": "Whole portfolio",
+  "note": "Example portfolio · figures are illustrative"
+}

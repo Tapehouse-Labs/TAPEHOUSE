@@ -1,0 +1,49 @@
+{
+  "percent": "{value}%",
+  "date": "{day} {month} {year}",
+  "months": {
+    "jan": "jan",
+    "feb": "fev",
+    "mar": "mar",
+    "apr": "abr",
+    "may": "mai",
+    "jun": "jun",
+    "jul": "jul",
+    "aug": "ago",
+    "sep": "set",
+    "oct": "out",
+    "nov": "nov",
+    "dec": "dez"
+  },
+  "title": "Erramos <num>{misses}</num> de <num>{total}</num> vezes. Aqui estão.",
+  "lede": "Demos à nossa banda a pior entrada que conseguimos encontrar, o preço da exchange on-chain isoladamente, ao longo de <num>{weekends}</num> fins de semana, e a avaliamos contra o primeiro preço atualizado quando o mercado voltou. Ela errou <num>{misses}</num> vezes. Qualquer pessoa pode reconstruir cada linha a partir da blockchain.",
+  "artAlt": "Uma pilha alta de cartões lacrados, com um puxado para fora da fila.",
+  "live": {
+    "title": "O registro ao vivo",
+    "body": "A banda como o produto a executa, alimentada por uma fonte ativa 24 horas por dia que responde a cada dez segundos. Tem apenas um fim de semana: <num>{inside}</num> de <num>{total}</num> reaberturas dentro.",
+    "caption": "Registro ao vivo das reaberturas de fim de semana",
+    "note": "Este primeiro fim de semana foi avaliado depois do fato, a partir da nossa própria captura minuto a minuto: a banda às 23:59 UTC contra o preço publicado às 00:00. As entradas seguintes são lacradas e recebem carimbo de data e hora antes de o mercado reabrir, e são marcadas como lacradas."
+  },
+  "stress": {
+    "title": "O teste de estresse",
+    "body": "A mesma banda, alimentada apenas com uma média de trinta minutos de negociações on-chain. Em um fim de semana esse preço se afasta do real, porque poucas pessoas estão negociando. Estas são as <num>{misses}</num> vezes em que ela saiu da banda.",
+    "captionMisses": "Reaberturas em que a banda errou",
+    "showAll": "Mostrar todas as <num>{count}</num> reaberturas",
+    "captionAll": "Todas as reaberturas do teste de estresse"
+  },
+  "baseline": "Para ter uma escala: não fazer nada e levar o preço de sexta-feira pelo fim de semana errou em <strong>{median}</strong> na mediana e em até <strong>{max}</strong>, ao longo de <num>{reopenings}</num> reaberturas. <link>Como reconstruir estas tabelas</link>.",
+  "table": {
+    "reopening": "Reabertura",
+    "token": "Token",
+    "weekendMove": "Variação no fim de semana",
+    "offBy": "Desvio",
+    "band": "Banda",
+    "result": "Resultado"
+  },
+  "result": {
+    "insideShort": "Dentro",
+    "wrongShort": "Erro",
+    "inside": "Dentro da banda",
+    "wrong": "Erramos"
+  }
+}

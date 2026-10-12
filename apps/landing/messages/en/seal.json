@@ -1,0 +1,9 @@
+{
+  "open": "OPEN",
+  "closed": "CLOSED",
+  "live": "LIVE",
+  "hours": "{n}h",
+  "ariaOpen": "US equity market is open",
+  "ariaClosed": "US equity market is closed, {detail} since the close",
+  "ariaReading": "Reading the market session"
+}

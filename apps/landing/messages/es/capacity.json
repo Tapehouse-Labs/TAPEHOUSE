@@ -1,0 +1,21 @@
+{
+  "title": "Ellos valoran una acción. Nosotros, el portafolio.",
+  "lede": "La mayoría de los prestamistas aquí aplica un límite fijo a cada Stock Token y suma los resultados. Una regla así no distingue un portafolio diversificado de una apuesta a un solo activo. Mueve los pesos y mira lo que se le escapa.",
+  "art": "Cuatro bloques de distintos tamaños sobre una misma viga, en equilibrio sobre un único punto de apoyo.",
+  "presetsLabel": "Portafolios de ejemplo",
+  "presets": {
+    "hers": "Su portafolio",
+    "single": "Todo en una acción",
+    "index": "Casi todo en el índice"
+  },
+  "valueText": "{value} por ciento del portafolio",
+  "oneByOne": "Valorado uno por uno",
+  "asPortfolio": "Valorado como portafolio",
+  "flatRule": "regla fija",
+  "verdict": {
+    "more": "Repartido entre posiciones que no caen a la vez, el portafolio vale más que la suma de sus partes.",
+    "less": "Concentrado, soporta menos de lo que prestaría la regla fija. Y debe ser así: es el préstamo que termina liquidado.",
+    "same": "Más o menos donde cae la regla fija. Mueve un peso y mira cómo se separan."
+  },
+  "note": "Modelo ilustrativo sobre un portafolio de ejemplo de {amount} USD. No es una oferta de crédito. Los parámetros con los que presta Tapehouse se publican junto con el backtest. <link>Ver los supuestos</link>."
+}

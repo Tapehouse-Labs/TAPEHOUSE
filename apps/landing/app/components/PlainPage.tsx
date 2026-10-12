@@ -1,20 +1,22 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import { Footer } from "./Footer";
 import { Mark } from "./Mark";
 
 /** The plain register: for pages that are read, not sold. */
 export function PlainPage({ title, lede, children }: { title: string; lede: string; children: React.ReactNode }) {
+  const t = useTranslations("site.plain");
   return (
     <>
       <div className="field field-bone min-h-[70svh]">
         <header className="shell flex items-center justify-between gap-4 pt-6">
-          <Link href="/" className="flex items-center gap-3 text-accent" aria-label="Tapehouse, home">
+          <Link href="/" className="flex items-center gap-3 text-accent" aria-label={t("home")}>
             <Mark className="h-[22px] w-auto" />
             <span className="font-display text-[15px] font-semibold tracking-[0.18em] text-strong">TAPEHOUSE</span>
           </Link>
           <Link href="/" className="text-[15px] text-muted underline hover:text-strong">
-            Back to the overview
+            {t("back")}
           </Link>
         </header>
         <main className="shell pb-[clamp(5rem,10vw,9rem)] pt-[clamp(4rem,9vw,8rem)]">

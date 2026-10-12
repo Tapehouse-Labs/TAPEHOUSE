@@ -1,0 +1,31 @@
+{
+  "title": "Un número que puedes comprobar. No una promesa.",
+  "lede": "Si prestas, construyes una wallet o gestionas un protocolo en esta cadena, necesitas un precio de los Stock Tokens un domingo. Este es el nuestro, con todo lo necesario para demostrar que nos equivocamos.",
+  "art": "Un enchufe de tres clavijas suspendido justo encima del bloque en el que encaja.",
+  "folds": {
+    "band": {
+      "q": "Cómo se construye la banda",
+      "a": "Tres cosas la ensanchan: fuentes activas que discrepan, un precio que se mueve rápido y menos fuentes respondiendo. Una fuente que se ha quedado en silencio por el fin de semana se aparta, nunca se promedia. Los parámetros son públicos: cualquiera puede recalcular la banda del domingo pasado y compararla con la nuestra."
+    },
+    "failure": {
+      "q": "Qué pasa cuando falla una fuente",
+      "a": "La banda se ensancha y el sello indica DEGRADED, junto con el número de fuentes que siguen activas. Nunca rellena el hueco con un número que no tiene."
+    },
+    "integrate": {
+      "q": "Cómo se integra",
+      "a": "Cada feed responde a la interfaz de agregador que tus contratos ya leen y añade una llamada que devuelve la banda, la sesión y el número de fuentes activas."
+    },
+    "changes": {
+      "q": "Qué cambia y cuándo te enteras",
+      "a": "Los parámetros solo cambian con aviso previo, on-chain, antes de entrar en vigor. No se puede construir sobre algo que se mueve sin avisar, así que no lo hace."
+    }
+  },
+  "preview": "Vista previa de la interfaz",
+  "code": {
+    "read": "// Lee el precio de un Stock Token junto con su banda.",
+    "interface": "// La interfaz que tus contratos ya leen.",
+    "band": "// Una llamada más: la banda, la sesión y las fuentes activas.",
+    "lend": "// Presta contra el extremo conservador, no contra el punto medio."
+  },
+  "footnote": "La interfaz es una vista previa y puede cambiar antes de la mainnet."
+}

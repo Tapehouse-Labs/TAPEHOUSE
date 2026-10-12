@@ -1,35 +1,47 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import type { Metadata, Viewport } from "next";
 import { Archivo, Inter_Tight, Spline_Sans_Mono } from "next/font/google";
-import "./globals.css";
-import { SITE_URL, X_HANDLE } from "./site";
+import { notFound } from "next/navigation";
+import { hasLocale, NextIntlClientProvider } from "next-intl";
+import { getTranslations, setRequestLocale } from "next-intl/server";
+import { alternates, OPEN_GRAPH_LOCALES, routing } from "@/i18n/routing";
+import "../globals.css";
+import { SITE_URL, X_HANDLE } from "../site";
 
 const archivo = Archivo({ variable: "--font-archivo", subsets: ["latin"], display: "swap" });
 const interTight = Inter_Tight({ variable: "--font-inter-tight", subsets: ["latin"], display: "swap" });
 const splineMono = Spline_Sans_Mono({ variable: "--font-spline-mono", subsets: ["latin"], display: "swap" });
 
-const DESCRIPTION =
-  "Borrow against every Stock Token you hold. Your whole portfolio backs one loan, the liquidation price is stated before you sign, and the price keeps moving when the market doesn’t.";
+export function generateStaticParams() {
+  return routing.locales.map((locale) => ({ locale }));
+}
 
-export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
-  title: { default: "Tapehouse — Portfolio margin for Stock Tokens", template: "%s — Tapehouse" },
-  description: DESCRIPTION,
-  alternates: { canonical: "/" },
-  openGraph: {
-    type: "website",
-    siteName: "Tapehouse",
-    url: "/",
-    title: "Tapehouse — Portfolio margin for Stock Tokens",
-    description: DESCRIPTION,
-  },
-  twitter: {
-    card: "summary_large_image",
-    site: `@${X_HANDLE}`,
-    title: "Tapehouse — Portfolio margin for Stock Tokens",
-    description: DESCRIPTION,
-  },
-};
+export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Promise<Metadata> {
+  const { locale } = await params;
+  if (!hasLocale(routing.locales, locale)) return {};
+  const t = await getTranslations({ locale, namespace: "meta" });
+  const links = alternates(locale, "/");
+  return {
+    metadataBase: new URL(SITE_URL),
+    title: { default: t("title"), template: "%s — Tapehouse" },
+    description: t("description"),
+    alternates: links,
+    openGraph: {
+      type: "website",
+      siteName: "Tapehouse",
+      url: links.canonical,
+      locale: OPEN_GRAPH_LOCALES[locale],
+      title: t("title"),
+      description: t("description"),
+    },
+    twitter: {
+      card: "summary_large_image",
+      site: `@${X_HANDLE}`,
+      title: t("title"),
+      description: t("description"),
+    },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: [
@@ -52,16 +64,19 @@ FORM: The opening shot of a film, a scene and a push-in. Candidate 1 of 7 on the
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 -->`;
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children, params }: LayoutProps<"/[locale]">) {
+  const { locale } = await params;
+  if (!hasLocale(routing.locales, locale)) notFound();
+  setRequestLocale(locale);
   return (
     <html
-      lang="en"
+      lang={locale}
       data-theme="light"
       className={`${archivo.variable} ${interTight.variable} ${splineMono.variable} antialiased`}
     >
       <body>
         <div hidden dangerouslySetInnerHTML={{ __html: CONTRACT }} />
-        {children}
+        <NextIntlClientProvider>{children}</NextIntlClientProvider>
       </body>
     </html>
   );

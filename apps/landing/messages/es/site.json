@@ -1,0 +1,27 @@
+{
+  "language": {
+    "aria": "Idioma"
+  },
+  "plain": {
+    "home": "Tapehouse, inicio",
+    "back": "Volver al resumen"
+  },
+  "footer": {
+    "home": "Tapehouse, inicio",
+    "aria": "Pie de página",
+    "tagline": "Margen de portafolio para Stock Tokens.",
+    "product": "Producto",
+    "builders": "Desarrolladores",
+    "openApp": "Abrir la app",
+    "capacity": "Cómo funciona la capacidad",
+    "weekend": "El fin de semana, medido",
+    "record": "El registro",
+    "feed": "Integrar el feed",
+    "methodology": "Metodología",
+    "vulnerability": "Reportar una vulnerabilidad",
+    "risk": "Aviso de riesgos",
+    "legal": "Tapehouse es software, no un bróker ni un banco, y no tiene licencia para prestar servicios financieros. Nada aquí es asesoría de inversión ni una oferta de crédito, y hoy funciona en una red de pruebas, donde los activos no tienen valor. Un Stock Token es un valor de deuda de su emisor, no una acción: sigue el precio y no te da derechos de accionista. Pedir prestado con un portafolio como garantía puede hacerte perder parte o todo, incluso mientras el mercado subyacente está cerrado.",
+    "readRisk": "Lee el aviso de riesgos completo",
+    "network": "Funciona en la testnet de Robinhood Chain"
+  }
+}

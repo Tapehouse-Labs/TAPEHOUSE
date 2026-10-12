@@ -1,0 +1,18 @@
+{
+  "title": "The market closes on Friday. Your loan doesn’t.",
+  "lede": "We measured it before we built it. Every weekend the reference price feed on this chain goes silent for <num>55.7 to 80.8 hours</num>, while an around-the-clock source kept answering <num>288 times out of 288</num>. People don’t stop either: <num>29.9%</num> of SPY transfers happen on a Saturday or a Sunday.",
+  "hoursSince": "hours since the reference feed last spoke",
+  "chartLabel": "Timeline of one weekend. The reference equity feed updates until Friday 16:18 UTC and not again until Monday 00:00 UTC, 55.7 hours later. An around-the-clock source reports every ten minutes throughout, 288 points out of 288.",
+  "days": {
+    "fri": "Fri",
+    "sat": "Sat",
+    "sun": "Sun",
+    "mon": "Mon"
+  },
+  "referenceFeed": "Reference equity feed",
+  "aroundClock": "Around-the-clock source",
+  "lastUpdate": "FRI 16:18 UTC",
+  "nextUpdate": "MON 00:00 UTC",
+  "points": "288 OF 288 TEN-MINUTE POINTS",
+  "caption": "One measured weekend, 28–31 August 2026, drawn to scale. Over the Labor Day weekend the same silence lasted 80.8 hours. <link>How we measured it</link>."
+}

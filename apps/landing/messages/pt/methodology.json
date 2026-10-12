@@ -1,0 +1,54 @@
+{
+  "meta": {
+    "title": "Metodologia",
+    "description": "Como cada número do site da Tapehouse foi medido e o que o modelo ilustrativo pressupõe."
+  },
+  "title": "Como medimos",
+  "lede": "Cada número deste site vem de um lugar que você pode verificar. Aqui está onde e como.",
+  "entries": {
+    "lending": {
+      "heading": "US$ 109,2 bilhões contra US$ 31,2 bilhões",
+      "p1": "Relatório anual do Morgan Stanley no Formulário 10-K do ano fiscal de 2025, empréstimos de Wealth Management: “Securities-based lending and Other” de US$ 109.201 milhões e empréstimos com margem de US$ 31.214 milhões. A primeira categoria inclui empréstimos que não são garantidos por valores mobiliários, então leia-a como um limite superior. Que a maior parte seja tomada para não vender é a nossa leitura, não a do relatório."
+    },
+    "silence": {
+      "heading": "De 55,7 a 80,8 horas de silêncio",
+      "p1": "Os intervalos entre atualizações consecutivas do feed de preços de referência de ações na Robinhood Chain, lidos on-chain ao longo de fins de semana de agosto e setembro de 2026. O mais longo, de 80,8 horas, abrange o fim de semana do Labor Day. O fim de semana desenhado na visão geral é o de 28 a 31 de agosto de 2026: última atualização na sexta-feira às 16:18 UTC, próxima atualização na segunda-feira às 00:00 UTC."
+    },
+    "coverage": {
+      "heading": "288 de 288",
+      "p1": "Uma fonte de preços ativa 24 horas por dia, amostrada em resolução de dez minutos ao longo de um fim de semana completo de 48 horas. Todos os 288 pontos esperados estavam presentes, e o maior intervalo entre dois deles foi de 600 segundos."
+    },
+    "weekendShare": {
+      "heading": "29,9% das transferências de SPY",
+      "p1": "A parcela das transferências do Stock Token SPY na Robinhood Chain que ocorreram em um sábado ou domingo, ao longo de 69 dias consecutivos. Uma semana perfeitamente uniforme daria 28,6%."
+    },
+    "flatRule": {
+      "heading": "A regra fixa de 62,5%",
+      "p1": "O limite por token que os mercados de empréstimo desta rede aplicavam a Stock Tokens de grande capitalização, como SPY, NVDA e TSLA, conforme lido em suas interfaces públicas em setembro de 2026."
+    },
+    "model": {
+      "heading": "O modelo ilustrativo de portfólio",
+      "p1": "O modelo interativo toma o pior um por cento dos resultados ao longo de um mercado fechado de três dias, a partir de volatilidades e correlações assumidas, dobra esse valor como estresse e reserva mais dez por cento. As premissas existem para mostrar o mecanismo. Não são os parâmetros com que o Tapehouse empresta, que são publicados com o backtest."
+    },
+    "band": {
+      "heading": "A banda de preço",
+      "p1": "A banda responde a uma pergunta: quanto vale este token agora e com que segurança sabemos disso. Seu centro é o preço ativo 24 horas por dia. Três coisas a alargam: fontes ao vivo que divergem, um preço que se move rápido e menos fontes respondendo. Um feed de referência que ficou em silêncio no fim de semana é deixado de lado: nunca entra na média e nunca é usado, por si só, para alargar a banda.",
+      "p2": "Quanto o preço pode se mover antes que alguém consiga agir é outra pergunta. Ela pertence ao motor de margem, não à banda.",
+      "p3": "Com uma fonte ativa, como em um fim de semana, a banda é de ±0,55%. Essa calibração é provisória: baseia-se em um pequeno número de reaberturas em um mês calmo."
+    },
+    "liveRecord": {
+      "heading": "O registro ao vivo",
+      "p1": "Para cada reabertura, tomamos a banda da última amostra anterior às 00:00 UTC de segunda-feira, quando o feed de ações de referência na Robinhood Chain é retomado, e comparamos seu centro com o primeiro preço que esse feed publica. Nada posterior ao carimbo de data e hora da própria banda é usado.",
+      "p2": "O primeiro fim de semana, 21 de setembro de 2026, foi avaliado depois do fato a partir da nossa própria captura minuto a minuto e está marcado como tal. As entradas seguintes são lacradas e recebem carimbo de data e hora antes da reabertura."
+    },
+    "stress": {
+      "heading": "O teste de estresse",
+      "p1": "A mesma banda alimentada por uma única fonte deliberadamente fraca: o preço médio ponderado pelo tempo de trinta minutos do pool da Uniswap v3 de cada token contra USDG, construído a partir de eventos de swap lidos da blockchain e terminando na reabertura. Ele é avaliado da mesma forma, contra a primeira marcação de referência após um silêncio de trinta horas ou mais. Cobre os nove fins de semana em que esses pools existiam, de 27 de julho a 21 de setembro de 2026: trinta reaberturas entre NVDA, TSLA, AAPL e SPY.",
+      "p2": "Em um fim de semana, o preço on-chain carrega um prêmio ou um desconto de até cerca de 1,2%, porque a liquidez é baixa. Para quem empresta, essa diferença não é ruído: é o preço que uma liquidação realmente obteria. O Tapehouse a considera no motor de margem."
+    },
+    "friday": {
+      "heading": "O preço de sexta-feira, levado pelo fim de semana",
+      "p1": "A variação entre a última marcação de referência antes de cada fim de semana e a primeira depois dela, ao longo de todas as quarenta e oito reaberturas de NVDA, TSLA, AAPL e SPY desde 1º de julho de 2026, lida da blockchain. A mediana é 0,34% e a maior, 1,33%."
+    }
+  }
+}

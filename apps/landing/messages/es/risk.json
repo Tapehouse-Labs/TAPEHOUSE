@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "title": "Aviso de riesgos",
+    "description": "Qué puede salir mal cuando pides prestado contra Stock Tokens con Tapehouse."
+  },
+  "title": "Lee esto antes de pedir prestado",
+  "lede": "Con claridad y por completo: qué es Tapehouse y qué puede salir mal.",
+  "entries": {
+    "what": {
+      "heading": "Qué es Tapehouse",
+      "p1": "Tapehouse es software: un conjunto de contratos inteligentes y esta interfaz para usarlos. No es un bróker ni un banco, no tiene licencia para prestar servicios financieros y nadie en Tapehouse toma la custodia de tus activos. Nada en este sitio es asesoría de inversión, legal o fiscal, y nada aquí es una oferta de crédito. Hoy funciona en una red de prueba, donde los activos no tienen valor."
+    },
+    "stock": {
+      "heading": "Qué es un Stock Token y qué no es",
+      "p1": "Un Stock Token no es una acción. Es un valor de deuda de la empresa que lo emite, creado para seguir el precio de una acción o de un fondo. Tenerlo no te da voto ni la condición de accionista, y solo puede canjearse por efectivo, a través de los proveedores que autorice el emisor.",
+      "p2": "Eso tiene consecuencias. Dependes de que el emisor siga siendo solvente y honre el token, algo que no ocurriría si fueras dueño de la acción. El token puede cotizar lejos de la acción que sigue, sobre todo cuando el mercado subyacente está cerrado. Los splits y otras acciones corporativas te llegan mediante el ajuste propio del token, no a través de un bróker. Y los emisores no ofrecen Stock Tokens a todo el mundo: las personas de Estados Unidos, entre otras, están excluidas."
+    },
+    "borrow": {
+      "heading": "Lo que puede costarte pedir prestado",
+      "p1": "Pedir prestado contra un portafolio puede hacerte perder una parte o todo. Si el valor de tus tenencias cae lo suficiente, parte de ellas se venderá para pagar el préstamo, y eso puede ocurrir mientras el mercado subyacente está cerrado."
+    },
+    "fail": {
+      "heading": "Qué puede fallar",
+      "p1": "Una banda publicada es una estimación y a veces se equivoca; por eso publicamos el registro. Las fuentes de precios pueden fallar, los contratos inteligentes pueden contener errores y una red puede detenerse."
+    },
+    "where": {
+      "heading": "Dónde está disponible",
+      "p1": "Es posible que Tapehouse no esté disponible donde vives. Compruébalo antes de usarlo."
+    }
+  }
+}

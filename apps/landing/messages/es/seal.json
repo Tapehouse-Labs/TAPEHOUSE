@@ -1,0 +1,9 @@
+{
+  "open": "ABIERTO",
+  "closed": "CERRADO",
+  "live": "EN VIVO",
+  "hours": "{n}h",
+  "ariaOpen": "El mercado bursátil de EE. UU. está abierto",
+  "ariaClosed": "El mercado bursátil de EE. UU. está cerrado, {detail} desde el cierre",
+  "ariaReading": "Leyendo la sesión del mercado"
+}

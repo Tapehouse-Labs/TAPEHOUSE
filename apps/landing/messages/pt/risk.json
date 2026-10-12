@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "title": "Aviso de riscos",
+    "description": "O que pode dar errado quando você pede emprestado contra Stock Tokens com o Tapehouse."
+  },
+  "title": "Leia isto antes de pedir emprestado",
+  "lede": "De forma clara e completa: o que é o Tapehouse e o que pode dar errado.",
+  "entries": {
+    "what": {
+      "heading": "O que é o Tapehouse",
+      "p1": "O Tapehouse é um software: um conjunto de contratos inteligentes e esta interface para usá-los. Não é uma corretora nem um banco, não possui licença para prestar serviços financeiros e ninguém no Tapehouse assume a custódia dos seus ativos. Nada neste site é aconselhamento de investimento, jurídico ou tributário, e nada aqui é uma oferta de crédito. Hoje ele opera em uma rede de teste, onde os ativos não têm valor."
+    },
+    "stock": {
+      "heading": "O que um Stock Token é e o que não é",
+      "p1": "Um Stock Token não é uma ação. É um título de dívida da empresa que o emite, criado para acompanhar o preço de uma ação ou de um fundo. Possuí-lo não dá a você direito a voto nem a condição de acionista, e ele só pode ser resgatado em dinheiro, por meio dos provedores que o emissor autorizar.",
+      "p2": "Isso tem consequências. Você depende de o emissor continuar solvente e honrar o token, o que não aconteceria se você fosse dono da ação. O token pode ser negociado longe da ação que acompanha, principalmente quando o mercado subjacente está fechado. Desdobramentos e outros eventos corporativos chegam a você pelo ajuste do próprio token, não por uma corretora. E os emissores não oferecem Stock Tokens a todos: pessoas dos Estados Unidos, entre outras, estão excluídas."
+    },
+    "borrow": {
+      "heading": "O que pedir emprestado pode custar a você",
+      "p1": "Pedir emprestado contra um portfólio pode fazer você perder parte dele ou tudo. Se o valor das suas posições cair o suficiente, algumas delas serão vendidas para pagar o empréstimo, e isso pode acontecer enquanto o mercado subjacente está fechado."
+    },
+    "fail": {
+      "heading": "O que pode falhar",
+      "p1": "Uma banda publicada é uma estimativa e às vezes está errada; é por isso que publicamos o registro. As fontes de preço podem falhar, os contratos inteligentes podem conter erros e uma rede pode parar."
+    },
+    "where": {
+      "heading": "Onde está disponível",
+      "p1": "O Tapehouse pode não estar disponível onde você mora. Verifique antes de usá-lo."
+    }
+  }
+}

@@ -1,20 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 "use client";
 
-import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
+import { Link } from "@/i18n/navigation";
 import { clamp01, onScrollFrame, prefersStill } from "./scroll";
 
-const LINES = [
-  "A tax bill for touching your own money.",
-  "Four holdings, treated like four strangers.",
-  "A loan that still thinks it’s Friday afternoon.",
-  "A Sunday when your own portfolio won’t pick up.",
-  "Learning your liquidation price the day it arrives.",
-];
+const LINES = ["tax", "strangers", "friday", "sunday", "liquidation"] as const;
 
 /** Chapter two: the frustration, before a single word of mechanism. */
 export function Frustrations() {
+  const t = useTranslations("frustrations");
   const list = useRef<HTMLOListElement>(null);
 
   useEffect(() => {
@@ -37,7 +33,7 @@ export function Frustrations() {
     <section className="field field-bone" aria-labelledby="ch-own">
       <div className="shell pb-[clamp(6rem,13vw,11rem)] pt-[clamp(8rem,17vw,15rem)]">
         <h2 id="ch-own" className="chapter-title max-w-[16ch]">
-          You own it. You just can’t use it.
+          {t("title")}
         </h2>
 
         <ol
@@ -50,17 +46,20 @@ export function Frustrations() {
               className="text-balance"
               style={{ opacity: "calc(0.16 + 0.84 * var(--lit, 0))" }}
             >
-              {line}
+              {t(`lines.${line}`)}
             </li>
           ))}
         </ol>
 
         <p className="lede mt-[clamp(4rem,9vw,8rem)] max-w-[52ch] text-body lg:ml-[32%]">
-          Borrowing so you don’t have to sell is not a niche. At Morgan Stanley’s wealth business, clients
-          owe <span className="num font-semibold text-strong">$109.2 billion</span> in securities-based and
-          other lending, against <span className="num font-semibold text-strong">$31.2 billion</span> in
-          margin loans. On-chain, every Stock Token is still priced alone.{" "}
-          <Link href="/methodology" className="text-strong underline">Where that comes from</Link>.
+          {t.rich("body", {
+            n: (chunks) => <span className="num font-semibold text-strong">{chunks}</span>,
+            link: (chunks) => (
+              <Link href="/methodology" className="text-strong underline">
+                {chunks}
+              </Link>
+            ),
+          })}
         </p>
       </div>
     </section>

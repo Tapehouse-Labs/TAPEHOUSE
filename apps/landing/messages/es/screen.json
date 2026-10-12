@@ -1,0 +1,14 @@
+{
+  "aria": "Cuenta de ejemplo de Tapehouse",
+  "liquidationLabel": "Tu precio de liquidación, indicado antes de firmar",
+  "ifFalls": "Si NVDA cae a <n>{price}</n>, vendemos el <n>{share}</n> de tu SPY, no toda tu posición.",
+  "borrowed": "<big>{amount}</big> <unit>USDG</unit> prestados, respaldados por las cuatro posiciones como una sola.",
+  "caption": "Posiciones que respaldan el préstamo",
+  "token": "Token",
+  "price": "Precio",
+  "band": "Banda",
+  "change": "24h",
+  "value": "Valor",
+  "total": "Portafolio completo",
+  "note": "Portafolio de ejemplo · las cifras son ilustrativas"
+}

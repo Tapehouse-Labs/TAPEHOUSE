@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+import { useTranslations } from "next-intl";
 import { APP_URL } from "../site";
 
 
 /** The bookend: the same hall as the opening shot, on Monday morning. */
 export function Closing() {
+  const t = useTranslations("closing");
   return (
     <section className="field field-navy overflow-hidden" aria-labelledby="ch-close">
       {/* Placeholder plate. The final asset is the filmed daylight shot of the opening hall. */}
@@ -22,15 +24,14 @@ export function Closing() {
       />
       <div className="shell relative flex min-h-[88svh] flex-col items-center justify-center pb-28 pt-44 text-center">
         <h2 id="ch-close" className="chapter-title max-w-[16ch]">
-          The bell rings on Monday. You didn’t wait for it.
+          {t("title")}
         </h2>
         <p className="lede mt-7 max-w-[46ch]">
-          Open an account on testnet, deposit the whole portfolio, and read your liquidation price
-          before you sign anything.
+          {t("lede")}
         </p>
         <a href={APP_URL} className="btn-primary mt-10 text-[15px]">
-          Open the app
-          <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] opacity-60">Testnet</span>
+          {t("open")}
+          <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] opacity-60">{t("testnet")}</span>
         </a>
       </div>
     </section>

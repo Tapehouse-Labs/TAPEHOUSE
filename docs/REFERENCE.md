@@ -629,6 +629,8 @@ Reads: `entryPoint`, `signer`, `owner`, `maxCostPerOperation`, `paused`, `operat
 
 The app is in English, Spanish and Portuguese. A visitor's language is the `locale` cookie, set by the language switch in the header, or else the best match of the browser's `Accept-Language`; the URL does not change. Catalogs are `apps/app/messages/<language>/<namespace>.json`, read with next-intl; `messages/en` defines every key, and `messages/catalogs.test.ts` fails on a missing or extra key, an invalid ICU message or a translation that changes a message's placeholders. Functions that decide what a visitor is told return message descriptors (`{ key, values }`), so their tests state the decision in any language; figures are formatted by `formatters(locale)` on exact bigint arithmetic, with the language's own separators, and a typed amount is read with the language's decimal separator alone. `apps/app/messages/README.md` holds the conventions and the glossary.
 
+The website is in the same three languages, each at its own address: English at `/`, Spanish at `/es` and Portuguese at `/pt`, with `hreflang` alternates in every page, in the `Link` header and in the sitemap. A first visit is sent to the language the browser prefers; the language switch in the footer and the hero links to the same page in another language. Its catalogs are `apps/landing/messages/<language>/<namespace>.json`, held to the same parity test.
+
 ## SDKs
 
 Three SDKs read the band, its feeds, the margin accounts, the short positions, the baskets and the gap cover, and build their transactions:

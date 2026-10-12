@@ -1,0 +1,18 @@
+{
+  "title": "O mercado fecha na sexta. Seu empréstimo não.",
+  "lede": "Medimos antes de construir. Todo fim de semana, o feed de preços de referência desta rede fica em silêncio por <num>55,7 a 80,8 horas</num>, enquanto uma fonte que opera 24 horas por dia continuou respondendo <num>288 vezes de 288</num>. As pessoas também não param: <num>29,9%</num> das transferências de SPY acontecem num sábado ou num domingo.",
+  "hoursSince": "horas desde a última atualização do feed de referência",
+  "chartLabel": "Linha do tempo de um fim de semana. O feed de referência de ações é atualizado até sexta-feira às 16:18 UTC e só volta a ser na segunda-feira às 00:00 UTC, 55,7 horas depois. Uma fonte que opera 24 horas por dia reporta a cada dez minutos, sem interrupção: 288 pontos de 288.",
+  "days": {
+    "fri": "Sex",
+    "sat": "Sáb",
+    "sun": "Dom",
+    "mon": "Seg"
+  },
+  "referenceFeed": "Feed de referência de ações",
+  "aroundClock": "Fonte 24 horas",
+  "lastUpdate": "SEX 16:18 UTC",
+  "nextUpdate": "SEG 00:00 UTC",
+  "points": "288 DE 288 PONTOS A CADA DEZ MINUTOS",
+  "caption": "Um fim de semana medido, de 28 a 31 de agosto de 2026, desenhado em escala. No fim de semana do Labor Day, esse mesmo silêncio durou 80,8 horas. <link>Como medimos</link>."
+}

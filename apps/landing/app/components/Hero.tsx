@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 "use client";
 
-import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
+import { Link } from "@/i18n/navigation";
 import { APP_URL } from "../site";
+import { LanguageSwitch } from "./LanguageSwitch";
 import { Mark } from "./Mark";
 import { Seal } from "./Seal";
 import { PortfolioScreen } from "./PortfolioScreen";
@@ -18,6 +20,7 @@ const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t 
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
 export function Hero() {
+  const t = useTranslations("hero");
   const section = useRef<HTMLElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const screen = useRef<HTMLDivElement>(null);
@@ -128,16 +131,17 @@ export function Hero() {
         <div className="hero-scrim" />
 
         <header className="hero-copy relative z-10 mx-auto flex w-full max-w-[1320px] items-center justify-between gap-4 px-5 pt-5 sm:px-8 sm:pt-6">
-          <Link href="/" className="flex items-center gap-3" aria-label="Tapehouse, home">
+          <Link href="/" className="flex items-center gap-3" aria-label={t("home")}>
             <Mark className="h-[22px] w-auto" />
             <span className="font-display text-[15px] font-semibold tracking-[0.18em]">TAPEHOUSE</span>
           </Link>
           <div className="flex items-center gap-3 sm:gap-4">
+            <LanguageSwitch />
             <span className="hidden sm:inline-flex">
               <Seal />
             </span>
             <a href={APP_URL} className="btn-ghost !py-[0.55em] text-[14px]">
-              Open the app
+              {t("openApp")}
             </a>
           </div>
         </header>
@@ -148,27 +152,26 @@ export function Hero() {
             className="arrive text-balance font-display text-[clamp(2.4rem,4.9vw,4.25rem)] font-normal leading-[1.04] tracking-[-0.032em]"
             style={{ "--i": 0 } as React.CSSProperties}
           >
-            <span className="block">Your whole portfolio.</span>{" "}
-            <span className="block">One limit. Published in advance.</span>
+            <span className="block">{t("title1")}</span>{" "}
+            <span className="block">{t("title2")}</span>
           </h1>
           <p
             className="arrive mt-6 max-w-[58ch] text-pretty text-[clamp(1.02rem,1.35vw,1.22rem)] leading-[1.5] text-[rgb(245_242_236/0.84)]"
             style={{ "--i": 1 } as React.CSSProperties}
           >
-            Borrow against every Stock Token you hold, with the liquidation price stated
-            before you sign and a price that keeps moving when the market doesn’t.
+            {t("lede")}
           </p>
           <div
             className="arrive mt-9 flex flex-wrap items-center justify-center gap-3 text-[15px]"
             style={{ "--i": 2 } as React.CSSProperties}
           >
             <a href={APP_URL} className="btn-primary">
-              Open the app
-              <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] opacity-60">Testnet</span>
+              {t("openApp")}
+              <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] opacity-60">{t("testnet")}</span>
             </a>
             <a href="#measured" className="btn-ghost">
-              <span className="sm:hidden">What we measured</span>
-              <span className="hidden sm:inline">See what we measured</span>
+              <span className="sm:hidden">{t("measuredShort")}</span>
+              <span className="hidden sm:inline">{t("measuredLong")}</span>
             </a>
           </div>
         </div>
@@ -177,8 +180,7 @@ export function Hero() {
           className="hero-copy arrive absolute inset-x-0 bottom-5 z-10 mx-auto max-w-[760px] px-5 text-center text-[12.5px] leading-snug text-[rgb(245_242_236/0.72)] sm:bottom-7"
           style={{ "--i": 4 } as React.CSSProperties}
         >
-          Tapehouse is not a broker. A Stock Token is a debt security of its issuer, not a share: it follows
-          the price and gives you no shareholder rights.
+          {t("disclaimer")}
         </p>
 
         <div ref={screen} className="hero-screen z-20">
