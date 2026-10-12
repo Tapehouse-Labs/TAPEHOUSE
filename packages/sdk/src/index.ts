@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 export * as accounts from './accounts.js'
+export * as auction from './auction.js'
 export * as backstop from './backstop.js'
 export * as band from './band.js'
 export type { At, PackageSource } from './band.js'
