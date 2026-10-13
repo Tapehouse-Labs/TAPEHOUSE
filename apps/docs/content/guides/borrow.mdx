@@ -1,0 +1,157 @@
+---
+title: "Borrow"
+description: "Read your position's liquidation price with the loan counted in, borrow USDG against it, and repay."
+---
+
+Borrowing draws USDG from the supply vault against the Stock Tokens in a position. Before you sign, the liquidation price tells you where the position stops meeting its requirement with the new loan on it. In this guide you check that price, borrow, watch the position and repay.
+
+## Before you start
+
+- A margin account with a deposit, as in [open an account](/guides/open-an-account).
+- The `client`, `deployments`, `wallet` and `account` of that guide. In code, `account` is the address that owns the position: your smart account, or your wallet when you act from it.
+
+## In the app
+
+The app shows the liquidation price of the asset that governs the chosen position under the bar, with the loan you are typing counted in, and the regime in words. In an unknown session it is the price at which borrowing stops. One line composes a deposit, loan, repayment or withdrawal, and shows before the wallet is asked:
+
+- what the position can borrow: its equity above its requirement and, before a closure, above a fifth of its gross exposure, within the debt caps
+- the premium the loan would owe over a 48-hour closure
+- the caps, the guardian's pause, halted assets, the asset's deposit cap and the issuer's pause and blocks
+
+Every transaction is simulated first, and a revert is explained in words. Loans and withdrawals go to your wallet.
+
+## From code
+
+<Steps>
+<Step title="Read the liquidation price with the loan counted in">
+
+`borrowing` is USDG in raw units, which has 6 decimals. 100 USDG is `100_000_000n`.
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+const borrowing = 100_000_000n
+
+const price = await accounts.liquidationPrice(client, deployments, account, CROSS, 'TSLA', borrowing)
+```
+</Tab>
+<Tab title="Go">
+```go
+borrowing := big.NewInt(100_000_000)
+
+price, err := client.Accounts().LiquidationPrice(nil, account, sdk.Cross, "TSLA", borrowing)
+```
+</Tab>
+<Tab title="Rust">
+```rust
+let borrowing = U256::from(100_000_000u64);
+
+let price = tapehouse.liquidation_price(account, CROSS, "TSLA", borrowing).await?;
+```
+</Tab>
+</Tabs>
+
+The price is USD with 8 decimals: the price of TSLA at or above which the position meets its requirement once it owes `borrowing` more. It searches through the margin engine with every other price and pool fixed, to within a 2^14th of the current price. Compare it with the band you read in [read a price](/guides/read-a-price).
+</Step>
+<Step title="Check what the position can take">
+
+```ts
+const { equity, requirement, missing, regime } = await accounts.health(client, deployments, account, CROSS)
+const { debtCap, weekendDebtCap, weekendLeverage, borrowingPaused } = await accounts.limits(client, deployments)
+```
+
+`equity` and `requirement` are USD with 18 decimals. A loan needs equity, collateral less debt, that meets the engine's requirement over the position's Stock Tokens at their band's low edge. From the regular open on the last trading day before a weekend or holiday until the reopening, a loan must also leave gross exposure to Stock Tokens at most `weekendLeverage` basis points of equity, which is 50,000, or five times.
+</Step>
+<Step title="Simulate, then borrow">
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+const call = accounts.borrow(deployments, { position: CROSS, assets: borrowing, account, receiver: owner.address })
+
+await client.simulateContract({ ...call, account })
+const hash = await wallet.writeContract(call)
+```
+
+From a smart account, send it as a user operation: `bundler.sendUserOperation({ calls: [sponsorship.asCall(call)] })`.
+</Tab>
+<Tab title="Go">
+```go
+tx, err := client.Accounts().Borrow(sdk.Cross, borrowing, account, receiver)
+if err != nil {
+	log.Fatal(err)
+}
+if err := client.Simulate(&bind.CallOpts{From: account}, tx); err != nil {
+	log.Fatal(err)
+}
+sent, err := client.Send(opts, tx)
+```
+</Tab>
+<Tab title="Rust">
+```rust
+let borrow = tapehouse.accounts()?.borrow(CROSS, borrowing, account, receiver);
+borrow.call().await?;
+let receipt = borrow.send().await?.get_receipt().await?;
+```
+</Tab>
+</Tabs>
+
+`receiver` is the address that gets the USDG. An address with a mandate can borrow only to the account itself.
+</Step>
+<Step title="Watch the position">
+
+```ts
+const { debt, premium, assets } = await accounts.repayment(client, deployments, account, CROSS)
+const leverage = await accounts.leverage(client, deployments, account, CROSS)
+```
+
+`repayment` reads what a full repayment takes, the debt and the weekend premium at one block. `leverage` is gross exposure over equity in basis points.
+</Step>
+<Step title="Repay">
+
+Anyone may repay a position. The caller's USDG pays the debt first, then the premium with what is left. Approve USDG to the margin accounts first.
+
+```ts
+import { usdgAbi } from '@tapehouse/sdk'
+
+await wallet.writeContract({
+  address: deployments.tokens.USDG,
+  abi: usdgAbi,
+  functionName: 'approve',
+  args: [deployments.tapehouse.MarginAccounts, assets],
+})
+await wallet.writeContract(accounts.repay(deployments, { position: CROSS, assets, account }))
+```
+
+In Go, `client.Accounts().Repayment` and `Repay`, with `client.Approve` for the allowance. In Rust, `tapehouse.repayment(account, position)` and `tapehouse.accounts()?.repay(...)`.
+</Step>
+</Steps>
+
+## What to expect
+
+- Interest accrues in the supply vault, at a rate that rises with utilisation. While the 24/5 session is closed, over weekends and holidays, each position's debt also carries a premium on top of the vault's interest, which the position's equity counts against.
+- Borrowing and withdrawing from a position in debt close for a position holding an asset whose band is halted or whose Stock Token has a multiplier change pending. After a halt lifts, they stay shut for thirty minutes (`AssetRecovering`), so a band that comes back is not trusted at once. Deposits and repayments stay open throughout.
+- A position that falls short is sold by the [liquidator](/concepts/liquidation). Over a weekend closure, positions short at their bands' low edges may go to [the reopening auction](/guides/auction) instead.
+
+## Errors you may hit
+
+| Error | Cause |
+|---|---|
+| `InsufficientMargin(equity, requirement)` | The loan would leave equity below the requirement. |
+| `WeekendLeverageExceeded(gross, equity)` | The loan would pass the weekend leverage cap. |
+| `DebtCapExceeded(debt, cap)`, `WeekendDebtCapExceeded(debt, cap)` | The positions' total debt would pass a cap. |
+| `AssetHalted(symbol)`, `CorporateActionPending(symbol)` | The band has no price for a held asset, or its multiplier is changing. |
+| `AssetRecovering(symbol, until)` | The asset's band came back from a halt less than thirty minutes ago. `until` is in seconds. |
+| `SessionUnknown()`, `SequencerNotSettled()` | The band cannot tell the session, or the L2 sequencer is not settled. |
+| `BorrowingIsPaused()` | The guardian paused new loans and withdrawals from positions in debt. |
+| `BorrowingAgainstUsdg()` | The position holds USDG. Repay with it first. |
+| `AssetFrozen(symbol)`, `Blocked(account)` | The issuer paused a held Stock Token or blocklisted the account. |
+| `MandateDebtLimit`, `MandateLeverageLimit`, `MandateReceiver`, `MandateExpired` | An agent's mandate does not allow the loan. |
+| `Unauthorized(caller, account)` | The caller is not the account or an address it authorized. |
+| `InsufficientLiquidity(requested, available)` | The supply vault holds less USDG than the loan. |
+
+## Next
+
+- [Earn](/guides/earn) by supplying the USDG others borrow.
+- [Liquidation](/concepts/liquidation) and [weekend gap cover](/concepts/weekend-gap-cover).
+- [The margin accounts](/contracts/margin-accounts).

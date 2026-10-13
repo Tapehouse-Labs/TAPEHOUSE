@@ -1,0 +1,175 @@
+---
+title: "Quickstart"
+description: "Read a Stock Token's band and the price at which a position would be liquidated, against Robinhood Chain's testnet."
+---
+
+This reads two things from the testnet: the band of TSLA, and the liquidation price of a position that borrows 50 more USDG. Neither needs a wallet, a key or ether.
+
+## Before you start
+
+You need the chain's registry, `deployments/46630.json` in the [repository](https://github.com/Tapehouse-Labs/TAPEHOUSE), which lists every contract the SDKs use. No SDK compiles in an address. The testnet's public RPC is `https://rpc.testnet.chain.robinhood.com`.
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```bash
+pnpm add @tapehouse/sdk viem
+```
+</Tab>
+<Tab title="Go">
+The Go SDK is used from a checkout of the repository today, because `go get` does not resolve its path. The [Go SDK](/sdks/go) page says how to use it from a checkout. Its import path is `github.com/tapehouse/tapehouse/services/sdk`.
+</Tab>
+<Tab title="Rust">
+The crate is not on crates.io yet. Use it from a checkout of the repository: add `tapehouse-sdk = { path = "crates/sdk" }` to your `Cargo.toml`, as the [Rust SDK](/sdks/rust) page shows.
+
+```bash
+cargo add alloy --features provider-http
+cargo add tokio --features macros,rt-multi-thread
+```
+</Tab>
+<Tab title="HTTP">
+```bash
+curl https://indexer-production-f5dc.up.railway.app/v1/status
+```
+</Tab>
+</Tabs>
+
+## Read the band
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+import { readFileSync } from 'node:fs'
+import { createPublicClient, http } from 'viem'
+import { band, parseDeployments } from '@tapehouse/sdk'
+
+const deployments = parseDeployments(JSON.parse(readFileSync('deployments/46630.json', 'utf8')))
+const client = createPublicClient({ transport: http('https://rpc.testnet.chain.robinhood.com') })
+
+const { state, live, mid, halfBps, low, high } = await band.quote(client, deployments, 'TSLA')
+console.log(state, live, mid, halfBps, low, high)
+```
+</Tab>
+<Tab title="Go">
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/tapehouse/tapehouse/services/sdk"
+)
+
+func main() {
+	backend, err := ethclient.DialContext(context.Background(), "https://rpc.testnet.chain.robinhood.com")
+	if err != nil {
+		log.Fatal(err)
+	}
+	deployments, err := sdk.LoadDeployments("deployments/46630.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	client := sdk.NewClient(backend, deployments)
+
+	quote, err := client.Band().Quote(nil, "TSLA")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(quote.State, quote.Live, quote.Mid, quote.HalfBps, quote.Low, quote.High)
+}
+```
+</Tab>
+<Tab title="Rust">
+```rust
+use alloy::providers::ProviderBuilder;
+use tapehouse_sdk::{Deployments, Tapehouse, to_bytes32};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let provider = ProviderBuilder::new().connect_http("https://rpc.testnet.chain.robinhood.com".parse()?);
+    let tapehouse = Tapehouse::new(provider, Deployments::load("deployments/46630.json")?);
+
+    let quote = tapehouse.band()?.quote(to_bytes32("TSLA")?).call().await?;
+    println!("{} {} {} {} {} {}", quote.state, quote.live, quote.mid, quote.halfBps, quote.low, quote.high);
+    Ok(())
+}
+```
+</Tab>
+<Tab title="HTTP">
+```bash
+curl "https://indexer-production-f5dc.up.railway.app/v1/contracts/tapehouse.Band/views/quote?symbol=TSLA"
+```
+</Tab>
+</Tabs>
+
+The result carries the band's state as a number (0 halted, 1 degraded, 2 closed, 3 open), how many price legs are live, the centre, the half-width in basis points, and the low and high edges. Prices have 8 decimals. [The band](/concepts/band) says what each state means. The HTTP call answers with the block it read at and the outputs by name.
+
+## Read a liquidation price
+
+The liquidation price is the price of a collateral asset at which a position falls short of its requirement, given what it already owes and a loan you are considering. It is a view, so you can ask before anyone signs. The position is `CROSS`, the cross position of the account, and the loan is 50 USDG, which has 6 decimals.
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+import { accounts, CROSS } from '@tapehouse/sdk'
+
+const price = await accounts.liquidationPrice(
+  client,
+  deployments,
+  '0xB986a345655097302cac8b4af6C948FfaF7f55FC',
+  CROSS,
+  'TSLA',
+  50_000_000n,
+)
+console.log(price)
+```
+</Tab>
+<Tab title="Go">
+```go
+price, err := client.Accounts().LiquidationPrice(
+	nil,
+	common.HexToAddress("0xB986a345655097302cac8b4af6C948FfaF7f55FC"),
+	sdk.Cross,
+	"TSLA",
+	big.NewInt(50_000_000),
+)
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Println(price)
+```
+
+Add `"math/big"` and `"github.com/ethereum/go-ethereum/common"` to the imports.
+</Tab>
+<Tab title="Rust">
+```rust
+use alloy::primitives::{U256, address};
+use tapehouse_sdk::CROSS;
+
+let price = tapehouse
+    .liquidation_price(
+        address!("0xB986a345655097302cac8b4af6C948FfaF7f55FC"),
+        CROSS,
+        "TSLA",
+        U256::from(50_000_000u64),
+    )
+    .await?;
+println!("{price}");
+```
+</Tab>
+<Tab title="HTTP">
+```bash
+curl "https://indexer-production-f5dc.up.railway.app/v1/contracts/tapehouse.MarginAccounts/views/liquidationPrice?account=0xB986a345655097302cac8b4af6C948FfaF7f55FC&position=0x0000000000000000000000000000000000000000000000000000000000000000&symbol=TSLA&borrowing=50000000"
+```
+</Tab>
+</Tabs>
+
+The answer is a price in USD with 8 decimals: the price of TSLA at or above which the position meets its requirement once it owes 50 USDG more. It is the band's low edge where the position falls short already, and zero where no price leaves it short or the asset is halted. Over HTTP the price comes back as `arg0`, since the function names no output. While the band cannot tell the session, the requirement used is the closed one, so the price is the one at which borrowing stops.
+
+## Next
+
+- [Open an account](/guides/open-an-account) and [borrow](/guides/borrow) from the app or from code.
+- [The SDKs](/sdks/overview) in full.
+- [The indexer API](/api/overview), if you would rather read events and views over HTTP.

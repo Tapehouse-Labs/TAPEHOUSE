@@ -1,0 +1,128 @@
+---
+title: "Verification"
+description: "How to check Tapehouse's claims yourself, from the deployed bytecode and the registry to the tests, the gas snapshots and static analysis."
+---
+
+Every claim the documentation makes can be checked against the repository and the chain. This page lists each check, the command that runs it and what a pass looks like. Everything is on the testnet and unaudited. The tests, the reproducible builds and the static analysis below are what stand in for an audit.
+
+## Check that a Stylus program is the code in the repository
+
+Every deployed Stylus program can be rebuilt from the repository and compared byte for byte with the code on chain, fragment by fragment. You need Docker, make and git.
+
+```bash
+git checkout <commit>
+make verify-stylus CHAIN=46630 TX=<deployment tx>
+```
+
+The commit is the one that added the deployment's row to the table in the repository's README, found with:
+
+```bash
+git log --reverse --format=%H -S <address> -- README.md | head -n 1
+```
+
+The check passes only when `cargo-stylus` prints `Verification successful`. `make verify-stylus` runs `cargo-stylus` in the Docker image that `cargo stylus deploy` and `cargo stylus verify` use for reproducible builds (`offchainlabs/cargo-stylus-base`, plus the toolchain in `stylus/rust-toolchain.toml`, linux/amd64), on the staged content of `stylus/`, so untracked files and unstaged edits never enter the build. Pass `CONTRACT=margin` for the margin engine. Running `cargo stylus verify` directly exits 0 even when verification fails, so read its last line.
+
+An example, the band program at `0xa70118d3324D90532E7D2854627b13CacE305641` (the program the testnet's band is a second instance of), deployed in `0x7f003392328803b2fd7331f6dcc2d96f387e8e9b811cdc74b01e9c77ba5e1310`:
+
+```bash
+make verify-stylus CHAIN=46630 TX=0x7f003392328803b2fd7331f6dcc2d96f387e8e9b811cdc74b01e9c77ba5e1310
+```
+
+The testnet's current band and margin engine are second instances of programs verified this way, cloned with `make clone-stylus` while Arbitrum pauses new Stylus activations. The instance runs the code of the program it was cloned from.
+
+A GitHub workflow, Stylus verification, runs the same check for any commit and deployment you give it.
+
+Verification covers the program's code. The configuration the program was constructed with is checked by `stylus/scripts/check-band.sh` and `stylus/scripts/check-margin.sh`, which only read the chain: owner, halt signer, assets, floors, pools, feeds and band.
+
+## Check the Solidity contracts on Sourcify
+
+Each Solidity contract in the registry is verified on [Sourcify](https://sourcify.dev), which supports all three chains and the compiler the repository pins. The Makefile has one verify target for each:
+
+| Target | Verifies |
+|---|---|
+| `make verify-band-feeds CHAIN=<id>` | every feed in the registry's `.bandFeeds` |
+| `make verify-supply-vault CHAIN=<id>` | the supply vault |
+| `make verify-margin-accounts CHAIN=<id>` | the margin accounts |
+| `make verify-liquidator CHAIN=<id>` | the liquidator |
+| `make verify-gap-backstop CHAIN=<id>` | the gap backstop |
+| `make verify-reopening-auction CHAIN=<id>` | the reopening auction |
+| `make verify-stock-lending CHAIN=<id>` | the stock lending vaults |
+| `make verify-short-positions CHAIN=<id>` | the short positions |
+| `make verify-morpho-oracles CHAIN=<id>` | the Morpho oracles |
+| `make verify-baskets CHAIN=<id>` | the baskets |
+| `make verify-gap-cover CHAIN=<id>` | the gap cover |
+| `make verify-sponsor-paymaster CHAIN=<id>` | the sponsor paymaster |
+
+Look up any address of [the contract addresses](/contracts/addresses) on Sourcify to read its verified source and compare it with `contracts/src`.
+
+## Read the registry against the chain
+
+`deployments/<chainId>.json` lists every contract the repository uses on each chain, and the SDKs read addresses only from it. To compare an entry with the chain:
+
+```bash
+R=https://rpc.testnet.chain.robinhood.com
+MARGIN=$(jq -r .tapehouse.Margin deployments/46630.json)
+cast code $MARGIN --rpc-url $R | head -c 80
+cast call $MARGIN "band()(address)" --rpc-url $R
+jq -r .tapehouse.Band deployments/46630.json
+```
+
+The fork tests do this for every entry: each one is checked against the chain at a pinned block. `stylus/scripts/check-band.sh <rpc url> <band address> <registry>` and `stylus/scripts/check-margin.sh <rpc url> <margin address> <registry>` check a program's configuration against the registry.
+
+## Run the tests
+
+```bash
+make test
+```
+
+`make test` runs every suite. Fork tests need an archive RPC for each chain. The Makefile exports public archive defaults that need no key and reads `ROBINHOOD_RPC_URL`, `ROBINHOOD_TESTNET_RPC_URL` and `ARBITRUM_RPC_URL` if you set your own. Run fork tests through `make`; to call `forge` directly, export the variables first. One fork test needs a logs RPC that serves wide ranges and fails without it.
+
+The repository's `JUDGES.md` counts the tests of each suite:
+
+| Suite | Tests |
+|---|---|
+| Solidity contracts, with invariants and fork tests (`forge test`) | 566 |
+| Uniswap deployment for the testnet (`forge test`) | 7 |
+| Stylus programs (`cargo test`) | 208 |
+| Rust SDK | 33 |
+| Go: services and SDK | 316 |
+| TypeScript: SDK, MCP server, app and website | 285 |
+
+The app's end-to-end tests (`make test-app-devnode`, desktop and phone Chromium, with axe's WCAG 2.2 AA checks) and the services' dev-node tests run against a local Nitro node, started with `make devnode`. `make coverage` runs Solidity coverage and fails below 95% of lines or branches.
+
+The margin engine's Solidity reference is a check of its own: `make compare-margin CHAIN=46630` calls it and the program with the same arguments and fails on a differing bit. [Stylus versus Solidity](/resources/stylus-vs-solidity) describes it.
+
+## Check the gas snapshots
+
+```bash
+make gas
+```
+
+`make gas` reports contract sizes, gas snapshots and WASM sizes, and fails on any change. The files it compares with are committed:
+
+| File | What it holds |
+|---|---|
+| `contracts/.gas-snapshot` | Foundry's gas of every test |
+| `contracts/snapshots/*.json` | The gas of each contract's main calls, such as `borrow`, `deposit` and `withdraw` for the margin accounts |
+| `stylus/.wasm-size` | The size of each Stylus program |
+| `stylus/.gas-devnode` | The L2 gas of the margin program and its Solidity reference on the dev node, compared with a tolerance of 0.5% |
+
+`make snapshot` regenerates them. The Stylus fragment count in `make gas` needs network access to Robinhood Chain. `make check-activation` runs `cargo stylus check` of every program against Robinhood Chain, its testnet and Arbitrum One.
+
+## Run static analysis
+
+```bash
+make lint-contracts
+```
+
+This runs Slither on the Solidity sources, at the version the Makefile pins (0.11.6, installed with `pipx install --force slither-analyzer==0.11.6`), with the configuration in `contracts/slither.config.json`: dependencies, tests and scripts are excluded and the run fails at medium severity. `make lint` runs it with formatting, lint, ShellCheck of the scripts and `reuse lint`.
+
+## Repeat the evidence behind the parameters
+
+`make backtest` repeats the [backtest](/resources/backtest) from public data, and `make calibrate` produces the [calibration](/resources/calibration) proposal for a chain.
+
+## Next
+
+- [Stylus versus Solidity](/resources/stylus-vs-solidity)
+- [Backtest](/resources/backtest)
+- [Contract addresses](/contracts/addresses)

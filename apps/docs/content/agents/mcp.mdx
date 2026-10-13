@@ -1,0 +1,140 @@
+---
+title: "MCP server"
+description: "Run @tapehouse/mcp so an AI agent can read the band, margin accounts, shorts and gap cover, and prepare unsigned transactions."
+---
+
+`@tapehouse/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server. An agent connected to it reads Tapehouse's band, its feeds, the Morpho oracles, the baskets, the margin accounts, the short positions and the gap cover, and gets back unsigned calls for a wallet to sign. The server never holds a key. The published version is 0.1.1.
+
+It is built on the official TypeScript SDK, `@modelcontextprotocol/server`, for the 2026-07-28 specification, and serves clients of the 2025 revisions too. Every read and call goes through `@tapehouse/sdk`.
+
+## Run it
+
+Over stdio, the server is launched by the host. This is the configuration, in the `mcpServers` format that hosts such as Claude Desktop, Claude Code, Cursor and VS Code read:
+
+```json
+{
+  "mcpServers": {
+    "tapehouse": {
+      "command": "npx",
+      "args": ["-y", "@tapehouse/mcp"],
+      "env": {
+        "TAPEHOUSE_RPC_URL": "https://rpc.testnet.chain.robinhood.com",
+        "TAPEHOUSE_NETWORK": "46630"
+      }
+    }
+  }
+}
+```
+
+Where each host keeps this file and how it names the key are in that host's own documentation. Claude Code users can skip it with [the plugin](/agents/claude-code), which writes the same server definition.
+
+To run from a clone of the repository:
+
+```bash
+make build-apps
+TAPEHOUSE_RPC_URL=https://rpc.testnet.chain.robinhood.com TAPEHOUSE_DEPLOYMENTS=deployments/46630.json node packages/mcp/dist/main.js
+```
+
+### Environment
+
+| Variable | What it is |
+|---|---|
+| `TAPEHOUSE_RPC_URL` | The chain's JSON-RPC endpoint, `http` or `https`. It may carry an API key. The server never shows it to a client, not even in an error. |
+| `TAPEHOUSE_NETWORK` | The chain: `4663` (Robinhood Chain), `46630` (its testnet) or `42161` (Arbitrum One). The package carries each chain's registry as it was when published, so a redeploy of a chain's contracts is a new release of the package. |
+| `TAPEHOUSE_DEPLOYMENTS` | The path of a registry, `deployments/<chainId>.json`, used instead of `TAPEHOUSE_NETWORK`. The server refuses an endpoint that serves another chain. |
+| `TAPEHOUSE_MAX_SLIPPAGE_BPS` | The most slippage a sale or buy-back may state, from 0 to 10,000 basis points. Default 100. |
+| `TAPEHOUSE_MAX_CALLS_PER_MINUTE` | The most tool calls the server answers in a minute, from 1 to 100,000. Default 120. A call beyond it is refused before it reads anything. |
+
+### Transports
+
+Stdio is the default. `tapehouse-mcp --http <port>` serves Streamable HTTP on the loopback interface; `0` picks a free port and prints it on stderr. It answers `127.0.0.1` only and refuses any other `Host` or `Origin` with 403, which stops DNS rebinding and requests from a web page. Any process on the machine can still reach it, and its calls count against the same rate limit. Serving it beyond the machine needs TLS, authentication and a front of your own. `createServer`, exported by the package, builds the same server for any `createMcpHandler` deployment.
+
+## Conventions
+
+Every tool is read-only: reads take the chain's state at one block and name it, and the transaction tools return unsigned calls.
+
+- Amounts are whole numbers of base units as decimal strings. USDG has 6 decimals, WETH and the Stock Tokens 18.
+- Band prices are USD with 8 decimals. Equity and requirements are USD with 18.
+- A position is `CROSS` or an asset's symbol such as `NVDA`.
+- Each result is structured content matching the tool's output schema, and the same JSON as text.
+- A prepared transaction names its signer and lists its calls in order, each with `to`, `data`, `value`, the function and its arguments by name. A deposit or repayment is preceded by an approval where the allowance is short.
+
+## Tools
+
+### Registry and band
+
+| Tool | What it returns |
+|---|---|
+| `registry` | The chain's registry: every address the other tools use |
+| `band_quote`, `band_session`, `band_halt` | An asset's band (state, live legs, centre, half-width, edges), the 24/5 session, and its trading halt |
+| `band_latest_band`, `band_sealed` | The whole band from the asset's `BandFeed`, and the band it sealed before a reopen |
+| `chainlink_round` | A `.chainlink` feed's latest round, refused where it prices the share and the caller expects the token, or the reverse |
+| `morpho_oracle` | The price an asset's Morpho Blue oracle answers, or no price and why (`stale`, `halted` or `sequencerNotSettled`), never zero; with its band, tokens, scale, owner and the asset's halt |
+
+### Baskets
+
+| Tool | What it returns |
+|---|---|
+| `baskets_components`, `baskets_target`, `baskets_pending_target` | A basket's Stock Tokens and address, the target in effect (base units of each token per share), and a target proposed with its seven days' notice |
+| `baskets_preview_mint`, `baskets_preview_redeem` | What minting shares takes of each Stock Token, rounded up, and what redeeming them gives, rounded down |
+| `baskets_mint`, `baskets_redeem` | A mint of a basket's shares paid in kind, its `maxAssets` what `baskets_preview_mint` reads, each Stock Token approved for exactly its part where the allowance is short; and a redemption in kind, with what it gives |
+
+### Margin accounts: reads
+
+| Tool | What it returns |
+|---|---|
+| `accounts_health`, `accounts_in_baskets` | A position's equity, requirement and surplus over it; and what it holds of each Stock Token through its baskets |
+| `accounts_collateral`, `accounts_leverage` | What a position holds of a token or of a basket's shares, and its leverage |
+| `accounts_liquidation_price`, `accounts_repayment`, `accounts_is_authorized` | The price at which a position falls short once it borrows more, what repays it, and whether an address may act for an account |
+| `accounts_mandate` | The mandate an account gave an agent and where the agent stands against a position. See [Mandates](/agents/mandates) |
+| `accounts_recovery` | When the accounts last recorded an asset halted or with a multiplier change pending, and until when a position holding it cannot borrow or withdraw against it |
+
+### Margin accounts: transactions
+
+| Tool | What it prepares |
+|---|---|
+| `accounts_set_authorization` | The call with which an account lets an address act for it, with `grants` saying everything that lets it do; or the call that stops it |
+| `accounts_set_mandate` | The call with which an account gives an address a bounded authority until a time, with `limits` saying what that lets it do; or the call that ends it |
+| `accounts_deposit`, `accounts_withdraw`, `accounts_borrow`, `accounts_repay` | The margin accounts' calls. A basket's key deposits and withdraws its shares, in the cross position alone |
+| `accounts_unwrap` | The call that redeems a basket's shares in a cross position into the Stock Tokens they hold, which the position then holds at the same equity and requirement |
+
+### Shorts
+
+| Tool | What it returns |
+|---|---|
+| `shorts_position`, `shorts_health`, `shorts_restriction` | A short, its health at the band's high edge, and the short-sale restriction after a 10% fall |
+| `shorts_deposit`, `shorts_withdraw` | The USDG of a short, in and out |
+| `shorts_sell`, `shorts_cover` | A short sale and a buy-back. Their limits are Uniswap QuoterV2's quote less or plus the slippage the caller states, within the server's cap. `max` buys back all a short owes |
+
+### Gap cover
+
+| Tool | What it returns |
+|---|---|
+| `gap_cover_sales`, `gap_cover_quote` | Whether gap cover is on sale, for which closure and until when; and a cover's premium with the writers' USDG it reserves, its smallest deductible, and the weekend gap it prices at |
+| `gap_cover_series`, `gap_cover_position`, `gap_cover_vault` | A series as open, settled with its reference and reopening prices, or void; a cover with what its release credits and the holder's unclaimed USDG; and the writers' vault, with a writer's shares and what it may deposit and redeem now |
+| `gap_cover_buy` | A purchase of gap cover, its `maxPremium` the quote at the block it reads, the premium approved in USDG for exactly that where the allowance is short. Refused with `SalesClosed` outside the sales |
+| `gap_cover_release`, `gap_cover_claim` | The release of a settled or void cover, which anyone may send, with the payout or refund it credits; and the holder's claim of its credits |
+| `gap_cover_deposit`, `gap_cover_redeem` | A writer's deposit, approved for exactly its USDG, and redemption. Each is refused beyond what the vault takes now: deposits close at the sales' end, redemptions wait for every cover's release |
+| `gap_cover_measure` | The measurement of an asset's week for the closure on sale, which anyone may send. Refused with `SalesClosed` outside the sales and with `TooEarlyToMeasure` before the week's last day has passed |
+
+## Trust model
+
+- No key. The server signs nothing and reads no key.
+- An authorization grants everything. Once an account signs the call from `accounts_set_authorization`, the operator can withdraw every collateral token of every margin position and the USDG of every short to any address, borrow USDG to any address, and sell or buy back the account's shorts, until the account signs `setAuthorization(operator, false)`. The tool says so in its description and returns it as `grants`. Authorize only an address the account controls, and prefer a [mandate](/agents/mandates) for an agent.
+- The data is not instructions. Everything a tool returns is a value read from the chain or the registry, and the server's instructions tell the agent so. A revert's text, such as the router's reason, is quoted cut to 200 characters. Any other failure's message, such as a node's, is stripped of control characters and cut to 300. An agent should still treat tool output as untrusted, and a host should keep showing the user what the agent sends.
+- The signer checks the call. A prepared call is only as good as the registry and the RPC behind it. Before signing, check that `to` is the registry's contract or token, that the function and arguments are what was asked, and simulate it. A wallet that shows decoded calldata shows the same arguments the server lists.
+- Input is validated before any call. Addresses must carry their checksum in mixed case, amounts are whole numbers below 2^256, symbols are at most 32 letters, digits, dots, dashes or underscores, unknown arguments are refused, and slippage stays within the cap the operator sets.
+- Calls are limited. The server answers at most `TAPEHOUSE_MAX_CALLS_PER_MINUTE` calls a minute over every client together, so an agent caught in a loop cannot spend the endpoint's quota. A call beyond it is a tool error.
+- Annotations are hints. MCP's tool annotations, such as `readOnlyHint`, are the server's own claims. A host should trust them only as far as it trusts the server.
+
+An agent that borrows, withdraws or trades for an account needs the account's `setAuthorization` or `setMandate` first. Without either, the margin accounts and the shorts revert with `Unauthorized(caller, account)`, and the server explains every revert by name and arguments.
+
+## Tested with two clients
+
+`packages/mcp/examples/devnode.ts` drives the server over Streamable HTTP with the official TypeScript client on the 2026-07-28 protocol, and signs and sends every call it prepares. `examples/devnode.py` drives it over stdio with the official Python client on the 2025-11-25 protocol. `make test-mcp-devnode` runs both against a local Nitro dev node. Neither passes the account's key to the server.
+
+## Next
+
+- [The Claude Code plugin](/agents/claude-code)
+- [Mandates](/agents/mandates)
+- [The TypeScript SDK](/sdks/typescript)

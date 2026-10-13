@@ -1,0 +1,88 @@
+---
+title: "Band feeds"
+description: "One Chainlink-compatible feed per asset that serves one side of the band, with the whole band, the token's market and a seal before each reopen."
+---
+
+A band feed serves one asset's band to Solidity code that already reads Chainlink. `latestRoundData()` answers one side of the band, low, mid or high, chosen at deployment, with 8 decimals. The feed has no owner and nothing to configure after deployment.
+
+## Addresses
+
+Robinhood Chain testnet, chain 46630, from `deployments/46630.json`, under `bandFeeds`.
+
+| Asset | Band feed |
+|---|---|
+| TSLA | `0xf725e77cB02029267f38355074Da70aC8Ea2CE87` |
+| AMZN | `0xdAFc2dDAe8D5815468Ae2cc470bbD8674D988D2f` |
+
+Testnet, not audited. The side a feed answers is set in its constructor and is read with `side()`. `make deploy-band-feeds` deploys low-side feeds.
+
+## Read a feed
+
+```ts
+import { readFileSync } from 'node:fs'
+import { createPublicClient, http } from 'viem'
+import { band, parseDeployments } from '@tapehouse/sdk'
+
+const deployments = parseDeployments(JSON.parse(readFileSync('deployments/46630.json', 'utf8')))
+const client = createPublicClient({ transport: http('https://rpc.testnet.chain.robinhood.com') })
+
+const { answer, updatedAt } = await band.latestRound(client, deployments, 'TSLA')
+const whole = await band.latestBand(client, deployments, 'TSLA')
+```
+
+A halted band has no answer. The feed reverts with `NoAnswer`, which a consumer should treat as "no price", never as zero.
+
+## Functions
+
+| Function | Who may call | What it does | Key reverts |
+|---|---|---|---|
+| `latestRoundData()` | Anyone, view | Chainlink's `AggregatorV3Interface` answer: the chosen side of the band. The round ID, `startedAt` and `updatedAt` are the block timestamp. | `NoAnswer(symbol)` while the band is halted, `SequencerNotSettled()` where the band follows a sequencer-uptime feed that is down or came back an hour ago or less |
+| `getRoundData(uint80 roundId)` | Anyone, view | Answers only the current round, the block timestamp. | `NoRound(roundId)` for any other round |
+| `latestBand()` | Anyone, view | The whole band, see below. | None of its own |
+| `seal()` | Anyone | Records the band before the session reopens and emits `Sealed`. The latest call before the reopen stands in `seals(reopenMs)`. | `NotSealWindow(session, reopenMs)` unless the session is closed and reopens within ten minutes |
+| `seals(uint64 reopenMs)` | Anyone, view | `state, live, mid, halfBps, low, high, sealedAt` of the band sealed before that reopen. All zero where none was sealed. | None |
+| `decimals()`, `description()`, `version()` | Anyone, view | Fixed at 8 decimals and version 1. `description` names what is priced: the Stock Token where the band names one, otherwise the share. | None |
+| `band()`, `symbol()`, `side()`, `pool()` | Anyone, view | The band program, the asset's symbol, the side answered (0 low, 1 mid, 2 high) and the token's Uniswap v3 pool, zero for none. | None |
+| `TWAP_WINDOW()`, `SEAL_WINDOW_MS()` | Anyone, view | 1,800 seconds and 600,000 milliseconds. | None |
+
+### The whole band
+
+`latestBand()` returns one struct: `state`, `live`, `mid`, `halfBps`, `low`, `high`; `variance`, the variance behind the half-width; `session`, `nyse`, `nyseNext`, `nyseChangeMs`, `sessionBoundaryMs`; `signedHalt`, `haltUntil`, `haltIssuedAt`, `oraclePaused`; `sequencerSettled`; and the token's own market as `twapValid`, `twap` and `premiumBps`.
+
+`twap` is the Stock Token's 30-minute Uniswap v3 TWAP in the pool's quote token, USDG on Robinhood Chain, with 8 decimals. `premiumBps` is its distance from the band's centre with USDG taken at par. They sit beside the band and never enter it. Without a pool, or while the pool has less than 30 minutes of history, `twapValid` is false and both are zero.
+
+## Events
+
+| Event | Emitted when |
+|---|---|
+| `Sealed(uint64 indexed reopenMs, uint8 state, uint8 live, uint64 mid, uint64 halfBps, uint64 low, uint128 high)` | Every `seal()`, so the record rebuilds from events alone. |
+
+## Roles and admin powers
+
+None. The feed has no owner, guardian or upgrade path. A band redeploy is a new set of feeds, so a consumer that must follow a redeployed band reads it through [the Morpho oracle](/contracts/morpho-oracle), which has an owner for that purpose.
+
+## Invariants
+
+- The band is recomputed on every read and its state already judges staleness, so a round is always the current block.
+- A feed reverts rather than report zero.
+- `seal()` works only while the session is closed and its reopen is at most ten minutes away. The reopening auction uses the sealed band to set its floor.
+- A deployed feed's band, symbol, side and pool never change.
+
+## SDK
+
+TypeScript, module `band` in `@tapehouse/sdk`.
+
+| Contract function | SDK call |
+|---|---|
+| `latestRoundData` | `band.latestRound(client, deployments, asset)` returns `roundId`, `answer`, `startedAt`, `updatedAt`, `answeredInRound` |
+| `latestBand` | `band.latestBand(client, deployments, asset)` |
+| `seals` | `band.sealed(client, deployments, asset, reopenMs)` |
+| `seal` | `band.seal(deployments, asset)`, a viem contract call |
+
+The SDK reads a feed by asset name from the registry's `bandFeeds` group, so the registry must list it. `band.chainlinkRound(client, feed)` reads a Chainlink feed from `.chainlink` in the same shape.
+
+## Next
+
+- [Band](/contracts/band)
+- [Reopening auction](/contracts/reopening-auction)
+- [Morpho oracle](/contracts/morpho-oracle)

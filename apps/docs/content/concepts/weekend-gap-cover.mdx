@@ -1,0 +1,72 @@
+---
+title: "Weekend gap cover"
+description: "Buy cover against a Stock Token's fall over a market closure, paid in USDG, and see how it is priced and settled from public inputs."
+---
+
+Weekend gap cover pays you if a Stock Token's price falls over a market closure, from the closure's reference price to its reopening price, beyond a deductible and up to a limit. It is settled in USDG, needs no token held, and is priced and settled entirely from Chainlink rounds and the band's recorded events, so anyone can rebuild a settlement.
+
+## Buy cover
+
+```ts
+import { gapCover } from '@tapehouse/sdk'
+
+const sale = await gapCover.sales(client, deployments)
+const deductibleBps = await gapCover.minDeductible(client, deployments, 'TSLA')
+const layer = { notional: 1_000_000_000n, deductibleBps, limitBps: deductibleBps + 1_000n }
+
+const { premium, reserve } = await gapCover.quote(client, deployments, 'TSLA', layer)
+const call = gapCover.buy(deployments, { asset: 'TSLA', ...layer, maxPremium: premium, holder: account })
+```
+
+`sales` returns the closure on sale and when its sales end, or `undefined` while no cover is sold. `quote` returns the premium in USDG and the writers' USDG the cover reserves. `minDeductible` is the smallest deductible allowed now, in basis points. `buy` returns a contract call for viem's `writeContract`, which reverts with `PremiumAboveLimit` if the premium has risen past `maxPremium`. `notional` is in USDG's 6 decimals, the deductible and limit are in basis points of the fall, and a deductible below the minimum reverts with `InvalidLayer`. The limit in the sample is an arbitrary 1,000 basis points above the deductible. `client`, `deployments` and `account` are as in [the band](/concepts/band#read-a-band).
+
+Each purchase is its own cover, held by `holder` (`covers(id)`), and is not transferable.
+
+## What a cover pays
+
+A cover pays `notional` times the fall of the asset's price from the closure's reference to its reopening price, beyond the deductible and up to the limit. It is a layer, as reinsurance writes one. A rise pays nothing. The price is the Stock Token's, as the band and its Chainlink feed quote it, so a dividend or a split pays nothing by itself.
+
+## When it is sold
+
+From the moment the band's session shows the coming close, on the last trading day before a weekend or holiday, until that close. On Robinhood Chain the close is the 24/5 session's. Where the band's Chainlink feeds follow NYSE's regular hours, as on Arbitrum One, it is the regular close. Cover is never sold while the band is halted for the asset, a multiplier change is pending, or the sequencer is not settled. Outside the sales, a purchase reverts with `SalesClosed`.
+
+## How it is priced
+
+A weekend gap scales a generalized Pareto tail of shape one half, fitted to ten years of the launch assets' weekend falls. In the contract's constants, a fall is in the tail past 18.3288% of the gap (`TAIL_THRESHOLD_PPM`), which happens on 5.0224% of weekends (`TAIL_PROBABILITY_PPM`), with a scale of 9.5837% of the gap (`TAIL_SCALE_PPM`). The deductible is at least that threshold.
+
+The premium is the layer's expected payout under that tail, in closed form, plus a loading of 50% (`LOADING_BPS`), rounded up. A larger gap raises every price.
+
+The gap follows the week. During the sales it is twice the asset's realised move over the trading week before the close (`MOVE_TO_GAP_BPS`), at least 55% of the engine's weekend gap for the asset and at most eight times it. The move is the root of the sum of the squared daily changes of the asset's Chainlink answers at the eight days that end a day before the close. The close fixes the days and the feed the rounds, so no caller chooses them. A week the feed cannot show prices at the most. `pricingGap(asset)` returns the gap and the week's move.
+
+The tail was fitted on 2016 to 2021 so that premiums come to 1.5 times the payouts of calm and of turbulent weeks alike. Over 2021 to 2026 the price kept writers ahead on every launch asset, whether buyers spread evenly or crowded into the weekends after turbulent weeks. [The backtest](/resources/backtest) states the checks: the gap the cover prices was exceeded by the 24/5 reopening's realised move in 0.17% of asset-weekends under uniform demand, and never on the 14 weekends since launch.
+
+If the feed's last round has not caught up with the market, the reference can stand up to Chainlink's deviation threshold away from it. Where it stands above the band's centre at a purchase, the layer is priced as measured from the centre, with the deductible and limit both lowered by the difference, and the deductible so measured must reach the tail's threshold (`StaleReference`).
+
+## Writers
+
+Writers deposit USDG and receive ERC-4626 shares. Every cover reserves its whole possible payout, `notional` times the width of its layer (limit less deductible, in basis points of 10,000), from their USDG until it is released, and a purchase beyond what is free reverts with `NoCapacity` (`capacity` reads what is free). A cover's premium is held apart and joins the writers' USDG, less what the cover pays, when the cover is released. Deposits are open while every outstanding cover is over the coming closure and its sales have not ended. Redemptions open only while no cover is outstanding.
+
+## Settlement
+
+1. The reference is the feed's last Chainlink round started before the sales ended.
+2. The reopening price is the first round that starts at or after the reopen, when that round lands within the settlement window inside the band recorded in its minute. Otherwise it is the median of the band centres recorded in the window, and the series is flagged.
+3. Anyone records the band each minute with `observe`, and settles the series once its window ends with `settle(symbol, closesMs, referenceRound, lastRound)`. The cover checks the named rounds against the feed.
+
+The window is the 15 one-minute slots from the reopen. A minute in which the band cannot vouch for the asset (halted, closed, or the sequencer not settled) moves the window by one slot, and a band that cannot vouch for it for more than 15 slots after the reopen leaves no window and voids the series. The median settles a series only when at least 8 of the window's slots hold the band, so a record that starts late, or keeps only the minutes it likes, cannot settle it alone.
+
+A void series refunds its covers' premiums. A series is void when its window never opened, when it has no usable round or no quorum, when its Stock Token's multiplier changed materially between the reference and the window's end, or when nobody settles it within a week of its close.
+
+Anyone may `release(id)` a cover once its series has settled or is void. That credits the holder its payout or refund, frees its reserve and adds its premium, less its payout, to the writers' USDG. The holder takes what it is owed with `claim(receiver)`.
+
+## Limits
+
+- The testnet's Chainlink feeds are `RedStoneRoundFeed` contracts that follow RedStone's regular-hours feed, a keeper records a round a minute during NYSE's regular hours, and these feeds are not independent of RedStone's signers.
+- The cover is a testnet product. Writers' USDG is at risk, and USDG's issuer can pause or freeze an address, which stops deposits, redemptions and purchases; settlement and release go on.
+- The CI dev node buys cover through the Stylus engine every Friday at 16:00 UTC, inside the sales in summer and in winter.
+
+## Next
+
+- [The session](/concepts/session)
+- [Liquidation](/concepts/liquidation)
+- [Gap cover contract](/contracts/gap-cover)
+- [The backtest](/resources/backtest)

@@ -1,0 +1,141 @@
+---
+title: "Short positions"
+description: "The contract that shorts a Stock Token against USDG margin, with its functions, rules, events and SDK calls."
+---
+
+`ShortPositions` lets an address short a Stock Token on its own margin. It borrows the token from the margin accounts' lending vault for that asset, sells it through the token's Uniswap v3 pool for USDG, and keeps the USDG as collateral. It is each lending vault's borrower, so the fee a lender earns is what the shorts pay.
+
+| | |
+|---|---|
+| Testnet address (46630) | `0xadc174ca32EBD4B27579E3759903F43b8F53D97F` |
+| Source | `contracts/src/ShortPositions.sol` |
+| Admin | None: it has no owner. Authorization and the pause are the margin accounts' |
+
+## Open and close a short
+
+Add USDG margin, then sell. Quote the sale first so the call carries a minimum.
+
+```ts
+import { shorts } from '@tapehouse/sdk'
+
+const account = wallet.account.address
+
+await wallet.writeContract(shorts.deposit(deployments, { asset: 'TSLA', amount: 500_000_000n, account }))
+
+const { minProceeds } = await shorts.quoteSale(publicClient, deployments, {
+  asset: 'TSLA',
+  amount: 10n ** 18n,
+  slippageBps: 50n,
+})
+await wallet.writeContract(shorts.sell(deployments, { asset: 'TSLA', amount: 10n ** 18n, minProceeds, account }))
+```
+
+The deposit is 500 USDG (6 decimals). The sale borrows one TSLA token (18 decimals) and sells it. USDG must be approved to the contract before `deposit`. To close, quote the buy-back and call `cover`:
+
+```ts
+const { maxCost } = await shorts.quoteCover(publicClient, deployments, {
+  asset: 'TSLA',
+  amount: 10n ** 18n,
+  slippageBps: 50n,
+})
+await wallet.writeContract(shorts.cover(deployments, { asset: 'TSLA', amount: 10n ** 18n, maxCost, account }))
+```
+
+Read the short with `shorts.position` (USDG held, what it owes in the token, borrow shares, book epoch) and `shorts.health` (equity and requirement at the band's high edge, in USD with 18 decimals, plus the engine's missing bits and regime).
+
+## How a short works
+
+- One short per token. Each address holds, for each Stock Token, one short of that token alone, with USDG as its only collateral: the margin it adds and the proceeds of what it sold. Nothing here deposits into or borrows from the supply vault, and no margin account position is touched.
+- Authorization. An address that an account authorized in the margin accounts (`setAuthorization`) may also sell, buy back, deposit and withdraw for it here. The accounts' guardian pauses new shorts and withdrawals from open ones as it pauses loans.
+- Selling. `sell` borrows `amount` and sells it through Uniswap's `SwapRouter02` for no less than the band's low edge, or the band's centre while the asset is restricted.
+- Buying back. `cover` buys back up to what the short owes and repays the vault. A partial buy-back also pays no more than the band's high edge, so it never leaves the short weaker. Buying back all it owes, or so much that it retires all its borrow shares, closes the short.
+- Margin. The engine margins a short as a negative quantity at the band's high edge. A sale or a withdrawal must leave its equity at or above its requirement, and within the weekend leverage cap from the regular open on the last trading day before a closure, while the band is not halted, no multiplier change is pending, the session is known and the pool's depth is read.
+- The fee. It accrues in the vault, in the token, so a short owes its share of the vault's debt as borrow shares. The debt is counted in raw units of the token, so a dividend or split leaves the count owed as it is.
+
+## Functions
+
+`symbol` is the asset's symbol as `bytes32`; the SDK takes the plain string. For every call that takes `account`, the caller is the account or an address it authorized.
+
+| Function | What it does | Who may call | Key reverts |
+|---|---|---|---|
+| `deposit(bytes32 symbol, uint256 amount, address account)` | Adds the caller's USDG to the account's short | Account or authorized | `ZeroAmount`, `Unauthorized` |
+| `withdraw(bytes32 symbol, uint256 amount, address account, address receiver)` | Sends USDG from the short to `receiver`; a short that owes the vault must still pass its checks | Account or authorized | `ZeroAmount`, `Unauthorized`, `InsufficientCollateral`, `BorrowingIsPaused`, `InsufficientMargin`, `Insolvent`, `DeficitOpen` |
+| `sell(bytes32 symbol, uint256 amount, uint256 minProceeds, address account)` | Borrows and sells; returns the proceeds | Account or authorized, while borrowing is not paused | `ZeroAmount`, `Unauthorized`, `BorrowingIsPaused`, `Blocked`, `AssetHalted`, `CorporateActionPending`, `SessionUnknown`, `LiquidityUnknown`, `SequencerNotSettled`, `InsufficientMargin`, `WeekendLeverageExceeded`, `NotShortable`, `Insolvent`, `DeficitOpen` |
+| `cover(bytes32 symbol, uint256 amount, uint256 maxCost, address account)` | Buys back and repays; returns the cost | Account or authorized | `ZeroAmount`, `Unauthorized`, `NoShort`, `Insolvent`, `DeficitOpen` |
+| `liquidate(address account, bytes32 symbol)` | Buys back all the short owes once its equity is below its requirement and pays the caller a bonus | Anyone | `SequencerNotSettled`, `NoShort`, `NotShortfall`, `AssetHalted`, `AboveLimit` |
+| `buyIn(uint256 assets)` | Buys `assets` of the token through the pool and repays them to the vault | The asset's lending vault only | `NotLending`, `SequencerNotSettled` |
+| `mark(bytes32 symbol)` | Records the band's centre for the restriction | Anyone | `AssetHalted` |
+
+### Reads
+
+| Function | Returns |
+|---|---|
+| `position(address account, bytes32 symbol)` | `(int256 usdgHeld, uint256 debt, uint256 shares, uint256 epoch)` |
+| `health(address account, bytes32 symbol)` | `(int256 equity, uint256 requirement, uint8 missing, uint8 regime)` |
+| `epoch(bytes32 symbol)` | The epoch of the current book |
+| `book(bytes32 symbol, uint256 epoch)` | `(shares, usdgHeld, costIndex)` |
+| `restriction(bytes32 symbol)` | `(bool restricted, uint64 close)` |
+| `fee(bytes32 symbol)` | The fee tier of the token's pool with USDG; zero where it cannot be shorted |
+| `accounts`, `band`, `engine`, `usdg`, `router`, `weekendLeverage` | The immutables |
+
+The matching SDK reads are `shorts.position`, `shorts.health`, `shorts.epoch`, `shorts.book`, `shorts.restriction` and `shorts.fee`.
+
+## Rules and limits
+
+| Name | Value | Meaning |
+|---|---|---|
+| `LIQUIDATION_BONUS_BPS` | 50 | A liquidator takes half a percent of the buy-back cost from the short's USDG |
+| `RESTRICTION_DROP_BPS` | 1,000 | A 10% fall from the last close restricts sales, as Regulation SHO Rule 201 does |
+| `MAX_PREMIUM_BPS` | 100 | A liquidation or buy-in pays at most 1% above the band's centre, and never above the high edge |
+
+**A fall of 10%.** Once the band's centre falls 10% from the asset's last close, a short sells at no less than the band's centre for the rest of that day and the next, in UTC. The close is the last centre the contract recorded on an earlier day. Every sale records one, and `mark` lets anyone record it.
+
+**Recalls.** When a lender's recall notice runs out and anyone calls the vault's `buyIn(ticket)`, the shorts buy in what is due through the pool, using only that token's shorts' USDG, and repay it. Each short pays its part of the cost in proportion to its borrow shares, when it is next touched. While the issuer has paused the token or blocklisted the contract, nothing is bought in and the notices keep running.
+
+**Books.** Each token's shorts share a book: their borrow shares, their USDG and the cost index of the buy-ins. Once the vault is owed nothing while borrow shares remain, the next sale opens a new book (`NewEpoch`). The earlier shorts owe nothing and take out what they hold.
+
+**Liquidation.** A short falls short when its equity is below its requirement at the band's high edge while the market is open, and at both edges while it is not. The liquidator waits while the pool asks more than a liquidation may pay (`AboveLimit`).
+
+**Who bears a loss.** A short whose USDG cannot buy back all it owes spends all of it, and the rest is written off on the vault, a loss to its lenders. A short can also owe more of the buy-ins than it holds. At its liquidation the book's other shorts are charged that amount and owe that much less of the token, written off too, so the lenders bear it as far as those shorts still owe the vault. Until it is liquidated, such a short closes only by liquidation (`Insolvent`), and the book cannot pay out what it no longer holds (`DeficitOpen`).
+
+## Events
+
+| Event | Emitted when |
+|---|---|
+| `Deposit(address indexed caller, address indexed account, bytes32 indexed symbol, uint256 amount)` | Margin is added |
+| `Withdraw(address indexed caller, address indexed account, bytes32 indexed symbol, uint256 amount, address receiver)` | Margin is withdrawn |
+| `Sell(address indexed account, bytes32 indexed symbol, uint256 amount, uint256 proceeds, uint256 shares)` | A short sells |
+| `Cover(address indexed account, bytes32 indexed symbol, uint256 amount, uint256 cost, uint256 shares)` | A short buys back |
+| `Liquidate(address indexed caller, address indexed account, bytes32 indexed symbol, uint256 amount, uint256 cost, uint256 bonus, uint256 writtenOff)` | A short is liquidated |
+| `BuyIn(bytes32 indexed symbol, uint256 amount, uint256 cost)` | The shorts buy in for the vault |
+| `Restricted(bytes32 indexed symbol, uint32 until)` | A 10% fall restricts sales until day `until`, counted in days since 1970 |
+| `NewEpoch(bytes32 indexed symbol, uint256 epoch)` | A new book opens |
+
+## Errors
+
+| Error | Meaning |
+|---|---|
+| `NotShortable(bytes32 symbol)` | No Stock Token, no pool to short through, or no lending vault |
+| `Unauthorized(address caller, address account)` | The caller may not act for the account |
+| `ZeroAmount()` | An amount of zero |
+| `BorrowingIsPaused()` | The guardian has paused new risk |
+| `Blocked(address account)` | The issuer has blocklisted the account |
+| `AssetHalted(bytes32 symbol)` | The asset's band is halted |
+| `CorporateActionPending(bytes32 symbol)` | A multiplier change is pending |
+| `SessionUnknown()`, `SequencerNotSettled()`, `LiquidityUnknown(bytes32 symbol)` | The band or engine cannot give what the check needs |
+| `InsufficientMargin(int256 equity, uint256 requirement)` | Equity is below the requirement |
+| `WeekendLeverageExceeded(uint256 gross, int256 equity)` | Gross exposure passes equity times the weekend leverage cap, from the regular open on the last trading day before a closure until the reopening |
+| `InsufficientCollateral(uint256 amount)` | The short holds less USDG than asked |
+| `Insolvent()`, `DeficitOpen()` | See who bears a loss above |
+| `NoShort()` | The account has no short of the asset |
+| `NotShortfall(int256 equity, uint256 requirement)` | The short's equity is not below its requirement |
+| `AboveLimit()` | The pool asks more than a liquidation may pay |
+| `NotLending(address caller)` | The caller is not the asset's lending vault |
+| `LengthMismatch()`, `InvalidPool(address token, uint24 fee)` | Constructor checks |
+
+## Next
+
+- [Stock lending](/contracts/stock-lending)
+- [Liquidation](/concepts/liquidation)
+- [Short and baskets](/guides/short-and-baskets)
+- [List shorts](/api/list-shorts)

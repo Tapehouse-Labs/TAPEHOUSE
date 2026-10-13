@@ -1,0 +1,61 @@
+---
+title: "Trust and limits"
+description: "What each input to Tapehouse is signed by, what you can check yourself, who can pause what, and what is not live or not covered."
+---
+
+Every price Tapehouse uses is signed by someone, every parameter is public, and a short list of people hold keys that can change something. This page names all three, then lists what is not live and what the product is not.
+
+## What is signed, and by whom
+
+| Input | Signed by | Where it is checked |
+|---|---|---|
+| The 24/7 price of a share | RedStone's authorised signers (`redstone-primary-prod`) | The band, on chain, with the rules of RedStone's own `PrimaryProdDataServiceConsumerBase`: five authorised signers, three unique signers per feed, the median of their values, a package at most 180 seconds old and 60 seconds ahead |
+| NYSE's current and next status | RedStone, in one package | The band, which derives the 24/5 session from it (see [the session](/concepts/session)) |
+| A Stock Token's price while its session is open | Chainlink | The band reads the feed's rounds |
+| A trading halt on the underlying | Tapehouse's halt signer | The band, as an EIP-712 message bound to one band, one asset, at most an hour long |
+| Whether the token's oracle is paused, the multiplier, a pause or blocklist | The token's issuer, on the token itself | The band reads it at every quote |
+
+The halt is the one input the band takes on Tapehouse's own signature. Robinhood reports halts in its API but not on chain, so the halt signer writes them. A halt that is not renewed lapses within an hour. An owner can replace the halt signer with `setHaltSigner` and can do nothing else to the band: it can halt an asset and never price one. The per-asset configuration is set once in the constructor, and a new configuration is a new band.
+
+Everyone else's data stays signed by its author. Anyone can write RedStone's packages to the band, and the band rejects a package that fails the checks above. On the testnet, where Robinhood Chain has no Chainlink equity feeds for these assets, `RedStoneRoundFeed` stands in: it follows RedStone's regular-hours feed, so those feeds are not independent of RedStone's signers as Chainlink's are.
+
+## What is public and reproducible
+
+- The code. The contracts verify on Sourcify. Each Stylus program rebuilds byte for byte from the repository: with Docker, make and git, `make verify-stylus CHAIN=<chainId> TX=<deployment tx>` passes only when `cargo-stylus` prints `Verification successful`.
+- The parameters. The margin engine's volatilities, correlations, weekend gaps and floors are in `stylus/contracts/margin/parameters.json`, every update emits an event, and each value moves by at most a factor of 1.5 per update (a depth may also fall by any amount, since a smaller depth only raises requirements), with one update a day at most.
+- The scenarios. The engine draws them from its parameters on every call. `scenarioDigest` hashes a whole set, and 144 digests computed independently of the program sit beside it in the repository.
+- The reference. The margin engine is also written in Solidity and deployed beside the program. `make compare-margin CHAIN=46630` calls both with the same arguments, needs no key, and stops at the first answer that differs by one bit.
+- The evidence. `make backtest` repeats the backtest from public data: 890 closures since 2010, and every closure since Robinhood Chain launched. It states where the model falls short ([the backtest](/resources/backtest)).
+- The record. The band's `PriceWritten` and `Anchored` events rebuild its history, each seal is an event, and a gap cover's settlement uses only Chainlink rounds and recorded `Observed` events.
+- The contract registry. `deployments/46630.json` lists every address the SDKs use, and no SDK compiles one in.
+
+<Deployments chain="46630" />
+
+## Who can pause what
+
+- The issuer. Robinhood can pause every Stock Token or one, blocklist an address and burn from any address. A paused or blocklisted token backs no new loan, and the accounts and vaults count a burn against the holders of that asset. Paxos can pause USDG, freeze an address and wipe a frozen address's balance, and the contracts that hold USDG stop their deposits and redemptions while that holds. Tapehouse can do none of this.
+- The guardian. The margin accounts' owner names a guardian, which can pause new borrowing and withdrawals from positions in debt. Deposits, repayments, seizures and write-offs stay open, so a pause never stops a borrower from repaying or a liquidator from selling.
+- The owners. Owners set the engine's parameters within their floors and steps, the halt signer, the vault's rate model within bounds, and, once, the liquidator, the borrower of the vault and the backstop. Ownership moves in two steps (OpenZeppelin's `Ownable2Step`). A Morpho oracle's owner can set any price by re-pointing it, so a market on it must have a timelock as the owner ([Morpho oracle](/guides/morpho-oracle)).
+- Anyone. Writing a price, a halt message, the seal, observing, syncing a multiplier, starting an auction and settling a cover are open to any address.
+
+## What is not live
+
+- Mainnet. Tapehouse runs on Robinhood Chain's testnet, chain 46630. Arbitrum paused new Stylus activations on 2 October 2026, which blocks deploying the band and the margin program on any network until it lifts. The testnet's band and engine are second instances of programs that were verified before the pause.
+- An audit. There is none. The slither run, the fork tests and the reproducible builds are what stands in for it.
+- Six assets. The testnet prices two, TSLA and AMZN, because those are the Stock Tokens it has. The code is written for the launch set of six.
+- Real pools. The testnet has no Uniswap v3, so the repository deploys Uniswap's own contracts and seeds a pool per asset. The engine reads their depth, which is small, so loans are small.
+- Native Stock Tokens. The testnet's tokens predate `oraclePaused`, so `wTSLA` and `wAMZN` wrap them one to one and add it.
+- The reopening auction's phases. They need a real reopening to run. They are tested with a warped clock and end to end against a node front that states each phase.
+
+## What it is not
+
+Tapehouse is not a broker. A Stock Token is a debt security of its issuer, not a share: it carries no shareholder rights, redeems for cash only, and is not offered to United States persons.
+
+The app answers a visitor from Cuba, Iran, North Korea or Syria, or from Crimea, Sevastopol, Donetsk or Luhansk, with status 451, by the country and region headers Vercel sets. That is best effort: it keeps out those who do not hide where they are. A wallet on OFAC's Specially Designated Nationals list of digital currency addresses is told so and sends nothing; the list in the app is a copy, as current as its date. These are the app's measures. The contracts accept any address the issuer has not blocked.
+
+## Next
+
+- [The band](/concepts/band)
+- [Verification](/resources/verification)
+- [Contract addresses](/contracts/addresses)
+- [Networks](/networks)

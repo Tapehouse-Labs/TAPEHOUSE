@@ -1,0 +1,216 @@
+---
+title: "Short and baskets"
+description: "Short a Stock Token on its own USDG margin, and mint, hold and redeem an index basket of Stock Tokens."
+---
+
+This guide covers two products that sit beside the margin account. A short position borrows a Stock Token, sells it and keeps the USDG. A basket is one ERC-20 that holds a fixed set of up to eight Stock Tokens, which the margin engine prices as that portfolio.
+
+## Before you start
+
+The `client`, `deployments`, `wallet` and `owner` of [open an account](/guides/open-an-account), and for a short, USDG in your wallet. The examples use the TSLA pool and the basket `PAIR`, both in `deployments/46630.json`.
+
+## Short a Stock Token
+
+`ShortPositions` borrows the token from the asset's lending vault and sells it through the token's Uniswap v3 pool. Each address holds one short per Stock Token, with USDG as its only collateral, and nothing in your margin account is touched. An address your account authorized with `setAuthorization` may also sell, buy back and withdraw here.
+
+<Steps>
+<Step title="Add margin">
+
+Approve USDG to the short positions, then deposit.
+
+```ts
+import { erc20Abi } from 'viem'
+import { shorts } from '@tapehouse/sdk'
+
+const margin = 500_000_000n // 500 USDG
+
+await wallet.writeContract({
+  address: deployments.tokens.USDG,
+  abi: erc20Abi,
+  functionName: 'approve',
+  args: [deployments.tapehouse.ShortPositions, margin],
+})
+await wallet.writeContract(shorts.deposit(deployments, { asset: 'TSLA', amount: margin, account: owner.address }))
+```
+</Step>
+<Step title="Quote the sale">
+
+The quote comes from Uniswap's QuoterV2 for the token's pool, with a limit set by your slippage in basis points, from 0 to 10,000.
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+const amount = 10n ** 18n // one token
+
+const { proceeds, minProceeds } = await shorts.quoteSale(client, deployments, { asset: 'TSLA', amount, slippageBps: 50n })
+```
+</Tab>
+<Tab title="Go">
+```go
+sale, err := client.Shorts().QuoteSale(nil, "TSLA", amount, 50)
+```
+</Tab>
+<Tab title="Rust">
+```rust
+let sale = tapehouse.quote_sale("TSLA", amount, 50).await?;
+```
+</Tab>
+</Tabs>
+</Step>
+<Step title="Sell">
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+await wallet.writeContract(
+  shorts.sell(deployments, { asset: 'TSLA', amount, minProceeds, account: owner.address }),
+)
+```
+</Tab>
+<Tab title="Go">
+```go
+tx, err := client.Shorts().Sell("TSLA", amount, sale.MinProceeds, account)
+sent, err := client.Send(opts, tx)
+```
+</Tab>
+<Tab title="Rust">
+```rust
+tapehouse
+    .shorts()?
+    .sell(to_bytes32("TSLA")?, amount, sale.min_proceeds, account)
+    .send()
+    .await?
+    .get_receipt()
+    .await?;
+```
+</Tab>
+</Tabs>
+
+The sale goes through at no less than the band's low edge and your `minProceeds`. The engine margins the short as a negative quantity at the band's high edge, so it loses on up-moves. A sale must leave equity at or above the requirement, and within the weekend leverage cap.
+</Step>
+<Step title="Watch the short">
+
+```ts
+const { usdgHeld, debt, shares, epoch } = await shorts.position(client, deployments, owner.address, 'TSLA')
+const { equity, requirement, missing, regime } = await shorts.health(client, deployments, owner.address, 'TSLA')
+const { restricted, close } = await shorts.restriction(client, deployments, 'TSLA')
+```
+
+`usdgHeld` is negative in deficit, `debt` what the short owes in the token, and `health` is at the band's high edge with equity and requirement in USD with 18 decimals. When the band's centre falls 10% from the asset's last close, `restricted` is true and a short sells at no less than the band's centre for the rest of that day and the next, in UTC.
+</Step>
+<Step title="Buy back">
+
+```ts
+const { cost, maxCost } = await shorts.quoteCover(client, deployments, { asset: 'TSLA', amount, slippageBps: 50n })
+
+await wallet.writeContract(shorts.cover(deployments, { asset: 'TSLA', amount, maxCost, account: owner.address }))
+await wallet.writeContract(shorts.withdraw(deployments, { asset: 'TSLA', amount: margin, account: owner.address, receiver: owner.address }))
+```
+
+Buying back all the short owes closes it. In Go, `QuoteCover` and `Cover`; in Rust, `tapehouse.quote_cover(asset, amount, slippage_bps)` and `shorts()?.cover(...)`.
+</Step>
+</Steps>
+
+The lending fee accrues in the token, so a short owes its share of the vault's debt as borrow shares. Anyone may `shorts.liquidate` a short whose equity is below its requirement: at the band's high edge while the market is open, and only if it falls short at both edges while it is not. The caller earns half a percent of the cost. What the short's USDG cannot buy back falls on the token's lenders.
+
+## Mint and hold a basket
+
+A basket mints and redeems in kind. You deposit each of its Stock Tokens in the basket's proportions and receive shares, and a redemption gives each token back.
+
+<Steps>
+<Step title="Read the components and the price of a share">
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+import { baskets } from '@tapehouse/sdk'
+
+const { assets, tokens } = await baskets.components(client, deployments, 'PAIR')
+const shares = 10n ** 18n
+const needed = await baskets.previewMint(client, deployments, 'PAIR', shares)
+```
+</Tab>
+<Tab title="Go">
+```go
+components, err := client.Basket("PAIR").Components(nil)
+needed, err := client.Basket("PAIR").PreviewMint(nil, shares)
+```
+</Tab>
+<Tab title="Rust">
+```rust
+let components = tapehouse.basket_components("PAIR").await?;
+let needed = tapehouse.preview_mint("PAIR", shares).await?;
+```
+</Tab>
+</Tabs>
+
+`needed` lists, in the order of `components`, what minting `shares` takes of each token in raw units, rounded up. Redemptions round down, so neither side takes from the other holders.
+</Step>
+<Step title="Approve each token and mint">
+
+```ts
+const basket = deployments.baskets.PAIR
+
+for (const [i, token] of tokens.entries()) {
+  await wallet.writeContract({ address: token, abi: erc20Abi, functionName: 'approve', args: [basket, needed[i]!] })
+}
+await wallet.writeContract(baskets.mint(deployments, { basket: 'PAIR', shares, receiver: owner.address, maxAssets: needed }))
+```
+
+`maxAssets` caps what the mint takes of each token. In Go, `Basket("PAIR").Mint(shares, receiver, maxAssets)`.
+</Step>
+<Step title="Deposit the shares into your cross position">
+
+```ts
+import { accounts, CROSS } from '@tapehouse/sdk'
+
+await wallet.writeContract({ address: basket, abi: erc20Abi, functionName: 'approve', args: [deployments.tapehouse.MarginAccounts, shares] })
+await wallet.writeContract(accounts.deposit(deployments, { position: CROSS, token: basket, amount: shares, account: owner.address }))
+
+const through = await accounts.inBaskets(client, deployments, owner.address, CROSS)
+```
+
+The engine margins the shares as the Stock Tokens they redeem for, together with what the position holds directly, so their correlations count. `inBaskets` gives, by asset, what the shares would redeem for now. Shares go into the cross position only, and only while the account holds none of the basket's tokens in isolated positions.
+</Step>
+<Step title="Leave">
+
+Redeem the shares you hold, or unwrap them inside the position to hold the Stock Tokens there.
+
+```ts
+await wallet.writeContract(baskets.redeem(deployments, { basket: 'PAIR', shares, receiver: owner.address, owner: owner.address }))
+await wallet.writeContract(accounts.unwrap(deployments, { account: owner.address, basket: 'PAIR', shares }))
+```
+
+To redeem shares held in the position, withdraw them first with `accounts.withdraw`. In Rust, `tapehouse.unwrap(account, "PAIR", shares)` builds the unwrap.
+</Step>
+</Steps>
+
+The owner may propose a new target, which takes effect seven days later: `baskets.target` and `baskets.pendingTarget` read it, so a holder who disagrees redeems first. Anyone may rebalance the basket toward its target, and only if what comes in at the bands' low edges is worth at least what goes out at their high edges.
+
+## What to expect
+
+- A short's equity is its USDG less what it owes at the band's high edge, and it closes only by buying back what it owes. A short that owes more of the buy-ins than it holds closes only by liquidation.
+- A basket's share moves only as its tokens could. While the issuer pauses any of them, there is no transfer, mint or redemption.
+- A position that falls short has its baskets unwrapped and their tokens sold as any other.
+
+## Errors you may hit
+
+| Error | Cause |
+|---|---|
+| `NotShortable(symbol)`, `InvalidPool(token, fee)` | The asset has no pool with USDG to short through. |
+| `InsufficientMargin(equity, requirement)`, `WeekendLeverageExceeded(gross, equity)` | The sale or withdrawal would leave the short under its requirement or past the cap. |
+| `AssetHalted(symbol)`, `CorporateActionPending(symbol)`, `SessionUnknown()` | The band cannot price the asset now. |
+| `Insolvent()` | The short owes more of the buy-ins than it holds; it closes only by liquidation. |
+| `DeficitOpen()` | Another short of the same book owes more than it holds, so the book cannot pay out until that short is liquidated. |
+| `NotShortfall(equity, requirement)` | `liquidate` on a short that meets its requirement. |
+| `AboveLimit()` | The pool asks more than the limit a liquidation may pay. |
+| `Unauthorized(caller, account)` | The caller is not the account or an address it authorized. |
+| `AboveMaximum(token, amount, maxAmount)` | A basket mint would take more of a token than `maxAssets`. |
+| `ComponentPaused()`, `Blocked(account)` | The issuer paused one of the basket's tokens, or blocklisted an address. |
+| `BasketFrozen(basket)`, `AssetCapExceeded(symbol, cap)` | The accounts refuse a loan or withdrawal against a frozen basket, or one with a token past its cap. |
+
+## Next
+
+- [Borrow](/guides/borrow) against a cross position that holds a basket.
+- [Short positions](/contracts/short-positions) and [baskets](/contracts/baskets).
+- [Earn](/guides/earn) by lending a Stock Token to the shorts.

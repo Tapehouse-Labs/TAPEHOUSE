@@ -1,0 +1,155 @@
+---
+title: "Read a price"
+description: "Read a Stock Token's band, the market session and any trading halt from the chain, and tell a price from no price."
+---
+
+Every Stock Token has a band on chain: a low edge, a centre and a high edge, with a state that says how far to trust it. In this guide you read the band of TSLA, the session it follows and the halt that can stop it, from code or over HTTP. You need no wallet and no ether.
+
+## Before you start
+
+- A chain's registry, `deployments/46630.json` in the [repository](https://github.com/Tapehouse-Labs/TAPEHOUSE). The SDKs compile in no address.
+- An SDK, installed as in the [quickstart](/quickstart), or `curl`.
+- The testnet RPC `https://rpc.testnet.chain.robinhood.com`, or the public indexer `https://indexer-production-f5dc.up.railway.app`.
+
+The examples below reuse the `client` and `deployments` the quickstart builds.
+
+## 1. Read the band
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+import { band } from '@tapehouse/sdk'
+
+const { state, live, mid, halfBps, low, high } = await band.quote(client, deployments, 'TSLA')
+```
+</Tab>
+<Tab title="Go">
+```go
+quote, err := client.Band().Quote(nil, "TSLA")
+```
+</Tab>
+<Tab title="Rust">
+```rust
+let quote = tapehouse.band()?.quote(to_bytes32("TSLA")?).call().await?;
+```
+</Tab>
+<Tab title="HTTP">
+```bash
+curl "https://indexer-production-f5dc.up.railway.app/v1/contracts/tapehouse.Band/views/quote?symbol=TSLA"
+```
+</Tab>
+</Tabs>
+
+| Field | Meaning |
+|---|---|
+| `state` | 0 halted, 1 degraded, 2 closed, 3 open |
+| `live` | How many price legs are live |
+| `mid` | The band's centre, USD with 8 decimals |
+| `halfBps` | The half-width, in basis points |
+| `low`, `high` | The band's edges, USD with 8 decimals |
+
+All fields are zero while the band is halted. The margin accounts value a Stock Token at `low`, and a short position is margined at `high`. [The band](/concepts/band) explains how the width is set.
+
+## 2. Read the session
+
+The band's state follows two clocks: Chainlink's 24/5 session and NYSE's regular hours.
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+const { state, nyse, nyseNext, changeMs, boundaryMs } = await band.session(client, deployments)
+```
+</Tab>
+<Tab title="Go">
+```go
+session, err := client.Band().Session(nil)
+```
+</Tab>
+<Tab title="Rust">
+```rust
+let session = tapehouse.band()?.session().call().await?;
+```
+</Tab>
+<Tab title="HTTP">
+```bash
+curl "https://indexer-production-f5dc.up.railway.app/v1/contracts/tapehouse.Band/views/session"
+```
+</Tab>
+</Tabs>
+
+`state` is 0 when the session is not known, 1 closed and 2 open. `changeMs` and `boundaryMs` are milliseconds. [The session](/concepts/session) says what happens to the band at each boundary.
+
+## 3. Read the halt
+
+A halt stops the band from pricing an asset. Three things cause one: a halt signed by Tapehouse's halt signer, a pause of the Stock Token's oracle by its issuer, and a multiplier change that Chainlink has not yet confirmed.
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+const { signedHalt, until, issuedAt, oraclePaused } = await band.halt(client, deployments, 'TSLA')
+```
+</Tab>
+<Tab title="Go">
+```go
+halt, err := client.Band().Halt(nil, "TSLA")
+```
+</Tab>
+<Tab title="Rust">
+```rust
+let halt = tapehouse.band()?.halt(to_bytes32("TSLA")?).call().await?;
+```
+</Tab>
+<Tab title="HTTP">
+```bash
+curl "https://indexer-production-f5dc.up.railway.app/v1/contracts/tapehouse.Band/views/halt?symbol=TSLA"
+```
+</Tab>
+</Tabs>
+
+## 4. Read the price as a Chainlink feed
+
+Each asset has a `BandFeed` that serves the band's low side as Chainlink's `latestRoundData`, so a contract that already reads Chainlink can read the band.
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+const round = await band.latestRound(client, deployments, 'TSLA')
+const whole = await band.latestBand(client, deployments, 'TSLA')
+```
+</Tab>
+<Tab title="Go">
+```go
+round, err := client.Band().LatestRound(nil, "TSLA")
+whole, err := client.Band().LatestBand(nil, "TSLA")
+```
+</Tab>
+<Tab title="Rust">
+```rust
+let feed = tapehouse.band_feed("TSLA")?;
+let round = feed.latestRoundData().call().await?;
+let whole = feed.latestBand().call().await?;
+```
+</Tab>
+</Tabs>
+
+The round's `answer` is the band's low edge, and its round ID and `updatedAt` are the block time.
+
+## What to expect
+
+- Closed, degraded and halted bands are valid answers. A reader that needs a price checks `state` first: a halted band has no price, and a degraded one has a wider band.
+- While the market is closed the band has a price only while someone writes a fresh RedStone package to it, which anyone may do. A band nobody has written to for two minutes can have no live leg.
+- Pin a read to a block when you compare several: the TypeScript functions take `{ blockNumber }` as their last argument, the Go ones a `*bind.CallOpts` with `BlockNumber`, the Rust calls `.block(...)`, and the HTTP view a `block` query parameter.
+
+## Errors you may hit
+
+| Error | Cause |
+|---|---|
+| `The registry has no .bandFeeds.<asset>` | The registry names no `BandFeed` for that asset. Check `deployments/<chainId>.json`. |
+| `Error::Argument` in Rust, an error from `ToBytes32` in Go | An asset name longer than 32 bytes. |
+| `NoAnswer(symbol)` | A `BandFeed`'s `latestRoundData` or a Morpho oracle read a band with no price. See [the Morpho oracle guide](/guides/morpho-oracle). |
+
+## Next
+
+- [The band](/concepts/band) and [the session](/concepts/session).
+- [Open an account](/guides/open-an-account) to borrow against what you read.
+- [The Morpho oracle guide](/guides/morpho-oracle), if a lending market prices a Stock Token by its band.

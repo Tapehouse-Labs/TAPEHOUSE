@@ -1,0 +1,258 @@
+---
+title: "TypeScript SDK"
+description: "Read the band, margin accounts, shorts, baskets and gap cover and build their transactions with @tapehouse/sdk on viem."
+---
+
+`@tapehouse/sdk` is typed reads and transaction builders for Tapehouse's contracts, on viem 2. A read takes a viem client and returns plain values. A transaction function returns a viem contract call you pass to `simulateContract` and `writeContract`, so you choose the wallet, the signer and the gas settings.
+
+## Install
+
+```bash
+pnpm add @tapehouse/sdk viem
+```
+
+viem is a peer dependency (`^2.57.2`). The package is ESM, ships its own types, and is licensed `MIT OR Apache-2.0`.
+
+## Read and send
+
+Every function takes a chain's registry as its second argument, parsed from `deployments/<chainId>.json` with `parseDeployments`. The SDK compiles in no address.
+
+```ts
+import { readFileSync } from 'node:fs'
+import { createPublicClient, createWalletClient, http } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import { robinhoodTestnet } from 'viem/chains'
+import { accounts, band, CROSS, parseDeployments } from '@tapehouse/sdk'
+
+const deployments = parseDeployments(JSON.parse(readFileSync('deployments/46630.json', 'utf8')))
+const publicClient = createPublicClient({ chain: robinhoodTestnet, transport: http() })
+
+const { state, low, high } = await band.quote(publicClient, deployments, 'TSLA')
+
+const owner = '0xB986a345655097302cac8b4af6C948FfaF7f55FC'
+const price = await accounts.liquidationPrice(publicClient, deployments, owner, CROSS, 'TSLA', 50_000_000n)
+
+const wallet = createWalletClient({
+  account: privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`),
+  chain: robinhoodTestnet,
+  transport: http(),
+})
+const { request } = await publicClient.simulateContract({
+  ...accounts.borrow(deployments, { position: CROSS, assets: 50_000_000n, account: owner, receiver: owner }),
+  account: wallet.account,
+})
+const hash = await wallet.writeContract(request)
+```
+
+An asset is its symbol as a string (`'TSLA'`); the SDK turns it into the `bytes32` the contracts take with `toBytes32`. A position is `CROSS`, the cross position, or an asset's symbol as `bytes32` for its isolated position; `accounts.positions` lists them. Amounts are `bigint` in the token's raw units: USDG has 6 decimals, Stock Tokens 18, and the band's prices are USD with 8.
+
+Every read ends with an optional `at` argument, `{ blockNumber?: bigint }`. Reads that combine several calls (`repayment`, `lending`, `holding`, `limits`, `backstop.state` and others) take all of them at one block, the latest by default.
+
+## Registry
+
+| Export | What it does |
+|---|---|
+| `parseDeployments(json)` | Parses a registry. An address in mixed case must carry its checksum; each is returned checksummed. Returns `Deployments` |
+| `toBytes32(name)` | An asset symbol or a RedStone feed ID as its ASCII bytes, right-padded to 32 |
+| `CROSS` | The cross position, `zeroHash` |
+| `tokenPriceFeed(deployments, name)`, `sharePriceFeed(deployments, name)` | A `.chainlink` feed typed by what it prices: the Stock Token on Robinhood Chain, the share on Arbitrum One. Each throws on the other kind |
+| `SHARE_PRICE_CHAINS` | The chains whose Chainlink feeds price the share: `[42161]` |
+
+## Modules
+
+Each module is a namespace import: `import { band, accounts } from '@tapehouse/sdk'`. A transaction function takes `deployments` and a named-argument object and returns `{ address, abi, functionName, args }`. A read takes `client`, `deployments`, its arguments and `at`.
+
+### band
+
+The band's quote, session and halt, each asset's `BandFeed`, and Chainlink feeds. [The band](/concepts/band) says what the values mean.
+
+| Function | Arguments | Returns or does |
+|---|---|---|
+| `quote` | `client, deployments, asset` | `{ state, live, mid, halfBps, low, high }`; state is 0 halted, 1 degraded, 2 closed, 3 open |
+| `session` | `client, deployments` | `{ state, nyse, nyseNext, changeMs, boundaryMs }` |
+| `halt` | `client, deployments, asset` | `{ signedHalt, until, issuedAt, oraclePaused }` |
+| `price` | `client, deployments, feedId` | The RedStone value the band stores: `{ value, packageTimestampMs, writtenAt }` |
+| `writePrices` | `deployments, source, feedIds` | The band's `writePrices` with the payload `source` returns. `source` is a `PackageSource`, your own RedStone gateway client or relay; the SDK holds no API key |
+| `latestRound` | `client, deployments, asset` | The `BandFeed`'s low side as a Chainlink round |
+| `latestBand` | `client, deployments, asset` | The whole band from the `BandFeed`, with the market and both halt sources |
+| `sealed` | `client, deployments, asset, reopenMs` | The band sealed before a reopen; all zero if none |
+| `seal` | `deployments, asset` | `BandFeed.seal()`, which anyone may call in the ten minutes before the session reopens |
+| `chainlinkRound` | `client, feed` | The latest round of a `.chainlink` feed, with what it prices |
+
+### accounts
+
+The margin accounts. `position` is `CROSS` or an asset's `bytes32`.
+
+| Function | Arguments | Does |
+|---|---|---|
+| `setAuthorization` | `deployments, authorized, allowed` | Lets an address borrow, withdraw, deposit and act for your shorts |
+| `setMandate` | `deployments, { agent, expiresAt, maxDebt, maxLeverage }` | Bounded authority for an agent until `expiresAt`; `expiresAt` of 0 ends it |
+| `deposit` | `deployments, { position, token, amount, account }` | Deposits a token; a basket's address deposits its shares into `CROSS` |
+| `depositWithPermit` | `deployments, { position, token, amount, account, deadline, signature }` | The same with an EIP-2612 permit |
+| `wrap` | `deployments, { account, value }` | Ether into WETH for an account |
+| `withdraw` | `deployments, { position, token, amount, account, receiver }` | Withdraws collateral |
+| `borrow` | `deployments, { position, assets, account, receiver }` | Borrows USDG |
+| `repay` | `deployments, { position, assets, account }` | Repays debt first, then premium. Anyone may |
+| `unwrap` | `deployments, { account, basket, shares }` | Redeems basket shares in the cross position for the Stock Tokens |
+| `lend`, `unlend`, `recall` | `deployments, { position, token, amount, account }` | Lend a Stock Token through its lending vault, take it back, or queue a recall |
+| `settle` | `deployments, { account, position, token }` | Takes what the vault holds for a recall. Anyone may |
+| `observe` | `deployments, { asset }` | Records an asset seen halted. Anyone may |
+| `isAuthorized` | `client, deployments, account, authorized` | Whether an address may act for an account |
+| `mandate`, `mandateStatus` | `client, deployments, { account, agent }` and, for status, `position` | The mandate, and whether the agent may borrow now with `reason` and `debtRoom` |
+| `health` | `client, deployments, account, position` | `{ equity, requirement, missing, regime }` in USD with 18 decimals |
+| `collateral` | `client, deployments, account, position, token` | What the position holds of a token |
+| `leverage` | `client, deployments, account, position` | Gross exposure over equity in basis points |
+| `liquidationPrice` | `client, deployments, account, position, asset, borrowing` | The price at or above which the position meets its requirement once it owes `borrowing` more USDG |
+| `repayment` | `client, deployments, account, position` | `{ debt, premium, assets }`, what a full repayment takes |
+| `inBaskets` | `client, deployments, account, position` | What the position holds of each Stock Token through its baskets |
+| `lending` | `client, deployments, account, position, token` | `{ lent, sellable, claim, recalls }` |
+| `recovery` | `client, deployments, asset` | When borrowing against an asset reopens after it was seen unusable |
+| `holding` | `client, deployments, asset, token` | The accounts' holding of an asset against its cap |
+| `limits` | `client, deployments` | Debt, caps, weekend leverage, the guardian's pause and the premium rate |
+| `issuer` | `client, token, holders` | The issuer's pause and its registry's blocks |
+| `stocks`, `positions` | `client, deployments` | The engine's assets and tokens, and every position an account may hold |
+
+### engine
+
+The margin engine's requirement for any portfolio. A `Portfolio` is `{ quantities, prices }`: signed amounts with 18 decimals and USD prices with 8, in the engine's order.
+
+| Function | Arguments | Returns |
+|---|---|---|
+| `requirement` | `client, deployments, portfolio, { horizon?, spansClosure }` | `{ margin, missing }` over `horizon` seconds, two days (`HORIZON`) by default |
+| `currentRequirement` | `client, deployments, portfolio` | `{ margin, missing, regime }` for the session now |
+
+### supply
+
+The vault USDG lenders deposit into.
+
+| Function | Arguments | Does |
+|---|---|---|
+| `deposit` | `deployments, { assets, receiver }` | Deposits USDG for shares |
+| `depositWithPermit` | `deployments, { assets, receiver, deadline, signature }` | The same with a USDG permit |
+| `withdraw` | `deployments, { assets, receiver, owner }` | Withdraws USDG, at most what the vault holds and has not lent |
+| `redeem` | `deployments, { shares, receiver, owner }` | Redeems shares |
+| `market` | `client, deployments` | Rates, utilisation, what it holds and lent, and `open` |
+| `lender` | `client, deployments, owner` | A lender's shares, what they are worth and what may leave now |
+
+### backstop
+
+The gap backstop that absorbs a closure's losses.
+
+| Function | Arguments | Does |
+|---|---|---|
+| `deposit` | `deployments, { assets, receiver }` | Deposits USDG |
+| `startCooldown` | `deployments` | Starts the cooldown of all the caller's shares |
+| `withdraw`, `redeem` | `deployments, { assets or shares, receiver, owner }` | Takes USDG out within the cooldown's window |
+| `claimGains` | `deployments, token` | Claims a Stock Token gained from the auction |
+| `claim` | `deployments` | Claims the premium set aside for the backstop. Anyone may |
+| `state` | `client, deployments` | Holdings, exposure limits per position, premium and terms |
+| `depositor` | `client, deployments, owner, tokens` | A depositor's shares, cooldown and gains |
+
+### auction
+
+The reopening auction. A bid is committed under a hash, then revealed. `commitment` computes the hash and `clearingPrice` the one price the contract accepts.
+
+| Function | Arguments | Does |
+|---|---|---|
+| `commitment` | `{ bidder, asset, openMs, quantity, price, salt }` | The hash a bid is committed under |
+| `clearingPrice` | `bids, supply, floor` | A round's only clearing price, or `undefined` if none clears |
+| `commit` | `deployments, { asset, commitment, deposit }` | Commits a hidden bid |
+| `reveal` | `deployments, { asset, openMs, quantity, price, salt }` | Reveals it |
+| `claim` | `deployments, { asset, openMs, index }` | Sends the bidder its tokens and the rest of its escrow |
+| `forfeit` | `deployments, { asset, openMs, commitment }` | Forfeits an unrevealed commitment. Anyone may |
+| `clear` | `deployments, { asset, openMs, price }` | Clears a round. Anyone may |
+| `enroll` | `deployments, { account, position, asset }` | Enrolls a position short at its bands' low edges. Anyone may |
+| `constants`, `phase`, `lastOpenMs` | `client, deployments` | The bond, windows and phase |
+| `round`, `previewFloor`, `commitmentOf` | `client, deployments, { asset, openMs }` (and `commitment`) | A round's lots and bids, the floor it will open with, and a commitment |
+
+### stockLending
+
+| Function | Arguments | Returns |
+|---|---|---|
+| `terms` | `client, deployments, asset` | Utilisation, rates, what the vault holds for recalls, what may still be borrowed, `maxUtilization`, `notice`, `feeShare` |
+| `ticket` | `client, deployments, asset, id` | A recall ticket and the ticket next in turn |
+
+### sponsorship
+
+The ERC-4337 side. [The sponsor](/operate/sponsor) is the service that pays.
+
+| Function | Arguments | Does |
+|---|---|---|
+| `entryPoint`, `accountFactory`, `paymaster` | `deployments` | The registry's EntryPoint, SimpleAccount factory and sponsor paymaster |
+| `accountAddress` | `client, deployments, owner` | The SimpleAccount the factory makes for an owner, salt 0 |
+| `freeOperationsLeft` | `client, deployments, account` | Sponsored operations left |
+| `asCall` | one transaction of this SDK | The same as a call of a user operation |
+| `permit` | `client, { token, owner, account, value, deadline }` | EIP-2612 typed data for `signTypedData`, its domain read from the chain |
+| `pull` | `{ token, owner, account, value, deadline, signature }` | The permit and transfer by which the account takes the token |
+| `callGas` | `client, deployments, account, callData` | The cold L2 gas of the account's calls |
+
+### baskets
+
+A basket is keyed by its name in `.tapehouse.Baskets`, for example `'PAIR'`.
+
+| Function | Arguments | Does |
+|---|---|---|
+| `mint` | `deployments, { basket, shares, receiver, maxAssets }` | Mints shares for at most `maxAssets` of each Stock Token |
+| `redeem` | `deployments, { basket, shares, receiver, owner }` | Redeems shares for the Stock Tokens |
+| `components` | `client, deployments, basket` | `{ assets, tokens }` |
+| `previewMint`, `previewRedeem` | `client, deployments, basket, shares` | What a mint takes (rounded up) or a redemption gives (rounded down) |
+| `target`, `pendingTarget` | `client, deployments, basket` | Units per share in effect, and a proposed target with its `effectiveAt` |
+
+### shorts
+
+| Function | Arguments | Does |
+|---|---|---|
+| `deposit` | `deployments, { asset, amount, account }` | Adds USDG to a short |
+| `withdraw` | `deployments, { asset, amount, account, receiver }` | Takes USDG out |
+| `sell` | `deployments, { asset, amount, minProceeds, account }` | Borrows the asset and sells it |
+| `cover` | `deployments, { asset, amount, maxCost, account }` | Buys it back and repays |
+| `liquidate` | `deployments, { account, asset }` | Buys back a short that fell short. Anyone may |
+| `mark` | `deployments, asset` | Records the band centre for the restriction after a 10% fall. Anyone may |
+| `quoteSale`, `quoteCover` | `client, deployments, { asset, amount, slippageBps }` | Uniswap QuoterV2's quote with `minProceeds` or `maxCost`; slippage is 0 to 10,000 basis points |
+| `position`, `health` | `client, deployments, account, asset` | A short's USDG, debt, shares and epoch, and its equity and requirement |
+| `epoch`, `book`, `restriction`, `fee` | `client, deployments, asset` (and `epoch` for `book`) | The asset's current book epoch, a book's shares and USDG, whether a short sells now, and the pool's fee tier |
+
+### morpho
+
+| Function | Arguments | Returns |
+|---|---|---|
+| `price` | `client, deployments, asset` | `{ price }`, or `{ price: undefined, noPrice, revert }` with `noPrice` one of `stale`, `halted`, `sequencerNotSettled`. Never zero |
+| `halt` | `client, deployments, asset` | The halt as the oracle reports it |
+| `oracle` | `client, deployments, asset` | The band, symbol, tokens, scale factor and owner |
+
+### gapCover
+
+| Function | Arguments | Does |
+|---|---|---|
+| `buy` | `deployments, { asset, maxPremium, holder, notional, deductibleBps, limitBps }` | Buys cover for the coming closure |
+| `deposit`, `withdraw`, `redeem` | as in `supply` | Writer deposits and exits |
+| `record` | `deployments` | Records the session's next close, or the reopen. Anyone may |
+| `measure` | `deployments, asset` | Keeps the week's realised move on sale. Anyone may |
+| `observe` | `deployments, { asset, closesMs }` | Records the band in this minute's slot after a closure. Anyone may |
+| `settle` | `deployments, { asset, closesMs, referenceRound, lastRound }` | Settles an asset's series. Anyone may |
+| `release` | `deployments, id` | Credits a cover's payout or refund to its holder. Anyone may |
+| `claim` | `deployments, receiver` | Sends the caller its credited USDG |
+| `quote` | `client, deployments, asset, layer` | The premium and the USDG it reserves |
+| `minDeductible`, `pricingGap`, `capacity`, `lastCloseMs`, `sales` | `client, deployments` (and `asset`) | What the cover prices and sells now |
+| `series`, `cover`, `holdings`, `payouts`, `writers`, `writer` | `client, deployments, ...` | Series, covers, a holder's covers, payouts and writers |
+| `payout` | `layer, { referencePrice, price }` | What a settled cover pays, computed locally |
+
+[The gap cover contract](/contracts/gap-cover) has the rules behind each call.
+
+### ABIs and errors
+
+The contracts' ABIs are exported `as const` from the build: `bandAbi`, `bandFeedAbi`, `marginAbi`, `marginAccountsAbi`, `liquidatorAbi`, `gapBackstopAbi`, `reopeningAuctionAbi`, `stockLendingVaultAbi`, `supplyVaultAbi`, `shortPositionsAbi`, `basketAbi`, `gapCoverAbi`, `morphoBandOracleAbi`, `sponsorPaymasterAbi`, `stockTokenAbi`, `usdgAbi`, `wethAbi`, `aggregatorAbi`, `quoterV2Abi`, `uniswapV3PoolAbi`, `morphoBlueAbi` and others. `decodeRevert`, `decodeRevertData` and `errorsAbi` are on [the errors page](/sdks/errors).
+
+## Authorization
+
+An account acts for itself. For anyone else to borrow, withdraw, deposit or act on its shorts, the owner calls `accounts.setAuthorization(deployments, authorized, true)`. Until then the call reverts with `Unauthorized(caller, account)`. For an agent that should be bounded, `accounts.setMandate` caps its debt and leverage and gives it an end time.
+
+## Examples
+
+The package has two runnable examples. `examples/devnode.ts` runs the band, accounts, shorts, baskets and gap cover modules against a local Nitro dev node (`PRIVATE_KEY=0x… pnpm devnode RPC_URL DEPLOYMENTS_JSON PAYLOAD_FILE`, with the account owner's key). `examples/sponsored.ts` sends a user operation through the sponsor paymaster (`PRIVATE_KEY=0x… pnpm sponsored RPC_URL BUNDLER_URL SPONSOR_URL DEPLOYMENTS_JSON`).
+
+## Next
+
+- [SDKs overview](/sdks/overview): the three SDKs side by side.
+- [Errors](/sdks/errors): decode a revert and fix it.
+- [Borrow](/guides/borrow): the same calls in a guide.

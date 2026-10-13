@@ -1,0 +1,73 @@
+---
+title: "Run the reference bidder"
+description: "Run the reference bot that bids in the reopening auction and buys in liquidation auctions, with its pricing rule, state file and environment variables."
+---
+
+The reference bidder bids in the reopening auction and buys in the liquidation auctions. It is built only on the Go SDK, go-ethereum and the indexer's public API, imports nothing else from the repository, and is meant to be copied out and run against the published SDK. Start in dry-run mode to see what it would do.
+
+## Run it
+
+```bash
+export ROBINHOOD_TESTNET_RPC_URL=https://rpc.testnet.chain.robinhood.com
+export TAPEHOUSE_BIDDER_KEYSTORE=~/.foundry/keystores/tapehouse-bidder
+export TAPEHOUSE_BIDDER_PASSWORD_FILE=~/.tapehouse/bidder.password
+export TAPEHOUSE_INDEXER_URL=https://indexer-production-f5dc.up.railway.app
+export TAPEHOUSE_BIDDER_DRY_RUN=true
+make run-bidder CHAIN=46630
+```
+
+`CHAIN` is 4663, 46630, 42161 or 412346, and `REGISTRY=<file>` overrides the registry. With `TAPEHOUSE_BIDDER_DRY_RUN=true` the bot simulates every transaction and sends none. Remove it to bid for real, from an account that holds USDG.
+
+## Environment variables
+
+| Variable | Meaning | Default |
+| --- | --- | --- |
+| `TAPEHOUSE_DEPLOYMENTS` | Path of the registry file. Required. | none |
+| `TAPEHOUSE_RPC_URL` | RPC of the registry's chain. Required. | none |
+| `TAPEHOUSE_BIDDER_KEYSTORE`, `TAPEHOUSE_BIDDER_PASSWORD_FILE` | The bidding account's keystore and the file that holds its password. | none |
+| `PRIVATE_KEY` | A hex key, for a dev node only. | none |
+| `TAPEHOUSE_INDEXER_URL` | Indexer for the liquidation auctions. Without it they are not watched. | none |
+| `TAPEHOUSE_INDEXER_KEY` | An API key for the indexer's keyed tier. | none |
+| `TAPEHOUSE_BIDDER_STATE` | Path of the state file. | `bidder-<chainId>.json` |
+| `TAPEHOUSE_BIDDER_BUDGET` | Budget for each round and each purchase, in USDG raw units. | 1,000 USDG (`1000000000`) |
+| `TAPEHOUSE_BIDDER_DISCOUNT_BPS` | Discount from the bot's price, below 10,000. | 300 |
+| `TAPEHOUSE_BIDDER_COMMIT_LEAD` | How long before the commit phase ends the bot commits, as a Go duration. | `15m` |
+| `TAPEHOUSE_BIDDER_ASSETS` | Assets to bid on, separated by commas. | every asset of the accounts |
+| `TAPEHOUSE_BIDDER_DRY_RUN` | `true` to simulate every transaction and send none. | off |
+
+## Its price
+
+A Stock Token is worth to the bot the lower of two values, less the discount: the low edge of the band sealed before the reopen, and the low edge of the band now, the weekend's last 24/7 leg. The price is therefore never above what the band's low edge says the token is worth. A seal counts in state 1 or 3, and the band now in state 1, 2 or 3 with a live leg. With neither, the bot has no price and makes no bid.
+
+## The reopening auction
+
+The bot commits once for each asset and round, within `TAPEHOUSE_BIDDER_COMMIT_LEAD` of the end of the commit phase, so that its price carries the latest 24/7 leg. It bids for as much as the budget buys at its price, at most the round's supply. The deposit is the budget, at least the bond, and is the same for every bid the budget allows, so it does not reveal the bid's size.
+
+An unrevealed commitment forfeits at least the bond, and a reveal the auction refuses leaves its commitment unrevealed. So before it commits, the bot checks three things against the round's floor: the price is at or above the floor, the bid is worth at least the minimum bid at the floor, and its escrow is within the deposit. It reads the bond, the minimum bid and the windows from the auction.
+
+Each committed bid is revealed at the first tick inside the half hour before the open. A bid outbid in a full book gets its deposit back, which is no error. Once the round is cleared, or its hour has lapsed, the bot claims each of its bids and drops the round. [Reopening auction](/guides/auction) walks through the rounds.
+
+## The state file
+
+Before it sends a commit, the bot writes the bid's quantity, price and salt to `TAPEHOUSE_BIDDER_STATE`, syncs the file and renames it over the old one. A restart still reveals the bid, and a crash between commit and reveal loses nothing. A bid whose commit never landed has nothing to reveal and is dropped with its round.
+
+Keep the file across restarts. Without it a committed bid cannot be revealed and its deposit is at risk.
+
+## Liquidation auctions
+
+Every 15 seconds the bot reads the auctions started in the last four hours from the indexer's API, on the public tier unless `TAPEHOUSE_INDEXER_KEY` is set, and keeps those the liquidator still shows live. It buys each Stock Token the position holds once the ask has fallen to its own price from the band now, for as much as the budget buys, with the ask's cost rounded up as its limit. It never buys WETH, whose price is Chainlink's and not the band's. See [Liquidation](/concepts/liquidation).
+
+## Approvals and security
+
+Before each commit or purchase the bot approves exactly the deposit or the limit, never an unlimited allowance. The key is read from a keystore with its password in a file, or from `PRIVATE_KEY` on a dev node, and never from an argument. The bot logs JSON with each secret replaced by `redacted`; RPC URLs and the indexer key never appear in a log. Fund the account with the budget you are willing to risk and some ether for gas.
+
+## Deploy on Railway
+
+`bidder` deploys from `services/Dockerfile` with `SERVICE=bidder`. Set `TAPEHOUSE_BIDDER_KEYSTORE_B64` and `TAPEHOUSE_BIDDER_PASSWORD_B64`, which the image turns into the keystore file and `TAPEHOUSE_BIDDER_PASSWORD_FILE`. Mount a volume at `/data`, set `TAPEHOUSE_BIDDER_STATE=/data/bidder.json` and `RAILWAY_RUN_UID=0`, since Railway mounts volumes as root. The bidder serves no HTTP, so it has no health check and relies on the restart policy.
+
+## Next
+
+- [Reopening auction](/guides/auction)
+- [Reopening auction contract](/contracts/reopening-auction)
+- [Liquidation](/concepts/liquidation)
+- [Run the keepers](/operate/keepers)

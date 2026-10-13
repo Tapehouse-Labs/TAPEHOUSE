@@ -1,0 +1,134 @@
+---
+title: "Supply vault"
+description: "The ERC-4626 vault where lenders deposit USDG and earn the interest the margin accounts pay, with its functions, rates, roles and SDK calls."
+---
+
+`SupplyVault` holds the USDG that the margin accounts borrow. Lenders deposit USDG and receive `thUSDG` shares, an [ERC-4626](https://eips.ethereum.org/EIPS/eip-4626) vault built on OpenZeppelin Contracts, and earn all the interest the borrower pays. You can deposit, read the rates and withdraw what the vault holds.
+
+## Address
+
+Robinhood Chain testnet, chain 46630, from `deployments/46630.json`, under `tapehouse.SupplyVault`.
+
+| Name | Address |
+|---|---|
+| Supply vault | `0xDa62E570B6d1A038C1b3b011555BdA1fFd82038F` |
+
+Testnet, not audited.
+
+## Deposit and read the market
+
+```ts
+import { readFileSync } from 'node:fs'
+import { createPublicClient, http } from 'viem'
+import { parseDeployments, supply } from '@tapehouse/sdk'
+
+const deployments = parseDeployments(JSON.parse(readFileSync('deployments/46630.json', 'utf8')))
+const client = createPublicClient({ transport: http('https://rpc.testnet.chain.robinhood.com') })
+
+const market = await supply.market(client, deployments)
+// { supplyRate, borrowRate, utilization, idle, debt, totalAssets, open }
+
+const call = supply.deposit(deployments, { assets: 100_000_000n, receiver: '0x...' })
+```
+
+`supply.deposit` returns a viem contract call for `simulateContract` and `writeContract`. The amount is in USDG base units. The vault takes no deposit until its borrower is set, and `open` is false while deposits are stopped.
+
+## Functions
+
+### ERC-4626 and the vault's own reads
+
+| Function | Who may call | What it does | Key reverts |
+|---|---|---|---|
+| `deposit(uint256 assets, address receiver)` | Anyone | Deposits USDG for shares to `receiver`. | `ERC4626ExceededMaxDeposit` while deposits are closed |
+| `mint(uint256 shares, address receiver)` | Anyone | Deposits the USDG that `shares` cost. | `ERC4626ExceededMaxMint` |
+| `depositWithPermit(uint256 assets, address receiver, uint256 deadline, uint8 v, bytes32 r, bytes32 s)` | Anyone | Deposits with an EIP-2612 permit for USDG. A permit already used, as by a front-runner, does not stop the deposit if the allowance stands. | As `deposit` |
+| `withdraw(uint256 assets, address receiver, address owner)` | Owner of the shares, or an approved spender | Sends USDG to `receiver` for the owner's shares, at most what the vault holds. | `ERC4626ExceededMaxWithdraw` |
+| `redeem(uint256 shares, address receiver, address owner)` | Owner of the shares, or an approved spender | Redeems shares for USDG, at most what the vault holds. | `ERC4626ExceededMaxRedeem` |
+| `totalAssets()` | Anyone, view | The USDG the vault holds by its own count plus what the borrower owes. | None |
+| `maxDeposit`, `maxMint`, `maxWithdraw`, `maxRedeem` | Anyone, view | `maxDeposit` and `maxMint` are zero until the borrower is set. All four are zero while USDG is paused, the vault is frozen or its balance is below its count. `maxRedeem` is also capped by the USDG the vault holds, and `maxWithdraw` follows it. | None |
+| `previewDeposit`, `previewMint`, `previewWithdraw`, `previewRedeem`, `convertToShares`, `convertToAssets`, `asset()` | Anyone, view | The ERC-4626 views. | None |
+| `debt()` | Anyone, view | What the borrower owes now, interest included, rounded up. | None |
+| `idle()` | Anyone, view | The USDG the vault holds for lenders and the borrower, by its own count. | None |
+| `utilization()` | Anyone, view | The share of the vault's assets lent, with 18 decimals. | None |
+| `borrowRate()`, `supplyRate()` | Anyone, view | The rates a year, with 18 decimals. Lenders earn the borrow rate on the share lent. | None |
+| `borrowIndex()`, `scaledDebt()`, `lastAccrual()` | Anyone, view | The borrow index with 27 decimals, the borrower's debt divided by the index at which it was taken, and when interest last accrued. | None |
+| `rateModel()` | Anyone, view | The `RateModel` struct: `optimal`, `base`, `slope1`, `slope2`, in basis points. | None |
+| `borrower()` | Anyone, view | The one address that may borrow and write debt off. | None |
+| `sync()` | Anyone | Brings the vault's count down to its balance, as after the issuer wipes a frozen vault. It never counts USDG sent to the vault directly. Emits `Sync`. | None |
+
+Shares have 6 more decimals than USDG, OpenZeppelin's virtual offset, so a first depositor cannot inflate the share price against the next.
+
+### Borrower and owner
+
+| Function | Who may call | What it does | Key reverts |
+|---|---|---|---|
+| `borrow(uint256 assets, address receiver)` | The borrower | Lends USDG from the vault. | `NotBorrower`, `InsufficientLiquidity(requested, available)` |
+| `repay(uint256 assets)` | The borrower | Repays up to `assets` from the borrower and returns what it repaid. | `NotBorrower` |
+| `writeOff(uint256 assets)` | The borrower | Writes off up to `assets` of debt. Every share loses its part. | `NotBorrower` |
+| `setBorrower(address newBorrower)` | Owner, once | Sets the only borrower, which is the margin accounts. | `BorrowerAlreadySet`, `InvalidBorrower` |
+| `setRateModel(RateModel model)` | Owner | Sets the rate model within its bounds, at once, after accruing at the old rate. | `InvalidRateModel` |
+| `transferOwnership(address)`, `acceptOwnership()` | Owner; pending owner for `acceptOwnership` | `Ownable2Step` behaviour. | `OwnableUnauthorizedAccount` |
+| `renounceOwnership()` | Nobody | Always reverts. | `OwnershipCannotBeRenounced` |
+
+The borrower is the [margin accounts](/contracts/margin-accounts). A person never calls `borrow`, `repay` or `writeOff` directly: they go through the accounts.
+
+## Rates
+
+The borrow rate rises with utilisation in two straight lines. The rate model gives `base` at zero utilisation, `base + slope1` at `optimal` and `base + slope1 + slope2` at full utilisation, in basis points a year, and the rate is linear in between. The rate model's bounds are:
+
+| Bound | Value |
+|---|---|
+| `MIN_OPTIMAL`, `MAX_OPTIMAL` | 100 and 9,900 basis points |
+| `slope1` | At most `slope2` |
+| Highest rate, `MAX_RATE` | 100,000 basis points a year, 1,000% |
+
+The model deployed on testnet is read with `rateModel()`.
+
+## Events
+
+| Event | Emitted when |
+|---|---|
+| `Deposit(address indexed sender, address indexed owner, uint256 assets, uint256 shares)` | A deposit or mint. |
+| `Withdraw(address indexed sender, address indexed receiver, address indexed owner, uint256 assets, uint256 shares)` | A withdrawal or redemption. |
+| `Transfer`, `Approval` | The share token's ERC-20 events. |
+| `BorrowerSet(address indexed borrower)` | The owner sets the borrower. |
+| `RateModelSet(uint16 optimal, uint32 base, uint32 slope1, uint32 slope2)` | The rate model changes. |
+| `InterestAccrued(uint256 interest, uint256 index)` | Interest accrues on the debt. |
+| `Borrow(address indexed receiver, uint256 assets)` | The borrower borrows. |
+| `Repay(address indexed payer, uint256 assets)` | The borrower repays. |
+| `WriteOff(uint256 assets)` | The borrower writes debt off, a loss to lenders. |
+| `Sync(uint256 idle)` | The vault's count falls to its balance. |
+| `OwnershipTransferStarted`, `OwnershipTransferred` | Ownership moves in two steps. |
+
+## Roles and admin powers
+
+- The borrower, the margin accounts, is set once by the owner and can never change. No lender's USDG can be lent to a borrower chosen after it was deposited.
+- The owner can set the rate model at once, within its bounds, and move ownership. It cannot move funds.
+- USDG's issuer can pause USDG or freeze an address, and then wipe a frozen address's balance. While USDG is paused, the vault is frozen or its balance is below its count, every `max*` view returns zero, so deposits and withdrawals revert with ERC-4626's `ERC4626ExceededMax...` errors. After a wipe the vault stays closed until `sync()` brings its count down to its balance, and lenders' shares lose what was wiped.
+
+## Invariants
+
+- The vault's assets are its own count of the USDG it holds plus what the borrower owes. USDG sent to it directly changes no share's value.
+- The debt grows by a borrow index with 27 decimals, compounded at every deposit, withdrawal, loan and repayment, and always rounded up, in lenders' favour.
+- A lender can withdraw only what the vault holds. The rest returns as the borrower repays.
+- Lenders bear last whatever the borrower cannot repay and the gap backstop does not cover. Until a write-off, shares keep their price, so a lender who withdraws before one loses nothing and those who stay bear it all.
+
+## SDK
+
+TypeScript, module `supply` in `@tapehouse/sdk`.
+
+| Contract function | SDK call |
+|---|---|
+| `deposit` | `supply.deposit(deployments, { assets, receiver })` |
+| `depositWithPermit` | `supply.depositWithPermit(deployments, { assets, receiver, deadline, signature })`, with the permit signature as one hex string |
+| `withdraw` | `supply.withdraw(deployments, { assets, receiver, owner })` |
+| `redeem` | `supply.redeem(deployments, { shares, receiver, owner })` |
+| `supplyRate`, `borrowRate`, `utilization`, `idle`, `debt`, `totalAssets`, `maxDeposit` | `supply.market(client, deployments)`, all read at one block |
+| A lender's shares and what they are worth | `supply.lender(client, deployments, owner)` |
+| `mint`, `rateModel`, `borrowIndex`, `sync`, `setRateModel` | No wrapper. Use `supplyVaultAbi`, which the package exports, with viem. |
+
+## Next
+
+- [Earn on USDG](/guides/earn)
+- [Margin accounts](/contracts/margin-accounts)
+- [Gap backstop](/contracts/gap-backstop)

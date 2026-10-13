@@ -1,0 +1,98 @@
+---
+title: "Mandates"
+description: "Give an agent a bounded authority over a margin account: a time, a debt limit and a leverage limit, with loans and withdrawals sent only to the account."
+---
+
+A mandate lets an account give one address, such as an agent's own wallet, a bounded authority over its margin positions until a time. It is the alternative to a full authorization, which lets an address do everything the account can do. The account sets a mandate with `setMandate` on `MarginAccounts`, which the MCP server prepares as `accounts_set_mandate`, and an agent checks where it stands with `accounts_mandate` before it borrows.
+
+## Mandate or authorization
+
+| | `setAuthorization` | `setMandate` |
+|---|---|---|
+| Borrow | To any address | Only to the account itself, within the limits |
+| Withdraw | Any collateral token, to any address | Only to the account itself, within the limits |
+| Deposit, repay, lend | Yes | Yes |
+| Ends | When the account signs the reverse | At `expiresAt`, or when the account sets `expiresAt` to 0 |
+| Limits on debt and leverage | None | `maxDebt` and `maxLeverage` |
+
+An address the account also authorized in full is not bound by a mandate. Give an agent a mandate, not an authorization.
+
+## Give a mandate
+
+The account itself signs. With the MCP server, call `accounts_set_mandate`:
+
+| Input | Type | Meaning |
+|---|---|---|
+| `agent` | address | The address that may act within the mandate. Mixed-case checksum required |
+| `expiresAt` | integer | When the mandate ends, in Unix seconds, in the future. `0` ends the mandate |
+| `maxDebt` | decimal string | The most debt a position may carry, in USDG base units (6 decimals) |
+| `maxLeverage` | integer | The highest leverage, gross exposure over equity, in basis points, from 10000 (1x) up |
+
+For example, an agent that may carry up to 500 USDG of debt at up to 2x for a day:
+
+```json
+{
+  "agent": "0xAgentAddressInMixedCaseChecksumForm",
+  "expiresAt": 1893456000,
+  "maxDebt": "500000000",
+  "maxLeverage": 20000
+}
+```
+
+The result names the signer, which is the account, lists one call to `setMandate`, and carries `limits`, a sentence saying what the signed call lets the agent do. Show that sentence to the owner. The owner signs and sends the call; the server and the agent do not.
+
+The same call from the TypeScript SDK, with viem, is `accounts.setMandate(deployments, { agent, expiresAt, maxDebt, maxLeverage })`, where `expiresAt` and `maxDebt` are `bigint` and `maxLeverage` is a `number`. It returns the `address`, `abi`, `functionName` and `args` of the call.
+
+`setMandate` reverts with `InvalidMandate` when `expiresAt` is not in the future or `maxLeverage` is below 10,000. A new mandate for the same agent replaces the old one. `MandateSet(account, agent, expiresAt, maxDebt, maxLeverage)` is emitted; an `expiresAt` of 0 emits it with zeros.
+
+## Borrow within a mandate
+
+Before preparing a borrow or a withdrawal for the account, the agent calls `accounts_mandate` with the account, its own address as `agent`, and the position: `CROSS`, the default, or an asset's symbol.
+
+| Output | Meaning |
+|---|---|
+| `expiresAt`, `maxDebt`, `maxLeverage` | The mandate's terms |
+| `reason` | `ok`, `none` (no mandate), `expired`, `debtLimit` or `leverageLimit` |
+| `debtRoom` | How much more USDG the agent may borrow under the debt limit |
+
+Each result also names the block it was read at. `reason` is computed in this order: no mandate, expired, debt at the limit, leverage at or above the limit. The SDK's `accounts.mandateStatus` and the contract's `mandateStatus(account, agent, position)` return the same reason and `debtRoom`.
+
+| `reason` | What the agent does |
+|---|---|
+| `ok` | Borrow no more than `debtRoom`, with `receiver` set to the account |
+| `none` | Stop. The owner has not given a mandate |
+| `expired` | Stop. The owner must renew it |
+| `debtLimit` | Do not borrow. Repaying frees room |
+| `leverageLimit` | Do not borrow or withdraw. Repaying or depositing lowers leverage |
+
+A position inside its mandate can still be unsafe, because the limits are the account's and the position is still margined against the band. Before a borrow, call `accounts_liquidation_price` with the amount as `borrowing`, and tell the owner the price. Then prepare `accounts_borrow` with the account as receiver. The agent's wallet signs that call.
+
+## What a mandate allows and what reverts
+
+Until `expiresAt`, an agent under a mandate may deposit Stock Tokens, USDG and baskets' shares, repay with the position's own USDG (`repayWithCollateral`), and lend and unlend, as an authorized address may. It may borrow and withdraw under three conditions, checked after the call's own requirement check:
+
+- the receiver is the account;
+- the position's debt after the call is at most `maxDebt`;
+- the position's leverage after the call is at most `maxLeverage`.
+
+A position without equity counts as infinite leverage. Prices that move an agent over a limit stop its borrowing and withdrawing and leave it free to deposit and repay.
+
+| Error | Raised when |
+|---|---|
+| `Unauthorized(caller, account)` | The caller is not the account, has no authorization and has no mandate |
+| `MandateExpired(account, agent, expiresAt)` | The mandate's `expiresAt` has passed. Any call that needs the account's authorization reverts, deposits and `repayWithCollateral` included |
+| `MandateDebtLimit(debt, maxDebt)` | A loan or withdrawal would leave the position's debt above `maxDebt` |
+| `MandateLeverageLimit(leverage, maxLeverage)` | A loan or withdrawal would leave leverage above `maxLeverage` |
+| `MandateReceiver(receiver, account)` | A loan or withdrawal names a receiver other than the account |
+| `InvalidMandate()` | `setMandate` was called with an expiry in the past or `maxLeverage` below 10,000 |
+
+Every other requirement of the account still applies: the position must meet its requirement at the band's low edge, borrowing stops while an asset is halted or recovering, and the weekend cap holds. A mandate sits on top of those rules and removes nothing from them.
+
+The Tapehouse app says the same in words. A `MandateDebtLimit` reads as borrowing that much would take the position's debt over what its mandate allows, and a `MandateReceiver` as a loan or withdrawal that may go only to the account that gave the mandate.
+
+## Next
+
+- [The MCP server](/agents/mcp)
+- [The Claude Code plugin](/agents/claude-code), whose `tapehouse-mandate` skill walks an agent through this
+- [Margin accounts](/contracts/margin-accounts)
+- [Borrow](/guides/borrow)

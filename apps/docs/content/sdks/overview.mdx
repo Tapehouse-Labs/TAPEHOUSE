@@ -1,0 +1,68 @@
+---
+title: "SDKs"
+description: "Three SDKs, in TypeScript, Go and Rust, read Tapehouse's contracts and build their transactions from one registry of addresses."
+---
+
+Tapehouse has three SDKs that cover the same ground: the band and its feeds, the margin accounts, the short positions, the baskets, the Morpho oracles and the gap cover. Each reads from a chain, builds a transaction for you to sign, and decodes a revert into the name of the error. None holds a key, calls a price gateway or compiles in an address.
+
+## Which one
+
+| | TypeScript | Go | Rust |
+|---|---|---|---|
+| Package | `@tapehouse/sdk` | `github.com/tapehouse/tapehouse/services/sdk` | `tapehouse-sdk` |
+| Built on | viem 2 | go-ethereum `bind/v2` | alloy 2 |
+| Where it is | On npm, version 0.1.5 | In the repository's `services` module | In the repository at `crates/sdk` |
+| Bindings | `as const` ABIs in `src/generated.ts` | abigen v2, one package per contract in `sdk/bindings` | alloy `sol!` over `abi/*.json` |
+| Reads | Functions per module: `band.quote(client, deployments, 'TSLA')` | Methods on typed objects: `client.Band().Quote(opts, "TSLA")` | Alloy instances and helpers: `tapehouse.band()?.quote(...)` |
+| Transactions | A viem contract call, passed to `simulateContract` and `writeContract` | An `sdk.Tx` (recipient and calldata), sent with `client.Send` | Alloy's call builder, sent with `.send()` |
+| Earning (supply vault, backstop) | Yes, `supply` and `backstop` modules | Generated bindings only | Generated bindings only |
+| Smart accounts and sponsorship | Yes, `sponsorship` module | No | No |
+| Errors | `decodeRevert` | `sdk.DecodeRevert` | `decode_revert` |
+| Licence | `MIT OR Apache-2.0` | `MIT OR Apache-2.0` | `MIT OR Apache-2.0` |
+
+The TypeScript SDK is published. The Go module path needs the repository at `github.com/tapehouse/tapehouse`, which is not where the public repository is, and the crate is not on crates.io, so use both from a checkout until they are published. Each SDK's page says how.
+
+<Cards>
+  <Card title="TypeScript" href="/sdks/typescript">The most complete: every module, including earning and sponsored smart accounts.</Card>
+  <Card title="Go" href="/sdks/go">The SDK the repository's keepers, bidder and alerts run on.</Card>
+  <Card title="Rust" href="/sdks/rust">Alloy instances for every contract, with helpers for quotes and cover.</Card>
+  <Card title="Errors" href="/sdks/errors">Decode a revert and fix it.</Card>
+</Cards>
+
+## Addresses come from the registry
+
+An SDK needs a chain's registry, `deployments/<chainId>.json`, which lists every contract on that chain ([networks](/networks) describes the file). You load it at runtime: `parseDeployments` in TypeScript, `LoadDeployments` in Go, `Deployments::load` in Rust. A mixed-case address must carry its checksum, and an entry the registry lacks fails with a message naming it, such as `.tapehouse.Band`.
+
+The registry also decides what a Chainlink feed prices. On Robinhood Chain it prices the Stock Token, on Arbitrum One the share, and each SDK types a feed by that: `tokenPriceFeed` and `sharePriceFeed`, or `TokenPriceFeed` and `SharePriceFeed`.
+
+## Bindings come from the ABIs
+
+The contracts' ABIs are the source. `make bindings` builds the contracts and writes each SDK's bindings from them, and `make check-bindings` fails in CI when the committed bindings differ from the build. Each SDK adds by hand only what an ABI cannot say: the registry, the helpers that combine reads at one block, the quotes through Uniswap's QuoterV2 and the revert decoder. When a contract changes, the SDK's calls change with it.
+
+## Reads and transactions
+
+A read returns values and sends nothing. Reads that combine several calls, such as a repayment's debt and premium, take them at one block, the latest unless you name one.
+
+A transaction is built and left unsent. The SDK returns the call and you choose the signer, the gas and the moment:
+
+1. Build the call, for example `accounts.borrow(...)`.
+2. Simulate it against the node. A revert comes back as a named error.
+3. Sign and send it with your own wallet.
+
+Quotes tell you the limits a transaction needs before you send it. A sale takes a `minProceeds` and a buy-back a `maxCost`, both from `quoteSale` and `quoteCover`, which ask Uniswap's QuoterV2 for the pool's price and apply the slippage you name, from 0 to 10,000 basis points. The contract never supplies them.
+
+## Authorization
+
+An account acts for itself. To let another address, such as a router or a keeper you run, borrow, withdraw and deposit for an account and act on its shorts, the owner sends `setAuthorization(authorized, allowed)` on the margin accounts. Until then those calls revert with `Unauthorized(caller, account)`. To bound an agent instead, `setMandate` gives it authority until a time, up to a debt and a leverage limit, and only to the account itself. [Agents and mandates](/agents/mandates) explains the rule.
+
+Anyone may call some functions without authorization: `repay`, `observe`, `settle`, `liquidate` and the gap cover's keeper steps. Their SDK docs say so.
+
+## RedStone data
+
+The band's `writePrices` verifies signed RedStone packages. The SDKs do not fetch them. You pass a `PackageSource`, an object or trait with one method that returns the payload for a list of feed IDs from your own gateway client, cache or relay.
+
+## Next
+
+- [Quickstart](/quickstart): the first read in each language.
+- [Networks](/networks): the chains and their registries.
+- [Errors](/sdks/errors): every custom error and how to fix it.

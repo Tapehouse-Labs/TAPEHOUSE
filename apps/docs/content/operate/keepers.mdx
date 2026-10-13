@@ -1,0 +1,93 @@
+---
+title: "Run the keepers"
+description: "Run the keeper service that sends every permissionless call keeping Tapehouse on time, with its jobs, environment variables and key handling."
+---
+
+The keeper sends every permissionless call that keeps Tapehouse on time on one chain: price writes, seals, halts, liquidations, auctions, gap cover settlements and more. No action needs a human, and none needs this keeper, since anyone may send each one. You can run your own beside Tapehouse's, and a call that someone did first costs you nothing because the keeper simulates before it sends.
+
+## Run it
+
+You need Go, a registry, an RPC URL, an account with ether for gas, and an indexer (yours or the public one).
+
+```bash
+export ROBINHOOD_TESTNET_RPC_URL=https://rpc.testnet.chain.robinhood.com
+export TAPEHOUSE_KEEPER_KEYSTORE=~/.foundry/keystores/tapehouse-keeper
+export TAPEHOUSE_KEEPER_PASSWORD_FILE=~/.tapehouse/keeper.password
+export TAPEHOUSE_INDEXER_URL=https://indexer-production-f5dc.up.railway.app
+make run-keeper CHAIN=46630
+```
+
+`CHAIN` is 4663, 46630, 42161 or 412346, and `REGISTRY=<file>` overrides the registry. The keeper logs JSON on standard error.
+
+## Environment variables
+
+| Variable | Meaning | Default |
+| --- | --- | --- |
+| `TAPEHOUSE_DEPLOYMENTS` | Path of the registry file. Required. | none |
+| `TAPEHOUSE_RPC_URL` | RPC of the registry's chain. Required. | none |
+| `TAPEHOUSE_RPC_FALLBACK_URLS` | More RPC URLs, separated by commas, used when an endpoint fails, answers an HTTP error or is over its rate. | none |
+| `TAPEHOUSE_RPC_RATE` | Most requests a second sent to the RPC. | 20 |
+| `TAPEHOUSE_INDEXER_URL` | Indexer that names the positions, shorts, recalls, commitments and covers to look at. Needed by the jobs marked below. | none |
+| `TAPEHOUSE_KEEPERS` | Jobs to run, separated by commas. | the jobs whose contracts the registry names |
+| `TAPEHOUSE_HALTS_URL` | Source of Robinhood's quotes for the halt job. | `https://api.robinhood.com/rhj/prices` |
+| `TAPEHOUSE_KEEPER_BUY` | `true` to buy at an auction once its ask is at the band's low edge or ETH's price. | off |
+| `TAPEHOUSE_KEEPER_REBALANCE` | `subsidise` to rebalance baskets the pools do not pay for. | off |
+| `TAPEHOUSE_KEEPER_ALIGN` | `true` to run the `pools` job. | off |
+| `TAPEHOUSE_KEEPER_KEYSTORE`, `TAPEHOUSE_KEEPER_PASSWORD_FILE` | The sending account's keystore and the file that holds its password. | none |
+| `TAPEHOUSE_KEEPER_KEY` | A hex key, for a dev node only. | none |
+| `TAPEHOUSE_HALT_KEYSTORE`, `TAPEHOUSE_HALT_PASSWORD_FILE` | The halt signer's keystore and password file. Without a halt key the `halt` job does nothing. | none |
+| `TAPEHOUSE_HALT_KEY` | A hex halt key, for a dev node only. | none |
+| `REDSTONE_API_KEY`, `REDSTONE_BACKUP_API_KEY` | Keys for RedStone's keyed gateways. | none |
+
+A name in `TAPEHOUSE_KEEPERS` that is not a job stops the keeper at start and lists the valid names. The `pools` job also needs `TAPEHOUSE_KEEPER_ALIGN=true`.
+
+## The jobs
+
+Each job runs on its own interval. The ones that need the indexer are marked with an asterisk.
+
+| Job | Every | What it sends |
+| --- | --- | --- |
+| `prices` | 60 s | `writePrices`: the band's market status, indexes and every 24/7 feed. A status 15 minutes old is logged as an error. |
+| `multiplier` | 30 s | `syncMultiplier` at start, when a Stock Token's terms change, and after each new Chainlink round while a step waits. |
+| `halt` | 30 s | A halt signed by the halt signer for each Stock Token Robinhood's quotes show halted, renewed every five minutes for fifteen, and its lift. |
+| `seal` | 15 s | Seals each `BandFeed` five minutes before the 24/5 reopen and again 90 seconds before it. |
+| `premium` | 60 s | `accruePremium` at each close ahead, reopening and seal window. |
+| `observe` | 30 s | `MarginAccounts.observe(asset)` for an asset that is halted or has a multiplier change pending. It needs no indexer. |
+| `mark` | 30 s | Marks each shortable asset after the regular close. |
+| `sync`* | 60 s | Syncs a burn and clears the dust it leaves. |
+| `liquidation`* | 15 s | Starts positions that fall short, deepest first, recalls, settles in cash, writes off and stops once a position recovers. |
+| `backstop`* | 60 s | Claims the backstop's premium and covers emptied positions. |
+| `reopening`* | 30 s | Enrols positions, clears rounds at their clearing price, forfeits unrevealed commitments and claims bids. |
+| `recall`* | 30 s | Settles each vault's head and buys in due tickets. |
+| `shorts`* | 15 s | Liquidates shorts, those in deficit first. |
+| `basket` | 5 min | Rebalances baskets from the keeper's own tokens. |
+| `gapcover`* | 20 s | Records reopens, observes, settles, releases and voids gap cover series. |
+| `rounds` | 60 s | Records the next round of each RedStone round feed, where the registry says `.chainlinkRegularHours`. |
+| `pools` | 60 s | Trades each Uniswap v3 pool against USDG back to the centre of its asset's band, where `TAPEHOUSE_KEEPER_ALIGN=true`. |
+
+See [Liquidation](/concepts/liquidation) and [The band](/concepts/band) for what these calls do on chain.
+
+## How it sends
+
+Each action is simulated from the keeper's address and sent only if it would succeed. A revert that means nothing is due, or that someone did it first, sends nothing. The keeper sends one transaction at a time, at the greater of the node's pending nonce and the one after the last it sent, and waits for it. A keeper that restarts, or one running beside another, repeats nothing.
+
+The `halt` job needs the halt signer's key, and the key must be the band's halt signer or the job fails. `observe` skips an asset observed less than a minute ago, so a long halt costs one transaction a minute.
+
+The `pools` job trades from the keeper's own tokens and stops where the pool's price reaches the band's centre. It trades only where a pool's price lies more than 25 basis points from it.
+
+## Keys and security
+
+The keeper's key comes from a Web3 Secret Storage keystore and the file that holds its password. The password is read only from that file, minus one trailing newline, and never from the environment itself, an argument, a log or an error. An unreadable or empty file is an error that names the variable. The hex-key variables exist for a dev node only. RPC URLs never appear in a log.
+
+Fund the keeper's account with enough ether for the transactions it sends and nothing more. Give the halt signer its own keystore, since it can only sign halts.
+
+## Deploy on Railway
+
+`keeper` deploys from `services/Dockerfile` with `SERVICE=keeper`. It serves no HTTP, so it has no health check and relies on the restart policy, and it keeps no state, so it needs no volume. Set `TAPEHOUSE_KEEPER_KEYSTORE_B64` and `TAPEHOUSE_KEEPER_PASSWORD_B64`, plus `TAPEHOUSE_HALT_KEYSTORE_B64` and `TAPEHOUSE_HALT_PASSWORD_B64` to run the halt job. The image turns each `_B64` variable into a `0600` file and sets `TAPEHOUSE_KEEPER_KEYSTORE` and `TAPEHOUSE_KEEPER_PASSWORD_FILE` for you. Point `TAPEHOUSE_INDEXER_URL` at the indexer, over Railway's private network if it runs there.
+
+## Next
+
+- [Run the indexer](/operate/indexer)
+- [Run the reference bidder](/operate/bidder)
+- [Liquidation](/concepts/liquidation)
+- [Calibration](/resources/calibration)

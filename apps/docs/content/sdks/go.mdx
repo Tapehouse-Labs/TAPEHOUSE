@@ -1,0 +1,168 @@
+---
+title: "Go SDK"
+description: "Read the band, margin accounts, shorts, baskets, auction and gap cover from Go and pack their transactions, over go-ethereum bindings."
+---
+
+The Go SDK reads Tapehouse's contracts and packs their transactions as calldata you sign and send yourself. It sits on go-ethereum's `bind/v2` and bindings generated from the contracts' ABIs. The repository's keeper, bidder, alerts, sponsor and backtest commands import it.
+
+<Warning title="Not published as a module yet">
+The SDK lives in the repository's `services` module, `github.com/tapehouse/tapehouse/services`, and its package is `github.com/tapehouse/tapehouse/services/sdk`. That path needs the repository at `github.com/tapehouse/tapehouse`, and the public repository is `github.com/Tapehouse-Labs/TAPEHOUSE`, so `go get` of the package does not resolve today. Use it from a checkout, for example with a `replace` directive in your `go.mod`, or from inside the `services` module.
+</Warning>
+
+## Read and send
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/ethereum/go-ethereum/accounts/abi/bind/v2"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/tapehouse/tapehouse/services/sdk"
+)
+
+func main() {
+	ctx := context.Background()
+	deployments, err := sdk.LoadDeployments("deployments/46630.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	backend, err := ethclient.Dial("https://rpc.testnet.chain.robinhood.com")
+	if err != nil {
+		log.Fatal(err)
+	}
+	client := sdk.NewClient(backend, deployments)
+
+	quote, err := client.Band().Quote(&bind.CallOpts{Context: ctx}, "TSLA")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(quote.State, quote.Low, quote.High)
+}
+```
+
+A transaction function returns an `sdk.Tx`, the recipient and the calldata. Check it with `client.Simulate`, then sign and send it with `client.Send`, both of which return a decoded `*sdk.Revert` where the revert data matches an error of the contracts.
+
+```go
+tx, err := client.Accounts().Borrow(sdk.Cross, big.NewInt(50_000_000), account, account)
+if err != nil {
+	log.Fatal(err)
+}
+if err := client.Simulate(&bind.CallOpts{Context: ctx, From: account}, tx); err != nil {
+	log.Fatal(err)
+}
+sent, err := client.Send(transactOpts, tx)
+```
+
+Assets are strings (`"TSLA"`) and the SDK converts them with `sdk.ToBytes32`. A position is `sdk.Cross`, the cross position, or an asset's `bytes32`. Amounts are `*big.Int` in raw units. Every read takes `*bind.CallOpts`; set `BlockNumber` to read at a block, and reads that combine several calls (`Repayment`, `InBaskets`) use one block, the latest where you name none. Slippage arguments are `int64` basis points from 0 to 10,000.
+
+## Registry
+
+| Function | What it does |
+|---|---|
+| `sdk.LoadDeployments(path)` | Reads `deployments/<chainId>.json` and returns `*Deployments` |
+| `sdk.ParseDeployments(data)` | The same from bytes |
+| `deployments.SharePrices()` | Whether the chain's Chainlink feeds price the share (`sdk.SharePriceChains`, Arbitrum One) |
+| `deployments.TokenPriceFeed(name)`, `deployments.SharePriceFeed(name)` | A Chainlink feed typed by what it prices |
+| `sdk.ToBytes32(name)` | An asset symbol or feed ID as 32 bytes |
+| `sdk.Cross` | The cross position |
+
+`Deployments` also carries `.chainlinkSequencer` (`ChainlinkSequencer`), which the Go SDK reads for the sequencer-uptime feed.
+
+## Client
+
+`sdk.NewClient(backend bind.ContractBackend, deployments *Deployments)` returns a `*Client`. Its accessors return the objects below.
+
+| Method | Returns |
+|---|---|
+| `Band()` | The band and each asset's `BandFeed` |
+| `Accounts()` | The margin accounts |
+| `Margin()` | The margin engine |
+| `Liquidator()`, `Backstop()` | The liquidator and the gap backstop's calls |
+| `ReopeningAuction()` | The reopening auction |
+| `LendingVault(asset)` | An asset's stock lending vault |
+| `Shorts()` | The short positions |
+| `Basket(key)` | A basket of `.tapehouse.Baskets` |
+| `GapCover()` | The gap cover |
+| `MorphoOracles()` | The Morpho oracles |
+| `Pool(address)`, `SwapRouter()`, `RoundFeed(address)` | A Uniswap v3 pool, the swap router and a round feed |
+| `Header`, `Simulate`, `Send` | The block header, an `eth_call` of a `Tx`, and sending a `Tx` |
+| `TokenPrice`, `SharePrice`, `RoundData`, `LatestRound` | Chainlink feed reads |
+| `BalanceOf`, `Allowance`, `Decimals`, `Paused`, `Approve` | Token reads and an approval |
+
+## Band
+
+| Method | Arguments | Does |
+|---|---|---|
+| `Quote` | `opts, asset` | State (0 halted, 1 degraded, 2 closed, 3 open), legs, centre, half-width and edges |
+| `Session` | `opts` | Chainlink's session and NYSE's state and boundaries |
+| `Halt` | `opts, asset` | The signed halt and the issuer's pause |
+| `Price` | `opts, feedID` | The RedStone value the band stores |
+| `WritePrices` | `ctx, source, feedIDs` | Packs `writePrices` with the payload of a `PackageSource` you supply |
+| `Asset`, `CorporateAction`, `Terms` | `opts, asset` | How the band is configured for an asset |
+| `HaltSigner` | `opts` | The halt signer's address |
+| `WriteHalt` | `asset, halted, issuedAt, expiresAt, signature` | Packs a signed halt |
+| `SyncMultiplier` | `asset` | Packs a multiplier sync |
+| `LatestRound`, `LatestBand`, `Sealed`, `Seal` | `opts, asset` (and `reopenMs`) | The `BandFeed`'s round and band, the sealed band, and the seal call |
+| `SequencerSettled`, `Variance` | `opts` (and `feedID`) | The sequencer state and a feed's variance |
+
+`PackageSource` is an interface with one method, `Payload(ctx context.Context, feedIDs []string) ([]byte, error)`. The SDK holds no RedStone key and calls no gateway.
+
+## Accounts
+
+`position` is `[32]byte`.
+
+| Method | Arguments |
+|---|---|
+| `SetAuthorization` | `authorized, allowed` |
+| `SetMandate` | `agent, expiresAt, maxDebt, maxLeverage` |
+| `Deposit` | `position, token, amount, account` |
+| `Withdraw` | `position, token, amount, account, receiver` |
+| `Borrow` | `position, assets, account, receiver` |
+| `Repay` | `position, assets, account` |
+| `Unwrap` | `account, key, shares` |
+| `Settle`, `Clear`, `Sync`, `Observe`, `AccruePremium` | Keeper calls |
+| `IsAuthorized`, `Mandate`, `MandateStatus` | Authorization reads |
+| `Health` | `opts, account, position` |
+| `Collateral`, `Leverage` | `opts, account, position` (and `token`) |
+| `LiquidationPrice` | `opts, account, position, asset, borrowing` |
+| `Repayment`, `InBaskets` | `opts, account, position` |
+| `Stocks`, `Holding`, `Closure`, `Recovery` | Engine assets, the holding of an asset, the closure and the recovery window |
+| `BackstopPremium`, `HasBackstop`, `Lent`, `Sellable` | Premium and lending reads |
+
+## Shorts, baskets and gap cover
+
+| Object | Methods |
+|---|---|
+| `Shorts()` | `Deposit(asset, amount, account)`, `Withdraw(asset, amount, account, receiver)`, `Sell(asset, amount, minProceeds, account)`, `Cover(asset, amount, maxCost, account)`, `Liquidate(account, asset)`, `Mark(asset)`; reads `Position`, `Health`, `Epoch`, `Book`, `Restriction`, `Fee`; quotes `QuoteSale` and `QuoteCover` returning `Sale{Proceeds, MinProceeds}` and `BuyBack{Cost, MaxCost}` |
+| `Basket(key)` | `Mint(shares, receiver, maxAssets)`, `Redeem(shares, receiver, owner)`, `Rebalance`; reads `Components`, `PreviewMint`, `PreviewRedeem`, `Target`, `PendingTarget`, `TotalSupply` |
+| `GapCover()` | `Buy(asset, layer, maxPremium, holder)`, `Deposit`, `Redeem`, `Record`, `Measure`, `Observe`, `Settle`, `Void`, `Release`, `Claim`; reads `Quote`, `MinDeductible`, `Tail`, `PricingGap`, `Capacity`, `LastCloseMs`, `Sales`, `Series`, `Feed`, `RegularHours`, `ReopenOf`, `Cover`, `Payouts`; `sdk.Payout(layer, referencePrice, price)` computes a settled cover's payout |
+| `ReopeningAuction()` | `Commit`, `Reveal`, `Enroll`, `Clear`, `Claim`, `Forfeit`; reads `Constants`, `Phase`, `LastOpenMs`, `Round`, `Lots`, `Bids`, `Commitment`, `Enrolled`; `sdk.Commitment(...)` and `sdk.ClearingPrice(bids, supply, floor)` |
+| `Liquidator()` | `Start`, `Stop`, `Buy`, `SettleCash`, `WriteOff`, `Recall`; reads `Auction`, `Shortfall`, `Running`, `Price`, `HourlyAllowance`, `HeldUntil`, `EthUsd`, `RecallHaircut` |
+| `LendingVault(asset)` | `Queue`, `Ticket`, `Claimable`, `Counted`, `BuyIn` |
+| `MorphoOracles()` | `Price(opts, asset)` returning an `OraclePrice`, `Halt`, `Oracle` |
+
+The Go SDK has no builders for the supply vault, and no reads for the gap backstop's state or a depositor's holdings. Use the generated binding in `services/sdk/bindings/supplyvault` or `gapbackstop` for those, or the [TypeScript SDK](/sdks/typescript), which has `supply` and `backstop` modules.
+
+## Errors
+
+`sdk.DecodeRevert(err)` returns the `*sdk.Revert` behind an error, with `Name`, `Args` and `Data`. `client.Simulate` and `client.Send` already return one. See [errors](/sdks/errors).
+
+```go
+if revert, ok := sdk.DecodeRevert(err); ok {
+	fmt.Println(revert.Name, revert.Args)
+}
+```
+
+## Example
+
+`services/sdk/examples/devnode` runs the SDK against a local Nitro dev node: `PRIVATE_KEY=0x… go run ./sdk/examples/devnode RPC_URL DEPLOYMENTS_JSON PAYLOAD_FILE`, from the `services` directory. It reads the key from the environment, never from a flag.
+
+## Next
+
+- [SDKs overview](/sdks/overview): the three SDKs side by side.
+- [Errors](/sdks/errors): decode a revert and fix it.
+- [Run the keepers](/operate/keepers): services built on this SDK.

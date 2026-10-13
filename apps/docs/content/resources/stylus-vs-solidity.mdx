@@ -1,0 +1,91 @@
+---
+title: "Stylus versus Solidity"
+description: "The margin engine's gas in Stylus and in a bit-exact Solidity reference, and the command that checks both live on the testnet."
+---
+
+The margin engine is a Stylus program. A second implementation of it in Solidity is deployed beside it on the testnet, and one command calls both with the same arguments, stops at the first answer that differs by a single bit, and prints the L2 gas of each call. You need Foundry and `jq`, and no key.
+
+## Run the comparison
+
+From a checkout of the repository, point the testnet's RPC variable at the public endpoint and run:
+
+```bash
+ROBINHOOD_TESTNET_RPC_URL=https://rpc.testnet.chain.robinhood.com make compare-margin CHAIN=46630
+```
+
+The target runs `stylus/scripts/compare-margin.sh` against the RPC URL and `deployments/46630.json`. It reads two entries of that registry: `.tapehouse.Margin`, the Stylus program, and `.references.Margin`, the Solidity reference. It sends no transaction.
+
+The script first compares the answers, then prints a Markdown table. The comparison covers 32 calls on the testnet's two assets:
+
+- the views (`assets`, `market`, `band`, `ethUsdFeed`, `owner`, `pendingOwner`, `lastUpdate`, `weekendLeverage`)
+- `volatility`, `correlation`, `weekendGap`, `pool` and `depth`
+- four scenarios, at indexes 0, 1, 255 and 256
+- `scenarioDigest` for each lattice size, 32, 64, 128 and 256, at two horizons
+- `requirement` at three horizons, with and without a closure, on a portfolio priced from the band's live quotes
+- `currentRequirement`
+
+If one answer differs, the script exits with `FAIL` and the call, the program's answer and the reference's. If all agree it prints `PASS`, then the L2 gas of each call, taken from the node's own estimate (`gasEstimateComponents` on the `NodeInterface` precompile at `0x00000000000000000000000000000000000000C8`, with the L1 component removed).
+
+## What it shows
+
+On the testnet's two assets the comparison reports the Stylus program 12.3 times cheaper for the requirement (`requirement(2)`) and 13.5 times cheaper for the 256-point scenario set (`scenarioDigest(256)`). Both figures come from the repository's own run of this command, as stated in `JUDGES.md`. Your run reports the gas of the chain at the time you call it.
+
+The repository's dev-node suite measures both on the same calls. This table is the one in the repository's README, from `stylus/.gas-devnode`, in L2 gas:
+
+| Call | Stylus | Solidity | Solidity / Stylus |
+|---|---|---|---|
+| `scenario(0)` | 118,013 | 232,187 | 2.0x |
+| `scenarioDigest(32)` | 128,910 | 561,633 | 4.4x |
+| `scenarioDigest(64)` | 139,628 | 933,948 | 6.7x |
+| `scenarioDigest(128)` | 163,408 | 1,678,505 | 10.3x |
+| `scenarioDigest(256)` | 209,547 | 3,167,787 | 15.1x |
+| `scenarioDigest(256,launch)` | 317,868 | 6,502,649 | 20.5x |
+| `requirement(3)` | 287,025 | 3,758,425 | 13.1x |
+| `requirement(6)` | 428,836 | 7,174,691 | 16.7x |
+| `currentRequirement(3)` | 351,236 | 3,820,422 | 10.9x |
+| `currentRequirement(1 of 6)` | 453,061 | 7,189,769 | 15.9x |
+| `assets()` | 94,636 | 42,216 | 0.4x |
+| `volatility(NVDA)` | 99,212 | 46,665 | 0.5x |
+| `correlation(NVDA,SPY)` | 106,019 | 54,471 | 0.5x |
+
+`make devnode deploy-stylus-devnode test-stylus-devnode gas-table` reproduces it on a local Nitro node, and `make gas` fails if the committed table and a new run differ.
+
+- Stylus wins wherever the scenario set is walked, from 4.4x for the 32-point lattice to 20.5x for the six launch assets' full set.
+- Stylus loses the small views, at about twice the gas. Every call pays about 95,000 gas to enter the uncached, three-fragment program, which is more than reading a few words costs. Net of that entry cost, the three-asset requirement is about 20 times cheaper.
+- Generating the 778 rows of `scenarioDigest(256)` takes about three quarters of the three-asset requirement's gas in Stylus and five sixths in Solidity. The profit and loss and the aggregation over them are the rest, with the pool reads.
+- A real pool read costs the same from either side, since both run the pool's own Solidity. In the fork test at block 75,093,578, reading and pricing the six launch pools and ETH/USD adds 458,971 gas to the reference's requirement, 76,495 per pool.
+- `wasm-opt` is worth 2% of size and 3% to 5% of gas. Without the `[wasm-opt]` tables the program compresses to 53,446 bytes against 52,282, and the three-asset requirement costs about 3.5% more.
+
+## The reference
+
+`contracts/test/reference/MarginReference.sol` is the margin engine in Solidity: the same scenario set, requirement, pool reads, session and weekend cap, over the same configuration, with Uniswap's own `TickMath` and `FullMath`. It is a reference for tests. It holds its configuration without the program's checks, parameter updates or ownership transfers, and nothing in Tapehouse depends on it.
+
+It answers every view of the program to the bit. Its tests reproduce the 144 scenario digests and 14 launch scenarios in `stylus/contracts/margin/testdata`, the 120 requirements against Robinhood Chain's pools at block 75,093,578 in a fork test, the band's 38 sessions and a month of real ones.
+
+It is compiled with the repository's settings, solc 0.8.37 with the optimizer at 200 runs, and its hot loops are `unchecked`, as the program's release build is. Checked arithmetic would nearly double its gas, and `via_ir` at 10,000 runs costs 11% more on the requirement than these settings.
+
+To call one function yourself, once on each address from the registry:
+
+```bash
+R=https://rpc.testnet.chain.robinhood.com
+MARGIN=$(jq -r .tapehouse.Margin deployments/46630.json)
+REFERENCE=$(jq -r .references.Margin deployments/46630.json)
+ARGS='requirement(int256[],uint256[],uint64,bool)(uint256,uint8)'
+for target in $MARGIN $REFERENCE; do
+  cast call $target "$ARGS" "[1000000000000000000,-500000000000000000]" "[37800000000,26000000000]" 172800 false --rpc-url $R
+done
+```
+
+The quantities have 18 decimals and are negative for a short, the prices are USD with 8 decimals, and the horizon is in seconds. The two answers are identical.
+
+## Why Stylus
+
+The engine's cost is the walk over a lattice of price scenarios for the whole portfolio, with pairwise correlations, then an expected shortfall over the draws. That is integer arithmetic in a loop, which a WASM program runs for a fraction of the gas the EVM charges.
+
+The reference exists to check that the saving costs no accuracy. The program is deterministic and integer-only, and the Solidity version agrees to the bit.
+
+## Next
+
+- [The margin engine](/contracts/margin-engine)
+- [Verification](/resources/verification)
+- [Portfolio margin](/concepts/portfolio-margin)

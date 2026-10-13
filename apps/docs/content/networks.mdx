@@ -1,0 +1,84 @@
+---
+title: "Networks"
+description: "The chains Tapehouse has a registry for, their chain IDs and RPC endpoints, what is deployed on each, and how to get test funds on the testnet."
+---
+
+Tapehouse is live on one chain, Robinhood Chain's testnet (46630). Two more chains, Robinhood Chain (4663) and Arbitrum One (42161), have a registry in the repository, and neither holds the Tapehouse contracts the SDKs need to borrow, lend or short. Everything on the testnet is unaudited.
+
+## Chains
+
+| Network | Chain ID | RPC | Registry |
+|---|---|---|---|
+| Robinhood Chain testnet | 46630 | `https://rpc.testnet.chain.robinhood.com` | `deployments/46630.json` |
+| Robinhood Chain | 4663 | `https://robinhood.drpc.org` | `deployments/4663.json` |
+| Arbitrum One | 42161 | `https://arbitrum.gateway.tenderly.co` | `deployments/42161.json` |
+| Local dev node | 412346 | `http://127.0.0.1:8547` | none committed |
+
+The testnet's RPC is Robinhood Chain's public endpoint. The RPCs of the other chains are the defaults the repository's Makefile uses for fork tests (public archive endpoints that need no key); set `ROBINHOOD_RPC_URL`, `ROBINHOOD_TESTNET_RPC_URL` or `ARBITRUM_RPC_URL` to use your own. The dev node is the local Nitro node that `make devnode` starts.
+
+The block explorer of the testnet is `https://explorer.testnet.chain.robinhood.com`. The public indexer for the testnet is `https://indexer-production-f5dc.up.railway.app` (see [the API](/api/overview)).
+
+## The registry
+
+A registry is the file `deployments/<chainId>.json` in the [repository](https://github.com/Tapehouse-Labs/TAPEHOUSE). It lists every contract the repository uses on that chain, grouped by what it is. No SDK compiles in an address: each reads the registry at runtime, and a mixed-case address in it must carry its checksum. Fork tests check each entry against the chain at a pinned block.
+
+| Group | What it holds |
+|---|---|
+| `tokens` | USDG, WETH and the Stock Tokens, by symbol |
+| `chainlink` | Chainlink feeds by name, such as `TSLA_USD`. On Robinhood Chain they price the Stock Token, on Arbitrum One the share |
+| `chainlinkSequencer` | The L2 sequencer-uptime feed, where the chain has one (`.Uptime`) |
+| `tapehouse` | The band, the margin engine, the accounts, the vaults, the liquidator, the backstop, the auction, the shorts, the baskets, the gap cover, the sponsor paymaster, and the halt signer and owner addresses |
+| `bandFeeds` | Each asset's `BandFeed`, which serves the band's low side as a Chainlink round |
+| `uniswapV3` | Uniswap's factory, swap router, quoter and the pools the margin engine reads |
+| `morpho`, `morphoOracles` | Morpho Blue, its interest rate model and markets, and each asset's oracle |
+| `erc4337` | The EntryPoint and the SimpleAccount factory |
+
+`"chainlinkRegularHours": true` says the registry's Chainlink feeds follow NYSE's regular hours. The testnet sets it, because its feeds are RedStone round feeds of the regular-hours price.
+
+## What is deployed where
+
+<Tabs group="shell">
+<Tab title="Testnet (46630)">
+The full stack is deployed: the band and the margin engine (both Stylus programs), the margin accounts, the supply vault, the liquidator, the gap backstop, the reopening auction, a stock lending vault for TSLA and AMZN, the short positions, the basket `PAIR`, the gap cover and the sponsor paymaster. The assets are TSLA and AMZN. The collateral is the wrapped token: `wTSLA` and `wAMZN` wrap Robinhood's testnet TSLA and AMZN one to one and add the `oraclePaused` view the band reads, so `.tokens.TSLA` and `.tokens.AMZN` are the wrappers. The testnet has no Uniswap v3, so the repository deployed Uniswap's factory, a swap router, a quoter and a pool of each asset against USDG, all at 0.05%. The pools' depth is small, and so are the testnet's loans.
+
+<Deployments chain="46630" />
+</Tab>
+<Tab title="Robinhood Chain (4663)">
+`deployments/4663.json` lists what already exists on the chain: USDG, WETH, the Stock Tokens (NVDA, TSLA, AAPL, MSFT, GOOGL and SPY), their Chainlink feeds, the issuer's Stock Token registry, Uniswap v3 with a pool for each asset, Morpho Blue with its interest rate model, and the ERC-4337 EntryPoint and SimpleAccount factory. It has no `tapehouse` group: no Tapehouse contract is deployed there, so an SDK call that needs the band or the accounts fails on a missing `.tapehouse` entry. The repository says the mainnet deployment follows the testnet's.
+</Tab>
+<Tab title="Arbitrum One (42161)">
+`deployments/42161.json` lists the band, its owner and halt signer, a `BandFeed` for each of NVDA, TSLA, AAPL, MSFT, GOOGL and SPY, the six Chainlink feeds and the sequencer-uptime feed. The band is a Stylus program deployed on the chain. Arbitrum One's Chainlink feeds report share prices, and the registry names no Stock Tokens, so the band prices the share and no multiplier applies. The margin accounts, the vaults and the other contracts are not deployed there.
+</Tab>
+</Tabs>
+
+## Get test funds
+
+The testnet needs ether for gas, test USDG and a Stock Token.
+
+| What | Where |
+|---|---|
+| Test USDG | [Paxos' faucet](https://faucet.paxos.com/?network=robinhood). The app links to it from its header |
+| A Stock Token | [Robinhood's testnet faucet](https://faucet.testnet.chain.robinhood.com/) |
+| Gas | A smart account pays no gas for its creation and its first three operations through the sponsor paymaster. An externally owned account needs testnet ether |
+
+The app wraps the testnet's Stock Token into `wTSLA` or `wAMZN` when you deposit, from your wallet. With the SDK you wrap it yourself: `wTSLA` and `wAMZN` follow the interface of `StockTokenWrapper`, whose `depositFor` takes the Stock Token and mints the wrapper.
+
+## Add the testnet to a wallet
+
+Enter these values in your wallet's custom network form.
+
+| Field | Value |
+|---|---|
+| Network name | Robinhood Chain Testnet |
+| RPC URL | `https://rpc.testnet.chain.robinhood.com` |
+| Chain ID | 46630 |
+| Currency symbol | ETH (18 decimals) |
+| Block explorer | `https://explorer.testnet.chain.robinhood.com` |
+
+In viem the same chain is `robinhoodTestnet` from `viem/chains`, and Robinhood Chain is `robinhood`.
+
+## Next
+
+- [Quickstart](/quickstart): read a band against the testnet.
+- [Contract addresses](/contracts/addresses): the testnet's addresses with what each contract does.
+- [SDKs](/sdks/overview): how the SDKs read a registry.

@@ -1,0 +1,104 @@
+---
+title: "Indexer API overview"
+description: "Every event and view of Tapehouse's contracts over REST and a WebSocket, with the limits of each tier and how to pay per request."
+---
+
+The indexer reads a chain's Tapehouse contracts and serves them. Everything it returns is an event a contract emitted, a view the chain answers at a named block, or a RedStone data package whose signature recovers to one of the signers the band accepts. Anyone can reproduce each answer from the chain or from the signed package, and the index rebuilds from the chain's events alone.
+
+The testnet's public index is at `https://indexer-production-f5dc.up.railway.app`. The [specification](https://indexer-production-f5dc.up.railway.app/v1/openapi.yaml) is served by the index itself, and the endpoint pages in this section are generated from it.
+
+```bash
+curl https://indexer-production-f5dc.up.railway.app/v1/status
+```
+
+```json
+{
+  "chainId": 46630,
+  "start": 128723678,
+  "head": { "number": 134082473, "hash": "0xe0f41b75…7420a76" },
+  "finalized": 134073789
+}
+```
+
+## Conventions
+
+- Contracts are named by their path in the chain's registry without the leading dot: `tapehouse.MarginAccounts`, `tapehouse.StockLending.TSLA`, `tapehouse.Baskets.PAIR`, `bandFeeds.TSLA`, `morphoOracles.NVDA`, `tokens.TSLA`, `morpho.Blue`. `GET /v1/contracts` lists the ones the index holds.
+- Every integer is a decimal string, so no client loses precision. Addresses are checksummed. Bytes, including a `bytes32` symbol, are `0x`-prefixed hex. A symbol or feed ID taken as an argument may also be given as text, such as `TSLA`.
+- Reads are made at the index's head unless a `block` is named, so events and views agree. A view that returns unnamed outputs names them `arg0`, `arg1` and so on.
+- An event carries `finalized`, true once the chain reports its block finalized. Until then a reorganisation may remove it, which the stream announces with a `rewind`.
+
+## Pagination
+
+`GET /v1/events` returns events in the order they were emitted, at most `limit` at a time (1 to 1,000, 100 unless set). When the page is full, `next` holds a cursor: pass it as `after` to read the following page. A `next` of `null` means there is no more.
+
+```bash
+curl "https://indexer-production-f5dc.up.railway.app/v1/events?contract=tapehouse.MarginAccounts&event=Borrow&limit=100"
+curl "https://indexer-production-f5dc.up.railway.app/v1/events?contract=tapehouse.MarginAccounts&event=Borrow&limit=100&after=134046162:1"
+```
+
+## Tiers
+
+| Tier | Rate | Burst | Streams | How |
+|---|---|---|---|---|
+| Public | 10 requests a second | 20 | 2 per client address | Nothing to send |
+| Keyed | 1,000 requests a second | 2,000 | 50 per key | `X-API-Key` header, for integrators |
+| Paid | Beyond the public rate | | | USDG per request, over x402 |
+
+A client address behind a proxy is the one in the header the operator names, where set and present, and otherwise the last address in `X-Forwarded-For` that is not a proxy. An IPv6 client counts as its /64.
+
+Over its limit a request gets `429` with `Retry-After`. Where the operator sells the requests beyond the public allowance, as the testnet's index does, it gets `402` instead.
+
+## Pay per request
+
+A client with no key can read beyond the public rate by paying for each request in USDG with [x402](https://x402.org), the HTTP 402 payment protocol. The reads are priced the same, 1,000 atomic units of USDG (0.001 USDG) on the testnet. The stream and the specification are not sold, so over the allowance they answer `429`.
+
+1. The request answers `402` with a `PAYMENT-REQUIRED` header: the base64 of a version 2 x402 document that says what the request costs, to whom and on which chain.
+2. The client signs an EIP-3009 `transferWithAuthorization` for that amount and repeats the request with the signed payment in `PAYMENT-SIGNATURE`. The payer needs no ether.
+3. The index asks its facilitator to verify and settle the payment on chain. Only then does it serve the read, with a `PAYMENT-RESPONSE` header that carries the settlement.
+
+A payment that does not settle is answered `402` again and the read is not served. [Agents](/agents/x402) shows a working client.
+
+## Errors
+
+Every error body is `{ "error": "…" }`.
+
+| Status | Meaning |
+|---|---|
+| 400 | A parameter is missing or malformed |
+| 401 | An `X-API-Key` the operator did not issue |
+| 402 | Over the public rate and the requests are for sale: pay as above |
+| 404 | The contract or view function is not one the index holds |
+| 429 | Over the tier's rate; wait `Retry-After` seconds |
+| 502, 503 | The chain's node did not answer, or the index is not ready |
+
+A view that reverts is a `200` whose `revert` field names the error and its arguments, where the SDKs' bindings know it.
+
+## The stream
+
+`GET /v1/stream` upgrades to a WebSocket and sends every event as the index sees it, with the head after each indexing step. Select one contract or one event with the `contract` and `event` query parameters.
+
+```ts
+const socket = new WebSocket('wss://indexer-production-f5dc.up.railway.app/v1/stream?contract=tapehouse.MarginAccounts&event=Borrow')
+socket.onmessage = ({ data }) => {
+  const message = JSON.parse(data)
+  if (message.type === 'rewind') console.log('a reorganisation removed every event above', message.block)
+}
+```
+
+| Message | Shape |
+|---|---|
+| Event | `{"type":"event","event":Event,"finalized":n}` |
+| Head | `{"type":"head","head":Head,"finalized":n}` |
+| Rewind | `{"type":"rewind","block":n,…}`: every event above block `n` was removed |
+
+A client that falls 256 messages behind is disconnected with code 1008. Resume from `/v1/events` with `after` set to the last cursor you saw.
+
+## Reorganisations
+
+The index checks its head's hash at every step and every log against the hash of its block. When the chain replaced a block, the index rewinds to the newest block whose hash the chain still has and sends `rewind`. `finalized` is true once an event's block is at or below the block the node reports as finalized, which on an Arbitrum chain is final on its parent chain. A local dev node reports no finalized block, so nothing there is final.
+
+## Next
+
+- [List events](/api/list-events) and [Call view](/api/call-view) are the two endpoints most integrations start with.
+- [Run the indexer](/operate/indexer) yourself.
+- [Pay per request](/agents/x402) from an agent.

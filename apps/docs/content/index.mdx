@@ -1,0 +1,46 @@
+---
+title: "Introduction"
+description: "Tapehouse is portfolio margin for Stock Tokens on Robinhood Chain. This is where you read its prices, borrow against a portfolio and build on it."
+---
+
+Tapehouse lets a holder deposit a whole portfolio of Stock Tokens and borrow against it as one position. Because the position is priced as a portfolio, a diversified one earns more borrowing capacity than the same assets priced one by one, and a concentrated one earns less.
+
+The equity market is closed for most of the week and Stock Tokens trade around the clock. Tapehouse keeps a price band on every Stock Token that stays on chain while the market is shut, says what state it is in (open, closed, degraded or halted), and states a position's liquidation price before anyone signs.
+
+<Cards>
+  <Card title="Quickstart" href="/quickstart">Read a Stock Token's band and a position's liquidation price in five minutes.</Card>
+  <Card title="Concepts" href="/concepts/band">The band, the session and the margin engine, in the order a loan meets them.</Card>
+  <Card title="SDKs" href="/sdks/overview">TypeScript, Go and Rust, generated from the contracts' ABIs.</Card>
+  <Card title="Agents" href="/agents/overview">An MCP server and a Claude Code plugin that read and prepare, and never hold a key.</Card>
+  <Card title="Indexer API" href="/api/overview">Every event and view of the contracts over REST and a WebSocket, free within a rate and paid per request beyond it.</Card>
+  <Card title="Contracts" href="/contracts/overview">Each contract, its functions and its testnet address.</Card>
+</Cards>
+
+## What is running
+
+Everything in these pages runs on Robinhood Chain's testnet, chain 46630. The header shows the head block of the testnet's public index, read when you opened the page. [Verification](/resources/verification) shows how to check each contract against its source.
+
+<Warning title="Testnet, not audited">
+Tapehouse is not audited and has no deployment on a mainnet that holds value. A Stock Token is a debt security of its issuer, not a share: it carries no shareholder rights, redeems for cash only, and is not offered to United States persons. Tapehouse is not a broker.
+</Warning>
+
+## Where to start
+
+<Steps>
+<Step title="Read the band">
+Follow the [quickstart](/quickstart) to read TSLA's band with the TypeScript SDK, Go, Rust or `curl`.
+</Step>
+<Step title="Understand what you read">
+[The band](/concepts/band) explains what its state, centre and half-width mean, and [the session](/concepts/session) explains why it widens when the market closes.
+</Step>
+<Step title="Borrow">
+[Open an account](/guides/open-an-account), then [borrow](/guides/borrow) with the liquidation price in front of you.
+</Step>
+<Step title="Build on it">
+Pick an [SDK](/sdks/overview), point an [agent](/agents/overview) at it, or read the [API](/api/overview).
+</Step>
+</Steps>
+
+## For agents
+
+Every page is served as Markdown at its own address with `.md` appended, for example [`/quickstart.md`](/quickstart.md). [`/llms.txt`](/llms.txt) lists the pages with a line each, and [`/llms-full.txt`](/llms-full.txt) is the whole documentation in one file. The [MCP server](/agents/mcp) reads the chain directly.

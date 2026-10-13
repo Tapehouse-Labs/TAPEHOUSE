@@ -1,0 +1,148 @@
+---
+title: "Reopening auction"
+description: "The sealed-bid, uniform-price batch that sells positions which fell short over a closure, with its phases, functions, events and SDK calls."
+---
+
+`ReopeningAuction` sells, at NYSE's regular open, the collateral of margin positions that fell short over a weekend or holiday closure. It runs one sealed-bid, uniform-price batch per Stock Token, so bidders compete on price in a single clearing. You can enroll a position, bid, submit the clearing price or claim what you won.
+
+| | |
+|---|---|
+| Testnet address (46630) | `0x8fcE1e7d2D5e470A5ae7569F803d2957b3A771CB` |
+| Source | `contracts/src/ReopeningAuction.sol` |
+| Admin | None: it has no owner and no setters |
+| Set by | The margin accounts' owner makes it the liquidator's auction |
+
+## Place a bid
+
+A bid is committed hidden, revealed in the last half hour before the open, and claimed after the round clears. The commitment binds the bid to your address.
+
+```ts
+import { toHex } from 'viem'
+import { auction } from '@tapehouse/sdk'
+
+const { openMs, revealing } = await auction.phase(publicClient, deployments)
+const salt = toHex(crypto.getRandomValues(new Uint8Array(32))) // keep it until the reveal
+
+const hash = auction.commitment({
+  bidder: wallet.account.address,
+  asset: 'TSLA',
+  openMs,
+  quantity: 5n * 10n ** 18n,
+  price: 20_000_000_000n,
+  salt,
+})
+
+await wallet.writeContract(auction.commit(deployments, { asset: 'TSLA', commitment: hash, deposit: 1_000_000_000n }))
+```
+
+`quantity` has 18 decimals. `price` is USD with 8 decimals per token, so the value above is 200 USD. `deposit` is in USDG units (6 decimals) and must be at least the bond, 100 USDG. It may exceed what the bid is worth to hide the bid's size, and the reveal returns the surplus.
+
+In the half hour before the open, reveal the same values:
+
+```ts
+await wallet.writeContract(auction.reveal(deployments, { asset: 'TSLA', openMs, quantity: 5n * 10n ** 18n, price: 20_000_000_000n, salt }))
+```
+
+After the open, anyone clears the round at the price `clearingPrice` computes, then each bidder claims:
+
+```ts
+const { bids, supply, floor } = await auction.round(publicClient, deployments, { asset: 'TSLA', openMs })
+const price = auction.clearingPrice(bids, supply, floor)
+
+await wallet.writeContract(auction.clear(deployments, { asset: 'TSLA', openMs, price: price! }))
+await wallet.writeContract(auction.claim(deployments, { asset: 'TSLA', openMs, index: 0n }))
+```
+
+`index` is the position of your bid in `bids`. `clearingPrice` returns `undefined` when bids exist and no supply does.
+
+## Phases
+
+The phases follow the band's `session()`. A round is keyed by its Stock Token's symbol and the regular open, in milliseconds.
+
+| Phase | When | What happens |
+|---|---|---|
+| Commit | From the 24/5 session's reopen until 30 minutes before the regular open | Positions are enrolled and bids committed |
+| Reveal | The last 30 minutes before the regular open | Bids are revealed and escrowed |
+| Clear | The first hour of regular trading | Anyone submits the clearing price |
+| Claim | Once cleared, or once the hour has passed uncleared | Bidders take their tokens and the rest of their escrow |
+
+`phase()` returns the open the contract is committing or revealing for, and whether it is revealing, or zero outside those phases. After a weekend the session names the open from the 24/5 reopen. After a holiday it names the open until the midnight that ends the holiday, and from then on only if a round opened before that midnight (`lastOpenMs`).
+
+A round nobody clears in its hour refunds every bid, and its positions return to the liquidator's Dutch auction. A halted asset reopens into the Dutch auction: no round is keyed on a halt's end.
+
+## Functions
+
+| Function | What it does | Who may call | Key reverts |
+|---|---|---|---|
+| `enroll(address account, bytes32 position, bytes32 symbol)` | Enters a position that falls short at its bands' low edges into the round of one of its Stock Tokens, redeeming its baskets first, and has the liquidator hold it out of the Dutch auction until the clearing window closes | Anyone, in the commit phase | `WrongPhase`, `UnknownAsset`, `NotEnrollable`, `TooManyLots`, `NoPrice` |
+| `commit(bytes32 symbol, bytes32 commitment, uint256 deposit)` | Takes a USDG deposit behind a hidden bid | Anyone, in the commit phase | `WrongPhase`, `UnknownAsset`, `InvalidCommitment` |
+| `reveal(bytes32 symbol, uint64 openMs, uint256 quantity, uint256 price, bytes32 salt)` | Reveals a bid, keeps its escrow and returns the rest of the deposit | The committing bidder, in the reveal phase | `WrongPhase`, `UnknownCommitment`, `InvalidBid` |
+| `forfeit(bytes32 symbol, uint64 openMs, bytes32 commitment)` | Sends a tenth of an unrevealed deposit, at least 100 USDG, to the accounts' reserve and returns the rest | Anyone, once the open has passed | `WrongPhase`, `UnknownCommitment` |
+| `clear(bytes32 symbol, uint64 openMs, uint256 price)` | Checks `price` against the bids and sells each lot's share at it; the backstop buys the rest | Anyone, in the first hour of regular trading | `WrongPhase`, `WrongState`, `NotClearingPrice` |
+| `claim(bytes32 symbol, uint64 openMs, uint256 index)` | Sends the bid's tokens and the rest of its escrow to the bidder | Anyone | `WrongState` |
+
+The reads are `round(symbol, openMs)`, `lots(symbol, openMs)`, `bids(symbol, openMs)`, `phase()`, `lastOpenMs()`, `commitments(symbol, openMs, commitment)`, `enrolled(openMs, account, position, symbol)`, `feeds(symbol)` and the immutables `liquidator`, `accounts`, `band` and `usdg`.
+
+The SDK's `auction.round` returns the round's fields with its `lots` and `bids`. `auction.previewFloor` gives the floor a round will open with, `auction.constants` the bond, the minimum bid and the window lengths, and `auction.enroll`, `auction.forfeit` and `auction.commitmentOf` cover the rest.
+
+## Rules
+
+| Name | Value |
+|---|---|
+| `BOND` | 100 USDG, the least a commitment's deposit |
+| `MIN_BID` | 100 USDG, the least a revealed bid may be worth at the floor |
+| `FORFEIT_BPS` | 1,000 basis points: an unrevealed deposit loses 10%, at least `BOND` |
+| `MAX_LOTS` | 32 lots per round; past that a larger lot takes the smallest one's place |
+| `MAX_BIDS` | 64 bids per round; past that a higher bid takes the lowest one's place, whose escrow goes back |
+| `REVEAL_MS` | 30 minutes, in milliseconds |
+| `CLEAR_MS` | 1 hour, in milliseconds |
+| `REOPEN_LEAD_MS` | 13.5 hours: how long before the regular open the 24/5 session reopens and the band is sealed |
+| `HOLIDAY_OPEN_MS` | 9.5 hours after the midnight that ends a holiday |
+
+The floor is 10% below the low edge of the band that the asset's `BandFeed` sealed at the reopen, which is the liquidator's maximum discount. Without a seal, the floor is set from the band's low edge when the round opens. No bid below the floor is taken. A bid is refused if it is below the floor, worth less than `MIN_BID` at the floor, or worth more than its deposit. A bid that finds no place in a full book gets its whole deposit back and emits `Outbid`.
+
+A lot is what repays all the position owes at the floor, fee included, capped by what the position holds and what its lending vault can return of what it lent. While the market is open, the liquidator holds an enrolled position out of its Dutch auction until the round's clearing window closes.
+
+### Clearing
+
+The clearing price is the highest bid price at which the bids at or above it take the whole supply. When all bids together take less, it is the lowest bid price. With no bid, it is the floor. Every bid above it fills, and bids at it share what is left pro rata. Each lot's share of what the bids take is sold through the liquidator at that one price. The [gap backstop](/contracts/gap-backstop) buys the rest of the lot at the same price, never above the band's low edge, so a high bid cannot set what the backstop pays. A backstop that cannot buy leaves the rest in the position and never stops the clearing.
+
+What neither the bids nor the backstop take stays in the positions, which return to the Dutch auction. What an emptied position still owes goes to the backstop's `cover`.
+
+## Events
+
+| Event | Emitted when |
+|---|---|
+| `RoundOpened(bytes32 indexed symbol, uint64 indexed openMs, uint64 sealMs, uint256 floor, bool fromSeal)` | A round opens with its floor |
+| `Enrolled(bytes32 indexed symbol, uint64 indexed openMs, address indexed account, bytes32 position, uint256 amount)` | A position is enrolled |
+| `LotEvicted(bytes32 indexed symbol, uint64 indexed openMs, address indexed account, bytes32 position)` | A larger lot takes a lot's place |
+| `Committed(bytes32 indexed symbol, uint64 indexed openMs, address indexed bidder, bytes32 commitment, uint256 deposit)` | A bid is committed |
+| `Revealed(bytes32 indexed symbol, uint64 indexed openMs, address indexed bidder, uint256 index, uint256 quantity, uint256 price)` | A bid is revealed at `index` |
+| `Outbid(bytes32 indexed symbol, uint64 indexed openMs, address indexed bidder, uint256 quantity, uint256 price)` | A bid found no place and its deposit went back |
+| `Evicted(bytes32 indexed symbol, uint64 indexed openMs, address indexed bidder, uint256 index, uint256 quantity, uint256 price)` | A higher bid took this bid's place |
+| `Cleared(bytes32 indexed symbol, uint64 indexed openMs, uint256 price, uint256 sold, uint256 paid, uint256 taken)` | A round clears; `taken` is what the backstop bought |
+| `Claimed(bytes32 indexed symbol, uint64 indexed openMs, address indexed bidder, uint256 index, uint256 amount, uint256 paid, uint256 refund)` | A bidder claims |
+| `Forfeited(bytes32 indexed symbol, uint64 indexed openMs, address indexed bidder, uint256 forfeited, uint256 returned)` | An unrevealed deposit is split |
+
+## Errors
+
+| Error | Meaning |
+|---|---|
+| `InvalidFeeds()` | The constructor's feeds do not match the symbols or the liquidator's band |
+| `WrongPhase()` | The session or the clock is not in the phase the call needs |
+| `UnknownAsset(bytes32 symbol)` | The accounts have no Stock Token with this symbol |
+| `NoPrice(bytes32 symbol)` | The band gives no price for the asset, so the floor is zero |
+| `NotEnrollable(address account, bytes32 position)` | The position meets its requirement at the low edges, can sell none of the Stock Token, or has a lot in the round already |
+| `TooManyLots()` | The round holds 32 lots, none smaller than this one |
+| `InvalidCommitment(bytes32 commitment)` | The commitment is pending already, or its deposit is below `BOND` |
+| `UnknownCommitment(bytes32 commitment)` | No pending commitment matches the bid |
+| `InvalidBid()` | The bid is below the floor, worth less than `MIN_BID`, or above its deposit |
+| `NotClearingPrice(uint256 price)` | The price is not the round's clearing price |
+| `WrongState()` | The round is cleared already, or cannot be claimed yet |
+
+## Next
+
+- [Gap backstop](/contracts/gap-backstop)
+- [Liquidator](/contracts/liquidator)
+- [Auction guide](/guides/auction)
+- [Reference bidder](/operate/bidder)

@@ -1,0 +1,129 @@
+---
+title: "Paying per request over x402"
+description: "Read Tapehouse's API beyond the public allowance by paying 0.001 USDG a request over x402, with no API key."
+---
+
+A client with no API key can read the indexer's API beyond the public allowance by paying for each request in USDG over [x402](https://x402.org), the HTTP 402 payment protocol. The API answers 402 with the price, the client signs a payment and repeats the request, and the read is served once the payment settles on the chain. The payer needs no ether.
+
+This is on where the indexer is given `TAPEHOUSE_X402_FACILITATOR`, as the testnet's is. A client within the allowance, and a client with a key, are never charged.
+
+## See a 402
+
+The public tier allows 10 requests a second per client address, with bursts of 20.
+
+```bash
+curl -si https://indexer-production-f5dc.up.railway.app/v1/status
+```
+
+Within the allowance this answers 200. Over it, the answer is 402 with a `PAYMENT-REQUIRED` header.
+
+## The protocol
+
+Tapehouse uses version 2 of x402, scheme `exact`, on `eip155:<chainId>` (`eip155:46630` for the testnet), paid in USDG with an EIP-3009 `transferWithAuthorization`.
+
+| Header | Direction | Carries |
+|---|---|---|
+| `PAYMENT-REQUIRED` | Server to client, on the 402 | The base64 of a JSON document: what a request costs, to whom, on which chain |
+| `PAYMENT-SIGNATURE` | Client to server, on the repeated request | The base64 of the payment payload, signed for this request |
+| `PAYMENT-RESPONSE` | Server to client, on the 200 | The settlement, including the transaction hash |
+
+In the 402's `accepts[0]`, `scheme` is `exact`, `network` is the chain, `asset` is USDG's address, `amount` is in the token's atomic units (6 decimals), `payTo` receives the payment, and `extra` is the token's EIP-712 domain, `name` and `version`, which the payment is signed under. A payment that does not settle is answered 402 again and the read is not served.
+
+## What is sold
+
+| | |
+|---|---|
+| Sold | The API's reads, each at the same price |
+| Price | `TAPEHOUSE_X402_PRICE` atomic units of USDG: 1000, which is 0.001 USDG, unless set |
+| Not sold | The stream (`/v1/stream`) and the specification (`/v1/openapi.yaml`). Over the allowance they answer 429 with `Retry-After` |
+| USDG on the testnet | `0x7E955252E15c84f5768B83c41a71F9eba181802F`, from `deployments/46630.json` |
+
+Testnet USDG comes from Paxos' faucet at `https://faucet.paxos.com/?network=robinhood`.
+
+## Pay from a client
+
+An x402 client refuses a token it was not told to accept. Allow USDG on the chain, with a cap per payment a few times the price: `10000` atomic units is ten times the default. The cap and the allowed asset protect the payer against a server that names another token or a larger amount.
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+
+```ts title="pay.ts"
+import { wrapFetchWithPayment, x402Client } from '@x402/fetch'
+import { ExactEvmScheme } from '@x402/evm/exact/client'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const usdg = '0x7E955252E15c84f5768B83c41a71F9eba181802F'
+const client = x402Client.fromConfig({
+  schemes: [{ network: 'eip155:46630', client: new ExactEvmScheme(privateKeyToAccount(process.env.PAYER_KEY as `0x${string}`)) }],
+  spendControls: { allowedAssets: [{ network: 'eip155:46630', asset: usdg, maxAmountPerPayment: '10000' }] },
+})
+const fetchWithPayment = wrapFetchWithPayment(fetch, client)
+const response = await fetchWithPayment('https://indexer-production-f5dc.up.railway.app/v1/contracts')
+```
+
+</Tab>
+<Tab title="Go">
+
+```go title="pay.go"
+package main
+
+import (
+	"net/http"
+	"time"
+
+	x402 "github.com/x402-foundation/x402/go/v2"
+	x402http "github.com/x402-foundation/x402/go/v2/http"
+	exactclient "github.com/x402-foundation/x402/go/v2/mechanisms/evm/exact/client"
+	evmsigners "github.com/x402-foundation/x402/go/v2/signers/evm"
+)
+
+func payingClient(privateKeyHex string) (*http.Client, error) {
+	signer, err := evmsigners.NewClientSignerFromPrivateKey(privateKeyHex)
+	if err != nil {
+		return nil, err
+	}
+	const usdg = "0x7E955252E15c84f5768B83c41a71F9eba181802F"
+	client := x402.Newx402Client(x402.WithSpendControls(x402.SpendControls{
+		AllowedAssets: []x402.SpendControlAsset{{Network: "eip155:46630", Asset: usdg, MaxAmountPerPayment: "10000"}},
+	})).Register("eip155:*", exactclient.NewExactEvmScheme(signer, nil))
+	return x402http.WrapHTTPClientWithPayment(&http.Client{Timeout: time.Minute}, x402http.Newx402HTTPClient(client)), nil
+}
+```
+
+Then `payingClient(key)` returns an `*http.Client`: `Get("https://indexer-production-f5dc.up.railway.app/v1/contracts")` pays when the API answers 402.
+
+</Tab>
+</Tabs>
+
+The key is the payer's own. Keep it in an environment variable the owner set, never in a prompt or a chat. Fund the payer with a few USDG: each request costs a fraction of one. A smart account's signature works too, because the facilitator accepts ERC-1271.
+
+An agent should read the price from the 402 before paying, refuse a change, and not loop. A read needed repeatedly is better paged once from `/v1/events` and kept, or served by a key from the operator. The MCP server needs none of this, because it reads the chain through the RPC. Use x402 for the indexer's history, events and composite reads.
+
+## The facilitator
+
+A facilitator verifies a signed payment and settles it on the chain. Robinhood Chain has none, so `services/cmd/facilitator`, built on the official Go SDK `github.com/x402-foundation/x402/go/v2`, is one. It serves `GET /supported`, `POST /verify` and `POST /settle`, only to the indexer's bearer token: the facilitator reads it as `TAPEHOUSE_FACILITATOR_TOKEN` and the indexer presents it as `TAPEHOUSE_X402_FACILITATOR_TOKEN`. It settles USDG only and pays the gas of each settlement from its own account, which holds ether and nothing else. Payments go to the indexer's `TAPEHOUSE_X402_PAY_TO`.
+
+| Variable | What it is |
+|---|---|
+| `TAPEHOUSE_DEPLOYMENTS` | The registry. Required |
+| `TAPEHOUSE_RPC_URL` | The chain's endpoint. Required, and it must serve the registry's chain |
+| `TAPEHOUSE_FACILITATOR_TOKEN` | The bearer token of the one client it serves. Required |
+| `TAPEHOUSE_FACILITATOR_KEYSTORE`, `TAPEHOUSE_FACILITATOR_PASSWORD_FILE` | The facilitator's key as a keystore, with its password read only from that file |
+| `TAPEHOUSE_FACILITATOR_KEY` | The hex key, for a dev node |
+| `TAPEHOUSE_FACILITATOR_ADDR` | The listen address. `127.0.0.1:4402` unless set |
+
+One `transferWithAuthorization` costs about 85,000 gas, paid by the facilitator's account. On the testnet that is a fraction of a thousandth of an ether, more than 0.001 USDG would buy at an ether's market price, so a mainnet deployment prices a request above its settlement.
+
+## Replay protection
+
+USDG answers an authorization used before with an event and no transfer, not a revert. The facilitator therefore reads `authorizationState` before it verifies and again before it settles, and refuses a used nonce. The SDK also refuses a settlement whose receipt holds no transfer of the amount. `UsdgForkTest` pins both behaviours against the real token.
+
+## Tests
+
+`make test-payments-devnode` pays through the official Go client against a dev node, with replays, an empty account and six payers at once. `make test-indexer-devnode` also drives the indexer with its facilitator, from free reads to a paid one.
+
+## Next
+
+- [The indexer's API](/api/overview)
+- [Running the indexer](/operate/indexer)
+- [The MCP server](/agents/mcp)

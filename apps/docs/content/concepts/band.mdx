@@ -1,0 +1,114 @@
+---
+title: "The band"
+description: "How Tapehouse prices a Stock Token while the equity market is closed, what the band's state and width mean, and what stops it from answering."
+---
+
+The band is the price of a Stock Token with its doubt attached: a centre, a half-width, a low and a high edge, and a state that says whether to trust them. Every contract in Tapehouse that needs a price asks the band, and every borrower can read the same answer.
+
+## Read a band
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+
+```ts
+import { readFileSync } from 'node:fs'
+import { createPublicClient, http } from 'viem'
+import { band, parseDeployments } from '@tapehouse/sdk'
+
+const deployments = parseDeployments(JSON.parse(readFileSync('deployments/46630.json', 'utf8')))
+const client = createPublicClient({ transport: http('https://rpc.testnet.chain.robinhood.com') })
+
+const { state, live, mid, halfBps, low, high } = await band.quote(client, deployments, 'TSLA')
+```
+
+</Tab>
+<Tab title="HTTP">
+
+```bash
+curl "https://indexer-production-f5dc.up.railway.app/v1/contracts/tapehouse.Band/views/quote?symbol=TSLA"
+```
+
+</Tab>
+</Tabs>
+
+Prices are in USD with 8 decimals. `halfBps` is the half-width in basis points of the centre. The program is `stylus/contracts/band`; its functions are listed in [the band contract](/contracts/band).
+
+| `state` | Name | Meaning |
+|---|---|---|
+| 3 | open | Chainlink's session is open and the legs the band expects are live. |
+| 2 | closed | Chainlink's session is closed. The band prices from the 24/7 leg alone. |
+| 1 | degraded | Fewer legs are live than expected, or the session is not known. |
+| 0 | halted | No price. `quote` returns all zeros. |
+
+## Two legs
+
+The band builds its price from two sources, called legs.
+
+- Chainlink's equity feed for the Stock Token. It follows a 24/5 session, so it prints through the trading day and goes quiet overnight, at weekends and on holidays. It is live while its session is open and its last round is at most 86,460 seconds old (the heartbeat plus 60 seconds).
+- RedStone's 24/7 feed for the share, signed by RedStone's authorised signers and written to the band by a keeper or by anyone. It is live for 120 seconds after its package.
+
+The centre is the live 24/7 leg, and otherwise Chainlink. A leg that has gone quiet is set aside, never averaged in.
+
+RedStone's packages are verified on chain with the rules of `PrimaryProdDataServiceConsumerBase` in `@redstone-finance/evm-connector` 1.0.0: five authorised signers, three unique signers per feed, the median of their values, and a package at most 180 seconds old and 60 seconds ahead. `writePrices(bytes32[] feedIds, bytes payload)` is open to anyone, and a package no newer than the stored one reverts with `PackageNotNewer`.
+
+## The half-width
+
+The half-width is the band's doubt, computed with integer arithmetic in `stylus/contracts/band/src/quote.rs`:
+
+| Part | Rule |
+|---|---|
+| Floor | At least 30 basis points. |
+| Volatility | At least z = 3 standard deviations of the feed's one-minute moves over a 3-minute latency. The variance is an EWMA with λ = 0.94, sampled at least 50 seconds of package time apart. |
+| Disagreement | When both legs are live, the gap between them above Chainlink's 50 basis point deviation is added. |
+| Fewer legs | 25 basis points with one live leg, 50 without the 24/7 leg. |
+| Index | 25 basis points while the 24/7 leg is made from an index (see below). |
+| Cap | 1,500 basis points. |
+
+Because the width is computed from what the legs say, with no calendar in it, it widens when the market closes and when sources disagree, and it narrows when they agree. Borrowing capacity values a Stock Token at the low edge, so a wider band lowers capacity before anything is liquidated.
+
+## Multipliers
+
+A Robinhood Stock Token's price is its share's price times the token's ERC-8056 multiplier, `floor(share × uiMultiplier / 1e18)`. Chainlink's feeds on Robinhood Chain already price the token and RedStone's 24/7 feeds price the share, so the band applies the multiplier to the 24/7 leg. It reads the multiplier from the token at every call, so a change takes effect exactly at its `effectiveAt`.
+
+| Change | Before `effectiveAt` | After `effectiveAt` |
+|---|---|---|
+| Under 50 bps, known size (a reinvested dividend) | Nothing changes. | A Chainlink round from before the step is scaled to the new terms. |
+| 50 bps or more, or unknown size (a split, a large dividend) | `corporateAction` reports it as scheduled. | The band is halted until `syncMultiplier` sees a Chainlink round from after the step land inside the band the 24/7 leg draws alone. |
+
+`syncMultiplier(bytes32 symbol)` is open to anyone. A halted asset stays halted until it is confirmed.
+
+## Halts
+
+`quote` returns zeros while either of two sources holds the asset.
+
+- The issuer's oracle pause. The Stock Token's `oraclePaused()` is set by the issuer, as it was around CRWD's 4:1 split on 2 July 2026. The band reads it at every quote, and a token that cannot be read counts as paused. A token that predates `oraclePaused()` is read through `tokenPaused()`.
+- A signed trading halt. Robinhood reports whether each underlying is halted, but not on chain. The band accepts that state when Tapehouse's halt signer has signed it as an EIP-712 `HaltState(bytes32 symbol,bool halted,uint64 issuedAt,uint64 expiresAt)` message for this band, and anyone writes it with `writeHalt`. A message spans at most an hour, so a halt that nobody renews lapses within an hour. It is the one input the band takes on Tapehouse's own signature.
+
+`band.halt(client, deployments, 'TSLA')` returns `signedHalt`, `until`, `issuedAt` and `oraclePaused`, which tells the sources apart.
+
+## The seal
+
+`BandFeed.seal()` records the whole band before the session reopens. Anyone may call it while the session is closed and its reopen is at most ten minutes away, and the latest call stands in `seals(reopenMs)`. The reopening auction takes its price floor from the sealed band, so the floor is published before any bid is made. `band.sealed` reads it.
+
+## Serving the band to other contracts
+
+`BandFeed` answers Chainlink's `AggregatorV3Interface`, one side of the band per feed (lending collateral reads the low side). A halted band reverts with `NoAnswer` rather than answering zero, so a consumer that treats a revert as no price stops new borrowing and never liquidates on a price of zero. `MorphoBandOracle` does the same for a Morpho Blue market. See [the Morpho oracle guide](/guides/morpho-oracle).
+
+`latestBand()` also returns the Stock Token's 30-minute Uniswap v3 TWAP and its distance from the centre. That market price is shown beside the band and is never part of it.
+
+## An index leg
+
+SPY has no RedStone 24/7 feed. Its 24/7 leg is its last Chainlink print moved by the S&P 500 index since that print: `print × index / index at the print`. The anchor is set when an index package signed within 120 seconds of a new Chainlink round is written, and the leg carries 25 basis points of extra half-width. Whoever writes the index chooses which package within that window becomes the anchor, so the leg can carry up to 240 seconds of the index's move as a bias.
+
+## Limits
+
+- The testnet prices TSLA and AMZN. Its Chainlink feeds are `RedStoneRoundFeed` contracts that follow RedStone, so on the testnet they are not independent of RedStone's signers as Chainlink's are.
+- On Arbitrum One the band prices the share, counts Chainlink only in NYSE regular hours, and is at most degraded while the L2 sequencer is down and for an hour after.
+- The band's accuracy was measured against 24 reopenings per chain: 19 fell inside the band on Robinhood Chain and 11 on Arbitrum One, with medians of 15.4 and 40.2 basis points of error. The method is in [the backtest](/resources/backtest).
+
+## Next
+
+- [The session](/concepts/session)
+- [Read a price](/guides/read-a-price)
+- [The band contract](/contracts/band)
+- [Band feeds](/contracts/band-feeds)

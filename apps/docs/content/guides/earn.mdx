@@ -1,0 +1,148 @@
+---
+title: "Earn"
+description: "Supply USDG to the vault, join the gap backstop, or lend a Stock Token, and know what each earns, how you leave and what you bear."
+---
+
+Money can work in three places on Tapehouse. Each answers the same four questions: what it earns, how you leave, what it bears and what your account holds. In this guide you read each place's terms from the chain and then enter and leave it.
+
+| Place | Earns | Leaves | Bears |
+|---|---|---|---|
+| Supply vault | The interest borrowers pay | Up to the USDG not lent | The last loss, after the borrower's collateral and the backstop |
+| Gap backstop | The weekend premium the accounts set aside | After a cooldown, outside closures | The second loss, up to its exposure limit per closure |
+| Stock lending | The fee shorts pay for the token | On notice, by the recall queue | A short's shortfall beyond its USDG, and issuer burns |
+
+## Before you start
+
+The `client`, `deployments`, `wallet`, `owner` and `usdgAbi` of [open an account](/guides/open-an-account) and [borrow](/guides/borrow), and USDG in your wallet. In the app, `/earn` lists these places in one ledger, and the smart account holds the shares: a deposit takes your wallet's USDG by permit in one sponsored operation, and withdrawals go to your wallet.
+
+## Supply USDG
+
+`SupplyVault` holds the USDG the margin accounts borrow. You deposit USDG and receive `thUSDG` shares of an ERC-4626 vault, and earn all the interest the borrower pays.
+
+<Steps>
+<Step title="Read the market">
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+import { supply } from '@tapehouse/sdk'
+
+const { supplyRate, borrowRate, utilization, idle, debt, totalAssets, open } = await supply.market(client, deployments)
+```
+</Tab>
+<Tab title="Rust">
+```rust
+use tapehouse_sdk::bindings::SupplyVault;
+
+let vault = SupplyVault::new(tapehouse.deployments().tapehouse["SupplyVault"], provider.clone());
+let supply_rate = vault.supplyRate().call().await?;
+let utilization = vault.utilization().call().await?;
+```
+</Tab>
+</Tabs>
+
+Rates are a year with 18 decimals, and `utilization` is the share lent, also with 18 decimals. The borrow rate rises with utilisation in two straight lines: from 0% at no utilisation to 6% a year at 90%, then to 46% at full utilisation. Lenders earn the borrow rate on the share lent, which is 5.4% a year at 90%. `open` is false while the vault takes no deposits.
+</Step>
+<Step title="Deposit">
+
+```ts
+const assets = 1_000_000_000n // 1,000 USDG
+
+await wallet.writeContract({
+  address: deployments.tokens.USDG,
+  abi: usdgAbi,
+  functionName: 'approve',
+  args: [deployments.tapehouse.SupplyVault, assets],
+})
+await wallet.writeContract(supply.deposit(deployments, { assets, receiver: owner.address }))
+```
+
+Or deposit with a USDG permit in one transaction: sign `sponsorship.permit(client, { token: deployments.tokens.USDG, owner, account: deployments.tapehouse.SupplyVault, value: assets, deadline })` and pass the signature to `supply.depositWithPermit`. A permit already spent, as by a front-runner, does not stop the deposit if the allowance stands.
+</Step>
+<Step title="Read your position and leave">
+
+```ts
+const { shares, assets: worth, maxWithdraw, maxRedeem } = await supply.lender(client, deployments, owner.address)
+
+await wallet.writeContract(supply.withdraw(deployments, { assets: maxWithdraw, receiver: owner.address, owner: owner.address }))
+```
+
+Shares carry six more decimals than USDG. You withdraw at most what the vault holds and has not lent; the rest returns as borrowers repay.
+</Step>
+</Steps>
+
+## Join the gap backstop
+
+`GapBackstop` is the junior tranche behind the vault's lenders, an ERC-4626 vault over USDG. Its depositors earn the weekend premium the accounts set aside for it, and cover first what a position emptied by liquidation still owes.
+
+```ts
+import { backstop } from '@tapehouse/sdk'
+
+const terms = await backstop.state(client, deployments)
+await wallet.writeContract(backstop.deposit(deployments, { assets, receiver: owner.address }))
+const mine = await backstop.depositor(client, deployments, owner.address, [deployments.tokens.TSLA])
+```
+
+Approve USDG to `deployments.tapehouse.GapBackstop` before the deposit. `state` returns what the backstop holds, its exposure limit, what is left of it and what it covered, for the cross positions and for each asset's isolated positions, with its cooldown, withdrawal window and the premium's split. `depositor` returns your shares, what they are worth, your cooldown and the gains you have not claimed.
+
+To leave, start a cooldown for all your shares, then redeem inside the window:
+
+```ts
+await wallet.writeContract(backstop.startCooldown(deployments))
+// a week later, for six days, while redemptions are open
+await wallet.writeContract(backstop.redeem(deployments, { shares: mine.shares, receiver: owner.address, owner: owner.address }))
+```
+
+At the reopening auction the backstop buys what the bids leave. The Stock Tokens it buys belong to its depositors at that moment, in proportion to their shares, and `backstop.claimGains(deployments, token)` sends them to you. Deposits are shut from the moment the accounts record a coming close until a day after its reopening, so no one buys into gains the closure already made.
+
+<Warning title="Redemptions shut around closures">
+Redemptions are shut while the market is closed, from the regular close before a weekend or holiday to the regular open after it, and from the moment the accounts record a coming close until a day after its reopening. A new cooldown replaces the last one.
+</Warning>
+
+## Lend a Stock Token
+
+A position can lend Stock Tokens through the asset's lending vault and earn the fee shorts pay. The position keeps the vault's shares, which count for the asset in the engine at 5% less in equity.
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+const token = deployments.tokens.TSLA
+const position = CROSS
+
+await wallet.writeContract(accounts.lend(deployments, { position, token, amount, account }))
+const { lent, sellable, claim, recalls } = await accounts.lending(client, deployments, account, position, token)
+
+await wallet.writeContract(accounts.unlend(deployments, { position, token, amount, account }))
+await wallet.writeContract(accounts.recall(deployments, { position, token, amount, account }))
+await wallet.writeContract(accounts.settle(deployments, { account, position, token }))
+```
+</Tab>
+<Tab title="Rust">
+```rust
+let accounts = tapehouse.accounts()?;
+accounts.lend(CROSS, token, amount, account).send().await?.get_receipt().await?;
+accounts.recall(CROSS, token, amount, account).send().await?.get_receipt().await?;
+```
+</Tab>
+</Tabs>
+
+`unlend` brings tokens back as far as the vault can return them now. `recall` takes the vault's free tokens back at once and queues the rest as a ticket, which the borrower returns within the vault's notice or by a buy-in. `settle`, which anyone may call, moves what has come back into the position's holding. A position may keep three recalls open.
+
+Where nobody shorts the token, a lending vault pays no yield. The app names none in that case.
+
+## Errors you may hit
+
+| Error | Cause |
+|---|---|
+| `ERC4626ExceededMaxDeposit`, `ERC4626ExceededMaxWithdraw`, `ERC4626ExceededMaxRedeem` | USDG is paused, the vault is frozen or its USDG wiped, or you asked for more than the vault holds free. |
+| `InsufficientLiquidity(requested, available)` | The vault holds less USDG than you asked for. |
+| `OutOfReach(symbol, amount, reachable)` | `unlend` asked for more than the vault can return now. Recall instead. |
+| `TooManyRecalls(symbol)`, `RecallTooSmall(amount)` | A position keeps at most three recalls open, and a recall is at least a hundredth of a token unless it is the first and whole one. |
+| `AssetFrozen(symbol)` | The issuer paused the Stock Token or blocklisted the vault or the accounts. |
+| `NothingToSettle()` | Nothing has come back for that recall yet. |
+
+## Next
+
+- [Borrow](/guides/borrow), the other side of the supply vault.
+- [The supply vault](/contracts/supply-vault) and [the gap backstop](/contracts/gap-backstop).
+- [The reopening auction](/guides/auction), where the backstop buys.

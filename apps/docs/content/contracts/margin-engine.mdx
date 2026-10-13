@@ -1,0 +1,149 @@
+---
+title: "Margin engine"
+description: "The Stylus program that returns the margin a portfolio of Stock Tokens needs, with its inputs, outputs, parameters, roles and SDK calls."
+---
+
+The margin engine is a Stylus (Rust) program that margins a portfolio of Stock Tokens as one position. You give it signed quantities and USD prices, and it returns the margin the portfolio needs. It is a view: nothing is signed off chain, and anyone can rebuild its scenario set from its parameters.
+
+## Address
+
+Robinhood Chain testnet, chain 46630, from `deployments/46630.json`, under `tapehouse.Margin`.
+
+| Name | Address |
+|---|---|
+| Margin engine | `0x85cbe267eF0c5dEC5Fc2aFc0b439cc62caB94982` |
+
+A Solidity reference implementation of the same engine is deployed at `0x68B73e2c70cd61B9d94cCF7c0F3502F9DE93749c` (`references.Margin`), so the two can be compared call by call. Nothing in Tapehouse depends on it. Testnet, not audited.
+
+## Ask for a requirement
+
+```ts
+import { readFileSync } from 'node:fs'
+import { createPublicClient, http } from 'viem'
+import { engine, parseDeployments } from '@tapehouse/sdk'
+
+const deployments = parseDeployments(JSON.parse(readFileSync('deployments/46630.json', 'utf8')))
+const client = createPublicClient({ transport: http('https://rpc.testnet.chain.robinhood.com') })
+
+const portfolio = {
+  quantities: [10n * 10n ** 18n, 0n],
+  prices: [250_00000000n, 180_00000000n],
+}
+const { margin, missing, regime } = await engine.currentRequirement(client, deployments, portfolio)
+```
+
+The lists follow the order of `assets()`. Quantities are signed token amounts with 18 decimals, negative for a short. Prices are USD with 8 decimals. The numbers above are placeholders: read `assets()` for the order and the band for real prices.
+
+## Inputs and outputs
+
+| Value | Unit |
+|---|---|
+| `quantities` | `int256[]`, token amounts with 18 decimals, in the order of `assets()` |
+| `prices` | `uint256[]`, USD with 8 decimals, in the same order |
+| `horizon` | Seconds. The engine margins over two days, 172,800 seconds, in every regime. |
+| `margin` | USD with 18 decimals |
+| `missing` | A bit for every asset whose liquidity input is missing: no pool, a pool with less than 30 minutes of history, or a stale ETH/USD answer |
+| `regime` | 0 unknown, 1 closed, 2 open, 3 closing |
+
+## Functions
+
+### Requirement
+
+| Function | Who may call | What it does | Key reverts |
+|---|---|---|---|
+| `requirement(int256[] quantities, uint256[] prices, uint64 horizon, bool spansClosure)` | Anyone, view | The margin the portfolio needs over `horizon` seconds, without the open market's buffer, and the missing bits. `spansClosure` counts the weekend-gap scenarios. Returns `uint256 margin, uint8 missing`. | `LengthMismatch`, `ExposureTooLarge` |
+| `currentRequirement(int256[] quantities, uint256[] prices)` | Anyone, view | The margin the portfolio needs now. It reads the band's session and returns `uint256 margin, uint8 missing, uint8 regime`. | `LengthMismatch`, `ExposureTooLarge`, `InsufficientGas` |
+| `weekendLeverage()` | Anyone, view | The most gross exposure the current requirement allows per unit of margin across a closure, in basis points, as a `uint32`. | None |
+
+`currentRequirement` is open or closed by the band's session:
+
+| Regime | Requirement |
+|---|---|
+| Open | The two-day requirement plus a 25% buffer |
+| Closing | Rises in a straight line from the open value to the closed one, from three hours before a weekend or holiday close to the end of its four-hour post-market |
+| Closed | The largest of the buffered open requirement, the requirement across the closure and a fifth of the gross exposure, plus the liquidity add-on |
+| Unknown | As closed |
+
+A call that leaves the band's `session()` too little gas reverts with `InsufficientGas` instead of reading as an unknown session.
+
+### Parameters
+
+| Function | Returns |
+|---|---|
+| `assets()` | `bytes32[]`, the assets in the order of every quantity, price and parameter list |
+| `volatility(bytes32 symbol)` | `uint32 value, uint32 floor`, daily volatility in centi-basis-points |
+| `correlation(bytes32 symbol, bytes32 other)` | `uint16 value, uint16 floor`, in basis points; 10,000 for an asset with itself |
+| `weekendGap(bytes32 symbol)` | `uint32 value, uint32 floor`, in centi-basis-points |
+| `depth(bytes32 symbol)` | `uint32 selling, uint32 buying, uint32 sellingCeiling, uint32 buyingCeiling`, whole USD a liquidation can sell and buy within a 10% move of its pool |
+| `pool(bytes32 symbol)` | `address`, the Uniswap v3 pool the asset is liquidated in, zero for none |
+| `market()` | `bytes32`, the asset that stands for the market, zero for the equal-weighted portfolio |
+| `lastUpdate()` | `uint64`, when the parameters were last updated, zero before the first update |
+| `ethUsdFeed()`, `band()` | `address`, the Chainlink feed that prices WETH and the band whose session sets the regime |
+| `owner()`, `pendingOwner()` | `address` |
+
+`volatility`, `correlation`, `weekendGap`, `depth` and `pool` revert with `UnknownAsset(symbol)` for a symbol the engine does not hold.
+
+### Scenarios
+
+| Function | Returns |
+|---|---|
+| `scenario(uint16 index, uint64 horizon)` | `int32[]`, one scenario's returns in millionths, in the order of `assets()` |
+| `scenarioDigest(uint16 size, uint64 horizon)` | `bytes32`, the keccak-256 of every scenario of a set of 32, 64, 128 or 256 lattice points |
+
+They revert with `ScenarioOutOfRange(index)` and `UnsupportedScenarioSize(size)`. Neither is in the SDK's exported ABI.
+
+### Updates
+
+| Function | Who may call | What it does | Key reverts |
+|---|---|---|---|
+| `setParameters(uint32[] volatilities, uint16[] correlations, uint32[] gaps, uint32[] depths)` | Owner | Replaces every parameter, in the order of `assets()`: a volatility and a gap for each asset, the correlations of the upper triangle row by row, then each asset's selling and buying depth. | `OwnableUnauthorizedAccount`, `UpdateTooSoon(nextUpdateAt)`, `LengthMismatch`, `InvalidVolatility`, `InvalidCorrelation`, `InvalidGap`, `InvalidDepth`, `VolatilityStepTooLarge`, `CorrelationStepTooLarge`, `GapStepTooLarge`, `DepthStepTooLarge`, `NotPositiveDefinite` |
+| `transferOwnership(address)`, `acceptOwnership()`, `renounceOwnership()` | Owner; pending owner for `acceptOwnership` | OpenZeppelin `Ownable2Step` behaviour. | `OwnableUnauthorizedAccount` |
+
+## Events
+
+| Event | Emitted when |
+|---|---|
+| `VolatilitySet(bytes32 indexed symbol, uint32 value)` | The constructor sets, or an update changes, a volatility. |
+| `CorrelationSet(bytes32 indexed symbol, bytes32 indexed other, uint16 value)` | Same, for a correlation. |
+| `GapSet(bytes32 indexed symbol, uint32 value)` | Same, for a weekend gap. |
+| `DepthSet(bytes32 indexed symbol, uint32 selling, uint32 buying)` | Same, for a depth. |
+| `OwnershipTransferStarted`, `OwnershipTransferred` | Ownership moves in two steps. |
+
+The history of every parameter rebuilds from these events alone.
+
+## Roles and admin powers
+
+The owner is the only privileged account. It can replace the parameters, and nothing else, with these limits:
+
+- Each value stays at or above its floor, and a depth stays above zero and at or below its ceiling. The floors and ceilings are set in the constructor and never change.
+- Each value moves by at most ×1.5 or ÷1.5 per update, except that a depth may fall by any amount, since a smaller depth only raises requirements.
+- An update comes at least a day after the one before. The first may come at any time.
+- The correlation matrix must stay positive definite.
+
+The engine's assets, pools and band are fixed at deployment. A new asset means a new engine.
+
+## Invariants
+
+- The engine draws a deterministic scenario set on every call: 256 joint draws, 256 with every correlation 1, 256 with every correlation 0, a market move down and up, and the weekend-gap scenarios. The requirement is the largest of the expected shortfall at 99% with diversification capped at 80%, the stress scenarios and a single-position floor, plus the liquidity add-on.
+- Arithmetic is integer. A Solidity reference answers every view of the program to the bit.
+- A position margined alone is the portfolio that holds only it: call `currentRequirement` with every other quantity zero. Hold each asset in one position only, because the engine prices what it is given and does not check it.
+- Across a closure, and whenever the session is unknown, leverage is capped: the requirement is at least a fifth of the gross exposure, so gross exposure over margin stays at or below 5×.
+
+## SDK
+
+TypeScript, module `engine` in `@tapehouse/sdk`.
+
+| Contract function | SDK call |
+|---|---|
+| `requirement` | `engine.requirement(client, deployments, { quantities, prices }, { horizon, spansClosure })`; `horizon` defaults to `engine.HORIZON`, 172,800 seconds |
+| `currentRequirement` | `engine.currentRequirement(client, deployments, { quantities, prices })` |
+| Parameter views, `weekendLeverage`, `setParameters` | No wrapper. Use `marginAbi`, which the package exports, with viem. |
+
+The margin accounts call the engine for every position: `accounts.health` returns a position's equity next to the engine's requirement, and `accounts.liquidationPrice` searches the engine for the price at which a position stops meeting it.
+
+## Next
+
+- [Portfolio margin](/concepts/portfolio-margin)
+- [Margin accounts](/contracts/margin-accounts)
+- [Calibration](/resources/calibration)
+- [Stylus versus Solidity](/resources/stylus-vs-solidity)

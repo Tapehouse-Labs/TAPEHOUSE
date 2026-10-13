@@ -1,0 +1,183 @@
+---
+title: "Gap cover"
+description: "Cover against a Stock Token's fall over a market closure, paid in USDG, with its functions, pricing inputs, settlement rules, events and SDK calls."
+---
+
+`GapCover` sells cover against a Stock Token's fall over a market closure, paid in USDG, and is an ERC-4626 vault over USDG for the writers who back it. A cover pays its notional times the fall of the asset's price from the closure's reference to its reopening price, beyond a deductible and up to a limit. [Weekend gap cover](/concepts/weekend-gap-cover) explains the idea. This page is the contract's reference.
+
+| | |
+|---|---|
+| Testnet address (46630) | `0x482434d135eeA48797c1d960DF0f3A01E434ad17` |
+| Source | `contracts/src/GapCover.sol` |
+| Share token | `thCOVER`, 12 decimals |
+| Admin | None: it has no owner and no setters |
+
+## Buy cover
+
+Cover is sold from the moment the band's session shows a coming close until the sales end. Quote the layer, then buy with a ceiling on the premium.
+
+```ts
+import { gapCover } from '@tapehouse/sdk'
+
+const sale = await gapCover.sales(publicClient, deployments)
+const minimum = await gapCover.minDeductible(publicClient, deployments, 'TSLA')
+
+const layer = { notional: 1_000_000_000n, deductibleBps: minimum, limitBps: minimum + 1_000n }
+const { premium } = await gapCover.quote(publicClient, deployments, 'TSLA', layer)
+
+await wallet.writeContract(
+  gapCover.buy(deployments, { asset: 'TSLA', ...layer, maxPremium: premium + premium / 100n, holder: wallet.account.address }),
+)
+```
+
+`sales` returns `undefined` while no cover is sold. `notional` is in USDG units (6 decimals), so the layer above covers 1,000 USDG. The caller pays the premium in USDG, so approve USDG to the cover first. Each purchase is its own cover, held by `holder`, and is not transferable. After the series settles, `gapCover.release` credits the payout and `gapCover.claim` sends it:
+
+```ts
+await wallet.writeContract(gapCover.release(deployments, id))
+await wallet.writeContract(gapCover.claim(deployments, wallet.account.address))
+```
+
+`gapCover.holdings` lists the covers an address holds, and `gapCover.payout` computes what a settled series pays a layer.
+
+## Functions
+
+| Function | What it does | Who may call | Key reverts |
+|---|---|---|---|
+| `buy(bytes32 symbol, uint256 notional, uint256 deductibleBps, uint256 limitBps, uint256 maxPremium, address holder)` | Buys cover over the coming closure; returns `(id, premium)` | Anyone, during the sales | `SalesClosed`, `ZeroAmount`, `InvalidHolder`, `NotCoverable`, `AssetHalted`, `CorporateActionPending`, `SequencerNotSettled`, `InvalidLayer`, `StaleReference`, `PremiumAboveLimit`, `NoCapacity` |
+| `record()` | Records the session's next close while it is open, and the reopen while it is closed | Anyone | None |
+| `measure(bytes32 symbol)` | Keeps the realised move of the week before the close, so the first buyer does not pay for reading it | Anyone, during the sales, from a day before the close | `NotCoverable`, `TooEarlyToMeasure` |
+| `observe(bytes32 symbol, uint64 closesMs)` | Records the band in this minute's slot of the settlement window; returns whether it recorded | Anyone, from the reopen | `NothingCovered`, `SeriesClosed`, `NotReopened`, `WindowClosed` |
+| `settle(bytes32 symbol, uint64 closesMs, uint80 referenceRound, uint80 lastRound)` | Settles a series once its window has ended | Anyone | `NotReopened`, `WindowOpen`, `InvalidReference`, `InvalidLastRound`, `SeriesClosed`, `NothingCovered` |
+| `void(bytes32 symbol, uint64 closesMs)` | Voids a series no one settled within a week of its close | Anyone | `NothingCovered`, `SeriesClosed`, `TooEarlyToVoid` |
+| `release(uint256 id)` | Credits the holder the payout or refund, frees the reserve and adds the premium less the payout to the writers; returns `(payout, refund)` | Anyone | `NoCover`, `NotSettled` |
+| `claim(address receiver)` | Sends the USDG credited to the caller | Any holder | None |
+| `sync()` | Lowers the writers' count after the issuer wipes the cover's USDG | Anyone | None |
+| `deposit`, `mint`, `withdraw`, `redeem` | The writers' ERC-4626 functions | Anyone, within `max*` | ERC-4626 `ExceededMax` errors |
+
+### Reads
+
+| Function | Returns |
+|---|---|
+| `quote(bytes32 symbol, uint256 notional, uint256 deductibleBps, uint256 limitBps)` | The premium at the weekend gap of `pricingGap` and the band's centre now |
+| `minDeductible(bytes32 symbol)` | The smallest deductible now, in basis points |
+| `pricingGap(bytes32 symbol)` | `(gap, weekMove)` in millionths |
+| `sales()` | `(closesMs, endsMs)`; zeros while no cover is sold |
+| `capacity()` | The writers' USDG not reserved for a cover |
+| `feed(bytes32 symbol)` | The Chainlink feed that settles cover on the asset |
+| `reopenOf(uint64 closesMs)` | When the closure reopens, in milliseconds; zero while unrecorded |
+| `series(bytes32 symbol, uint64 closesMs)` | The series' notional, prices, shift, status and flag |
+| `covers(uint256 id)` | A cover's holder, closure, layer, asset and premium; zero once released |
+| `held`, `reserved`, `premiums`, `owed`, `outstanding`, `outstandingIn(closesMs)`, `coverCount`, `lastCloseMs`, `payouts(holder)` | The cover's accounting |
+| `engine`, `band`, `regularHours` | The immutables |
+
+The SDK reads are `gapCover.quote`, `minDeductible`, `pricingGap`, `capacity`, `lastCloseMs`, `sales`, `series`, `cover`, `holdings`, `payouts`, `writers` and `writer`.
+
+## What a cover pays
+
+The cover pays `notional` times the fall from the reference to the reopening price, beyond `deductibleBps` and up to `limitBps`, in basis points of the reference price: a layer, as reinsurance writes one. A rise pays nothing. The price is the Stock Token's, as the band and its Chainlink feed quote it, so a dividend or split pays nothing by itself. The cover is settled in USDG and needs no token held. A payout is capped by the writers' USDG at release.
+
+A valid layer has a deductible of at least `minDeductible`, a limit above the deductible, and a limit of at most 10,000 basis points. Otherwise `buy` reverts with `InvalidLayer`, which carries the minimum.
+
+**When it is sold.** From the moment the band's session shows the coming close, on the last trading day before a weekend or holiday, until that close. Where the band's Chainlink feeds follow NYSE's regular hours (`regularHours`), the sales end at the regular close and the reopening is the regular open. Never while the band is halted for the asset, a multiplier change is pending, or the sequencer is not settled.
+
+## Pricing
+
+The premium is the layer's expected payout under a fitted tail, in closed form, plus `LOADING_BPS` (50%), rounded up. The tail is a generalized Pareto of shape one half, fitted to ten years of the launch assets' weekend falls, and scaled to the period the cover pays.
+
+During the sales the gap it prices at is `MOVE_TO_GAP_BPS` (twice) the asset's realised move over the trading week before the close, at least `MIN_GAP_BPS` (55%) of the engine's weekend gap for the asset and at most `MAX_GAP_MULTIPLE` (8) times it. The move is the root of the sum of the squared daily changes, in millionths, of the asset's Chainlink answers at the eight days that end a day before the close. The close fixes the days and the feed the rounds, so no caller chooses them. A week the feed cannot show, a day without a round or a positive answer, prices at the most. Outside the sales a quote uses the engine's gap.
+
+**A reference that has not caught up.** The feed's last round becomes the reference only if no other prints before the sales end, and it can stand up to Chainlink's deviation threshold away from the market. Where it stands above the band's centre at a purchase, the layer is priced as measured from the centre, deductible and limit both lowered by the difference. The deductible so measured must reach the tail's threshold, or `buy` reverts with `StaleReference`. `minDeductible` already includes that difference.
+
+| Constant | Value |
+|---|---|
+| `LOADING_BPS` | 5,000 |
+| `TAIL_THRESHOLD_PPM` | 183,288: the smallest deductible, in millionths of the gap |
+| `TAIL_SCALE_PPM` | 95,837 |
+| `TAIL_PROBABILITY_PPM` | 50,224: how often a weekend falls past the threshold |
+| `MOVE_TO_GAP_BPS` | 20,000 |
+| `MIN_GAP_BPS` | 5,500 |
+| `MAX_GAP_MULTIPLE` | 8 |
+| `WEEK_DAYS` | 7 |
+
+## Writers
+
+Writers deposit USDG and receive shares. Every cover reserves its whole possible payout, `notional * (limit - deductible) / 10,000` rounded up, from their USDG until it is released (`reserved`, `capacity`). A purchase beyond what is free reverts with `NoCapacity`. A cover's premium is held apart (`premiums`) and joins the writers' USDG, less what the cover pays, when it is released.
+
+Deposits are open while no cover is outstanding, or while every outstanding cover is over the coming closure and its sales have not ended. Redemptions open only while no cover is outstanding. The SDK's `gapCover.writers` and `gapCover.writer` return the pool and one writer's position.
+
+## Settlement
+
+A closure's reference is its feed's last Chainlink round started before the sales ended. Its reopening price is the first round that starts at or after the reopen, which is the 24/5 session's reopen or, where the feeds follow regular hours, the regular open after it. That round settles the series only when it lands within the settlement window and inside the band recorded in its minute. Otherwise the median of the band centres recorded in the window settles it, and the series is flagged (`flagged` in `series`). Every input is a Chainlink round or an `Observed` event, so anyone can rebuild a settlement.
+
+**The window.** It is the 15 one-minute slots from the reopen (`WINDOW_SLOTS`), and no caller chooses it: a slot is recorded only within it and only from the band itself. A minute in which the band cannot vouch for the asset, recorded in the window's first slot, moves the window by one slot. A band that cannot vouch for it for more than 15 slots after the reopen (`MAX_DELAY_SLOTS`) leaves no window, and the series is void. The median settles a series only when at least 8 of the window's slots hold the band (`QUORUM_SLOTS`).
+
+**Void.** A void series refunds its covers' premiums. Settlement voids a series whose window never opened, one without a usable round or a quorum, and one whose Stock Token's multiplier changed materially after its reference round started and before its window ended. A series no one settles within `SETTLEMENT_DEADLINE`, seven days after its close, can be voided by anyone with `void`.
+
+**Recording the closure.** `record` stores the session's next close while the session is open and the reopen while it is closed. A closure keeps the close first recorded for it as the key of its series (`lastCloseMs`), even when the session revises the close. A series settles only once its reopen was recorded while the session was closed, so keepers call `record` during each closure.
+
+| Constant | Value |
+|---|---|
+| `WINDOW_SLOTS` | 15 |
+| `QUORUM_SLOTS` | 8 |
+| `MAX_DELAY_SLOTS` | 15 |
+| `SLOT_MS` | 60,000 |
+| `SETTLEMENT_DEADLINE` | 7 days |
+| `POST_MARKET_MS` | 14,400,000 |
+| `REOPEN_BEFORE_OPEN_MS` | 48,600,000 |
+
+## The issuer's controls
+
+The cover counts its USDG itself, so USDG sent to it directly changes no share's value. While USDG is paused, the cover frozen or its USDG wiped, deposits and redemptions stop. Settlement and release go on, and claims wait. `sync()` counts a wipe as a loss to the writers, after the premiums and credits the cover holds.
+
+## Events
+
+| Event | Emitted when |
+|---|---|
+| `CloseRecorded(uint64 indexed closesMs, uint64 atMs)` | A close is recorded, first or as the session revised it |
+| `ReopenRecorded(uint64 indexed closesMs, uint64 reopensMs)` | A reopen is recorded |
+| `Measured(bytes32 indexed symbol, uint64 indexed closesMs, uint256 weekMove)` | A series keeps its week's move |
+| `Bought(uint256 indexed id, address indexed holder, bytes32 indexed symbol, uint64 closesMs, uint256 notional, uint256 deductibleBps, uint256 limitBps, uint256 premium)` | A cover is bought |
+| `Observed(bytes32 indexed symbol, uint64 indexed closesMs, uint256 slot, uint64 mid, uint64 low, uint128 high)` | The band is recorded in a slot; zeros shift the window |
+| `Settled(bytes32 indexed symbol, uint64 indexed closesMs, uint80 referenceRound, uint256 referencePrice, uint80 firstRound, uint256 price, bool flagged)` | A series settles |
+| `Voided(bytes32 indexed symbol, uint64 indexed closesMs)` | A series is void |
+| `Released(uint256 indexed id, address indexed holder, uint256 payout, uint256 refund)` | A cover is released |
+| `Claimed(address indexed holder, address indexed receiver, uint256 amount)` | A holder claims |
+| `Sync(uint256 held)` | The writers' count falls |
+
+## Errors
+
+| Error | Meaning |
+|---|---|
+| `NotCoverable(bytes32 symbol)` | The engine has no Chainlink feed in the band for the asset |
+| `SalesClosed()` | The session shows no close ahead, or the sales have ended |
+| `ZeroAmount()`, `InvalidHolder()` | A zero notional, or a zero-address holder |
+| `AssetHalted(bytes32)`, `CorporateActionPending(bytes32)`, `SequencerNotSettled()` | The band cannot vouch for the asset |
+| `InvalidLayer(uint256 deductibleBps, uint256 limitBps, uint256 minimum)` | The deductible is below `minimum`, not below the limit, or the limit passes 10,000 |
+| `StaleReference(uint256 deductibleBps, uint256 minimum)` | The feed's answer stands above the band's centre and the deductible is too low |
+| `PremiumAboveLimit(uint256 premium, uint256 maxPremium)` | The premium passes the buyer's ceiling |
+| `NoCapacity(uint256 need, uint256 free)` | The cover would reserve more than the free USDG |
+| `NothingCovered(bytes32, uint64)`, `SeriesClosed(bytes32, uint64)` | No cover was sold in the series, or it has settled or is void |
+| `NotReopened(uint64 closesMs)` | The reopen is not recorded or not yet reached |
+| `WindowClosed(uint256 endMs)`, `WindowOpen(uint256 endMs)` | The settlement window has ended, or has not |
+| `InvalidReference(uint80)`, `InvalidLastRound(uint80)` | A named round is not the feed's last round before the close or the reopen |
+| `TooEarlyToVoid(uint256 fromMs)`, `TooEarlyToMeasure(uint256 fromMs)` | The call is before its earliest time |
+| `InsufficientGas()` | A Chainlink feed read ran out of gas; send more |
+| `NoCover(uint256 id)`, `NotSettled(uint256 id)` | The cover is missing or released, or its series has not settled |
+
+## RedStone round feeds
+
+The cover reads Chainlink-compatible feeds with rounds, through the band. Where an asset has no Chainlink feed, as on the Robinhood Chain testnet, `RedStoneRoundFeed` is that feed. Anyone appends a payload from RedStone's `redstone-primary-prod` data service to `update()`. The feed checks it as RedStone's own contracts do: the data service's five signers, three unique, the median of their values, a package at most three minutes old. It keeps the value as the next round, numbered from one in one phase, with the package's time. It follows RedStone's feed of the asset's name, its price in regular hours, and scales it by the Stock Token's multiplier so that it prices the token as Robinhood Chain's Chainlink feeds do.
+
+The registry names it as the asset's Chainlink feed and says in `.chainlinkRegularHours` that these feeds follow NYSE's regular hours, and the band and the cover follow. The feeds are not independent of RedStone's signers, as Chainlink's are. A feed younger than the week the cover reads prices at the cover's most.
+
+| Function | What it does | Reverts |
+|---|---|---|
+| `update()` | Verifies the payload appended to the call and records a round; returns its id | `InvalidPayload`, `SignerNotAuthorised`, `InvalidSignature`, `ValueTooWide`, `TimestampsMustMatchAndBePositive`, `InsufficientNumberOfUniqueSigners`, `TimestampIsTooOld`, `TimestampIsFromTheFuture`, `NotNewer`, `AnswerTooLarge` |
+| `latestRoundData()`, `getRoundData(uint80)`, `description()` | Chainlink's `AggregatorV3Interface` reads | None |
+
+## Next
+
+- [Weekend gap cover](/concepts/weekend-gap-cover)
+- [Band feeds](/contracts/band-feeds)
+- [Get the gap cover series](/api/get-gap-cover-series)
+- [Keepers](/operate/keepers)

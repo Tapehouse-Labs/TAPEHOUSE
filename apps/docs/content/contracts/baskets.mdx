@@ -1,0 +1,122 @@
+---
+title: "Baskets"
+description: "The ERC-20 index share over a fixed set of Stock Tokens, minted and redeemed in kind, with its functions, target rules, events and SDK calls."
+---
+
+`Basket` is a share of a fixed set of up to eight Stock Tokens, minted and redeemed in kind. One ERC-20 holds a portfolio, and the margin engine margins it as that portfolio. You can mint shares by depositing the tokens, redeem them for the tokens, and read the target the owner has set.
+
+| Basket | Testnet address (46630) |
+|---|---|
+| `PAIR` | `0x31B777cCC84236B6f53882890ABC7CD19b4c9575` |
+
+Source: `contracts/src/Basket.sol`. The registry key is the basket's name under `.tapehouse.Baskets`, and the SDK takes that key as `basket`.
+
+## Mint and redeem
+
+Read what a mint takes, approve each Stock Token to the basket, then mint with a cap per token.
+
+```ts
+import { baskets } from '@tapehouse/sdk'
+
+const shares = 10n ** 18n
+const { tokens } = await baskets.components(publicClient, deployments, 'PAIR')
+const amounts = await baskets.previewMint(publicClient, deployments, 'PAIR', shares)
+
+await wallet.writeContract(
+  baskets.mint(deployments, { basket: 'PAIR', shares, receiver: wallet.account.address, maxAssets: amounts }),
+)
+```
+
+`components` lists the symbols and tokens, and every list of amounts follows that order. `maxAssets` is one limit per token, in raw units. Passing `previewMint`'s result as the limit fails if the basket's holdings move against you before the transaction lands, so add a margin of your own where that matters.
+
+Redeem the same way:
+
+```ts
+await wallet.writeContract(
+  baskets.redeem(deployments, { basket: 'PAIR', shares, receiver: wallet.account.address, owner: wallet.account.address }),
+)
+```
+
+## Functions
+
+| Function | What it does | Who may call | Key reverts |
+|---|---|---|---|
+| `mint(uint256 shares, address receiver, uint256[] maxAssets)` | Takes each token's part of what the basket holds, rounded up, and mints; returns the amounts taken | Anyone | `ZeroAmount`, `LengthMismatch`, `AboveMaximum`, `EmptyBasket`, `ComponentPaused`, `Blocked` |
+| `redeem(uint256 shares, address receiver, address owner)` | Burns shares and sends each token's part, rounded down; returns the amounts | The owner, or an address with its allowance | `ZeroAmount`, `ComponentPaused`, `Blocked` |
+| `proposeTarget(uint256[] units)` | Proposes a new target, in effect after `NOTICE` | Owner | `LengthMismatch`, `InvalidTarget` |
+| `rebalance(uint256[] assetsIn, uint256[] assetsOut, address receiver)` | Moves the basket toward the target in effect, taking `assetsIn` from the caller and sending `assetsOut` to `receiver` | Anyone | `LengthMismatch`, `SequencerNotSettled`, `AssetHalted`, `CorporateActionPending`, `PastTarget`, `ValueLost`, `ZeroAmount` |
+| `renounceOwnership()` | Always reverts | Nobody | `OwnershipCannotBeRenounced` |
+
+### Reads
+
+| Function | Returns |
+|---|---|
+| `components()` | `(bytes32[] symbols, address[] tokens)` |
+| `totalAssets()` | What the basket holds of each token, in raw units |
+| `target()` | The target in effect: raw units of each token per share |
+| `pendingTarget()` | `(uint256[] units, uint64 effectiveAt)`; empty and zero if none |
+| `previewMint(uint256 shares)`, `previewRedeem(uint256 shares)` | The amounts of each token, rounded up for a mint and down for a redemption |
+| `paused()` | Whether any of the tokens is paused |
+| `isBlocked(address account)` | Whether the issuer has blocklisted the account in any of the tokens' registries |
+| `band` | The band that prices a rebalance |
+
+The SDK has `baskets.components`, `baskets.previewMint`, `baskets.previewRedeem`, `baskets.target` and `baskets.pendingTarget`, plus the `mint` and `redeem` call builders.
+
+## How shares work
+
+- In kind. A share is a claim on its part of every token the basket holds. Minting rounds each token's part up and redeeming rounds it down, as ERC-4626 does, so neither takes from other holders. A share is asked for, never priced, so no donation can make a mint cost more than one raw unit of each token above its part. The first mint, and the first after every share is gone, pays the target.
+- Raw units. The basket counts each token in its raw units, so dividends and splits, which move only the token's ERC-8056 multiplier, pass through, and mints and redemptions stay open over a multiplier change. A burn by the issuer from the basket falls at once on every holder in proportion, and a token sent to it is every holder's.
+- The issuer's controls. A share moves only as its tokens could. There is no transfer, mint or redemption while any token is paused (`ComponentPaused`), and none to, from or by an address the issuer has blocklisted in any of the tokens' registries (`Blocked`). A paused token, or a blocklisted basket, stops every redemption: shares are never redeemed in part.
+- Margin. The margin accounts take the shares of the baskets their owner adds, and margin them as the Stock Tokens they redeem for. When a margin position falls short, the liquidator redeems its baskets into those tokens and sells them as any other.
+
+## The target and rebalancing
+
+The owner proposes a new target, in raw units of each token per share, and it takes effect `NOTICE` (seven days) later, so a holder who disagrees can redeem in kind first. The set of tokens never changes: a target can weigh them anew or leave one out. A proposal replaces an earlier one that has not yet taken effect.
+
+Anyone may call `rebalance` to move the basket toward the target in effect. Each token either comes in or goes out, never both, and none passes its target. What comes in, valued at each band's low edge, must be worth at least what goes out, valued at each band's high edge. So at every price the band allows, the basket is worth no less afterward, and whoever rebalances pays the bands' width. Each token that moves needs a band with a price, no multiplier change pending, and a settled L2 sequencer.
+
+## Parameters and limits
+
+| Name | Value |
+|---|---|
+| `MAX_COMPONENTS` | 8, the margin engine's most assets |
+| `NOTICE` | 7 days |
+
+A target holds a nonzero amount of at least one token, and the first target holds a nonzero amount of every token. A basket holds from one to eight distinct tokens, each with a Stock Token in the band.
+
+## Roles
+
+The owner proposes targets and does nothing else. It cannot touch holdings, mint or pause the basket. Ownership moves in two steps and cannot be renounced.
+
+## Events
+
+| Event | Emitted when |
+|---|---|
+| `Deposit(address indexed sender, address indexed owner, uint256[] assets, uint256 shares)` | A mint |
+| `Withdraw(address indexed sender, address indexed receiver, address indexed owner, uint256[] assets, uint256 shares)` | A redemption |
+| `TargetProposed(uint256[] units, uint64 effectiveAt)` | A target is proposed; `effectiveAt` is in seconds |
+| `Rebalanced(address indexed caller, address indexed receiver, uint256[] assetsIn, uint256[] assetsOut)` | A rebalance |
+
+## Errors
+
+| Error | Meaning |
+|---|---|
+| `UnknownAsset(bytes32)`, `DuplicateComponent(bytes32)`, `InvalidComponents()` | Constructor checks on the token set |
+| `LengthMismatch()` | A list is not one entry per token |
+| `InvalidTarget()` | A target holds nothing of every token, or the first holds nothing of one |
+| `ZeroAmount()` | An amount of zero |
+| `EmptyBasket()` | Every token the basket holds has been burned, so it takes no mint |
+| `AboveMaximum(address token, uint256 amount, uint256 maxAmount)` | A mint would take more of `token` than the caller's maximum |
+| `ComponentPaused()` | One of the tokens is paused |
+| `Blocked(address account)` | The issuer has blocklisted the account |
+| `SequencerNotSettled()` | The L2 sequencer is down or was within the hour |
+| `AssetHalted(bytes32)`, `CorporateActionPending(bytes32)` | A token's band is halted or its multiplier is changing |
+| `PastTarget(bytes32 symbol)` | The rebalance would take a token past its target, or away from it |
+| `ValueLost(uint256 valueIn, uint256 valueOut)` | What comes in is worth less than what goes out |
+| `OwnershipCannotBeRenounced()` | `renounceOwnership` was called |
+
+## Next
+
+- [Margin accounts](/contracts/margin-accounts)
+- [Short and baskets](/guides/short-and-baskets)
+- [Portfolio margin](/concepts/portfolio-margin)

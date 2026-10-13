@@ -1,0 +1,128 @@
+---
+title: "Sponsor paymaster"
+description: "The ERC-4337 paymaster that pays gas for a new smart account's first operations, with its functions, limits, events and SDK helpers."
+---
+
+A new user may hold Stock Tokens and no ether for gas. `SponsorPaymaster` is an ERC-4337 paymaster that pays the gas for creating a smart account and for its first operations, when Tapehouse's sponsor service has signed them. You can send those operations from a viem smart account with the SDK's helpers and a paymaster client.
+
+| | |
+|---|---|
+| Testnet address (46630) | `0x3721b8136593BCC78787943664cF9404d12Ecbd2` |
+| EntryPoint (v0.7) | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+| SimpleAccountFactory | `0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985` |
+| Source | `contracts/src/SponsorPaymaster.sol` |
+| Built on | OpenZeppelin's `PaymasterSigner`, with an ECDSA signer and two-step ownership |
+
+The accounts are eth-infinitism's SimpleAccount v0.7, owned by the wallet the user already has. An account's address follows from its owner, so it is known, and can receive tokens, before it exists. The addresses come from `.erc4337` in `deployments/46630.json`.
+
+## Send a sponsored operation
+
+This sends one operation that creates the account and approves USDG to the margin accounts, paid by the paymaster. The service signs it over ERC-7677, so viem's `createPaymasterClient` on the service's URL is the client.
+
+```ts
+import { createPublicClient, http, maxUint256 } from 'viem'
+import { createBundlerClient, createPaymasterClient } from 'viem/account-abstraction'
+import { toSimpleSmartAccount } from 'permissionless/accounts'
+import { sponsorship, usdgAbi } from '@tapehouse/sdk'
+
+const client = createPublicClient({ chain, transport: http(rpcUrl) })
+
+const account = await toSimpleSmartAccount({
+  client,
+  owner,
+  factoryAddress: sponsorship.accountFactory(deployments),
+  entryPoint: sponsorship.entryPoint(deployments),
+})
+
+const bundler = createBundlerClient({
+  account,
+  client,
+  paymaster: createPaymasterClient({ transport: http(sponsorUrl) }),
+  transport: http(bundlerUrl),
+})
+
+const hash = await bundler.sendUserOperation({
+  calls: [
+    sponsorship.asCall({
+      address: deployments.tokens.USDG,
+      abi: usdgAbi,
+      functionName: 'approve',
+      args: [deployments.tapehouse.MarginAccounts, maxUint256],
+    }),
+  ],
+})
+```
+
+`owner` is a viem local account, `chain` your chain definition, and `rpcUrl`, `bundlerUrl` and `sponsorUrl` your endpoints. [Sponsor service](/operate/sponsor) covers the service. Check how many sponsored operations an account has left:
+
+```ts
+const left = await sponsorship.freeOperationsLeft(client, deployments, account.address)
+```
+
+The other SDK helpers are `sponsorship.paymaster`, `sponsorship.accountAddress`, `sponsorship.callGas`, and `sponsorship.permit` with `sponsorship.pull`, by which an account takes tokens its owner signed a free EIP-2612 permit for.
+
+## What the paymaster checks
+
+On every operation it sponsors, the paymaster checks, in order:
+
+1. Sponsorship is not paused, or it reverts with `SponsorshipPaused`.
+2. The operation's required prefund is at most `maxCostPerOperation`, or it reverts with `CostAboveLimit`.
+3. Unless the operation only creates the account, the account has an operation left, which this counts, or it reverts with `FreeOperationsUsed`.
+4. The sponsor service's signature is valid.
+
+Creating an account counts nothing. Each account then has `FREE_OPERATIONS`, 3, sponsored operations, whether or not their calls succeed.
+
+The signature is over OpenZeppelin's `UserOperationRequest` (EIP-712, domain name "Tapehouse Sponsor Paymaster", version "1"). It covers the operation's gas limits, fees and pre-verification gas and a validity window. `paymasterData` holds `validAfter` and `validUntil`, 6 bytes each, then the signature. An operation changed after signing, or signed by anyone else, fails with `AA34 signature error`. One outside its window fails with `AA32`.
+
+A signature is needed because a paymaster that checked nothing else would pay whoever submits an operation what it claims to cost. Anyone can act as their own bundler and raise the fee and the pre-verification gas up to the paymaster's limit. ERC-7562 forbids a paymaster to read the gas price or the time during validation, so no rule on chain closes that alone.
+
+## Functions
+
+| Function | What it does | Who may call | Key reverts |
+|---|---|---|---|
+| `freeOperationsLeft(address account)` | Operations the account has left | Anyone (view) | None |
+| `setSigner(address signer_)` | Sets the sponsor service's signing address | Owner | `OwnableUnauthorizedAccount` |
+| `setMaxCost(uint128 maxCost)` | Sets the most an operation may cost the paymaster, in wei | Owner | `OwnableUnauthorizedAccount` |
+| `setPaused(bool paused_)` | Pauses or resumes sponsorship | Owner | `OwnableUnauthorizedAccount` |
+| `deposit()` | Adds the ether sent to the paymaster's deposit in the EntryPoint | Anyone, payable | None |
+| `withdrawTo(address payable to, uint256 value)` | Withdraws deposit to `to` | Owner | `OwnableUnauthorizedAccount` |
+| `addStake(uint32 unstakeDelaySec)` | Stakes the ether sent | Owner, payable | `OwnableUnauthorizedAccount` |
+| `unlockStake()` | Starts the delay after which the stake may be withdrawn | Owner | `OwnableUnauthorizedAccount` |
+| `withdrawStake(address payable to)` | Withdraws the unlocked stake | Owner | `OwnableUnauthorizedAccount` |
+| `renounceOwnership()` | Always reverts | Nobody | `OwnershipCannotBeRenounced` |
+
+The EntryPoint calls the paymaster's validation and post-operation hooks. No other address can.
+
+### Reads
+
+`entryPoint`, `signer`, `owner`, `maxCostPerOperation`, `paused`, `operations(address account)`, `freeOperationsLeft(address account)`, `FREE_OPERATIONS` and `eip712Domain`.
+
+## Roles and budget
+
+The owner can pause sponsorship, rotate the service's key with `setSigner`, change `maxCostPerOperation`, and withdraw the deposit and stake. The paymaster's deposit in the EntryPoint is the overall budget: a sponsored operation draws on it.
+
+The paymaster reads its own storage while it validates, which bundlers allow only of a staked paymaster. The owner stakes it with `addStake`. The limits apply to each account, and addresses are free, so a determined user can spend the deposit at what operations really cost, within the service's daily budgets.
+
+## Events
+
+| Event | Emitted when |
+|---|---|
+| `SignerSet(address indexed signer)` | The signing address is set, including at deployment |
+| `MaxCostSet(uint128 maxCost)` | The cost limit is set, including at deployment |
+| `PausedSet(bool paused)` | Sponsorship is paused or resumed |
+
+## Errors
+
+| Error | Meaning |
+|---|---|
+| `FreeOperationsUsed(address account)` | The account has used its free operations |
+| `CostAboveLimit(uint256 maxCost)` | The operation may cost more than `maxCostPerOperation`; the value is the required prefund |
+| `SponsorshipPaused()` | Sponsorship is paused |
+| `OwnershipCannotBeRenounced()` | `renounceOwnership` was called |
+
+## Next
+
+- [Sponsor service](/operate/sponsor)
+- [Margin accounts](/contracts/margin-accounts)
+- [SDK errors](/sdks/errors)
+- [Quickstart](/quickstart)

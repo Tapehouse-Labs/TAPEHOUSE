@@ -1,0 +1,80 @@
+---
+title: "The session"
+description: "How the band knows whether the market is open, and what changes for a loan across the week, from the margin ramp to the reopening auction."
+---
+
+The session is the clock Tapehouse runs on. It is derived on chain from signed data, with no calendar in any contract, and it decides which price legs count, how much margin a position needs, when liquidations run and when the reopening auction opens.
+
+## Read it
+
+```ts
+import { band } from '@tapehouse/sdk'
+
+const { state, nyse, nyseNext, changeMs, boundaryMs } = await band.session(client, deployments)
+```
+
+| Field | Values |
+|---|---|
+| `state` | Chainlink's 24/5 session: 0 not known, 1 closed, 2 open. |
+| `nyse`, `nyseNext` | NYSE now and next: 0 not known, 1 regular hours, 2 short close, 3 weekend or holiday. |
+| `changeMs` | When NYSE changes state, in milliseconds. |
+| `boundaryMs` | The session's next boundary: when an open session closes or a closed one reopens, in milliseconds. |
+
+Times are zero when not known. `client` and `deployments` are built as in [the band](/concepts/band#read-a-band).
+
+## The 24/5 session
+
+Chainlink's equity feeds on Robinhood Chain follow a 24/5 session, and the band uses the same session on every chain. It runs from 20:00 ET on the evening before each trading day to 20:00 ET on it, and is closed over weekends and NYSE holidays.
+
+The band derives it from RedStone's signed New York market status: the current status, the next status and the next change time, written in one package. No time zone appears in the rule, because each boundary is a fixed distance from a signed time and none of those distances spans a daylight-saving change.
+
+| NYSE, as signed | 24/5 session |
+|---|---|
+| Regular hours, or a short close between trading days | Open |
+| A short close followed by a weekend or holiday close (the evening before a holiday) | Open only for the post-market after the regular close |
+| A weekend or holiday close | Open for 4 hours after the regular close (post-market), then closed until 20:00 ET before the next trading day |
+
+If the three values do not come from one package, or are more than an hour old, the session is not known. Chainlink is then treated as asleep and every band that is not halted is degraded. Every contract that needs the session treats unknown as the cautious case.
+
+## A week in the life of a loan
+
+The same position meets the session at six points.
+
+1. During the week. The band has two legs and is open. The margin engine requires the position's expected loss over two days plus a 25% buffer.
+2. The regular open on the last trading day before a weekend or holiday. A loan or withdrawal must now leave gross exposure to Stock Tokens at most five times equity, and the cover for the coming closure goes on sale.
+3. Three hours before the regular close. The requirement starts a straight-line ramp from the open value to the closed one, so an account that must add margin or reduce can do so against the regular session's book. When the 24/5 session closes, the cover's sales end, and after the post-market the weekend premium starts to accrue.
+4. The closure. The band prices from the 24/7 leg alone, so it is closed and wider. The liquidator treats the market as closed: it sells slower, and only positions that fall short at both edges of their bands.
+5. Ten minutes before the reopen. Anyone may call `seal()`, which records the band the reopening auction will take its floor from.
+6. The reopen. The 24/5 session opens on Sunday evening. At NYSE's regular open the sealed-bid auction clears.
+
+Each part is explained in [portfolio margin](/concepts/portfolio-margin), [liquidation](/concepts/liquidation) and [weekend gap cover](/concepts/weekend-gap-cover).
+
+## What each contract reads
+
+| Contract | What the session changes |
+|---|---|
+| Margin engine | The regime: open, closing, closed or unknown. Unknown is margined as closed. |
+| Margin accounts | The five times weekend leverage cap, the weekend premium, and the caps on total and new debt before a closure. A position holding Stock Tokens cannot borrow while the band cannot tell the session. |
+| Liquidator | Whether the market is open. It is closed from the regular close before a weekend or holiday until the regular open after it, and while the session is not known. |
+| Reopening auction | Its phases: enrolment and commitment from the reopen to half an hour before the open, reveal in that half hour, clearing in the first hour of regular trading. |
+| Gap cover | When cover is sold, and when a series settles. |
+| Gap backstop | Redemptions are shut while the market is closed or the session is unknown. |
+
+## Holidays and short closes
+
+A holiday is a weekend close to the band: the signed status says the next state is a holiday and when it changes. A short close before a holiday is signed as a short close followed by a holiday close, and the ramp for it can start only at that close. The regular close is recorded when a status written during regular hours announces it, so a band deployed after a Friday close treats that Friday's post-market as closed.
+
+## Other chains
+
+Arbitrum One's Chainlink feeds follow NYSE regular hours, and the band counts that leg only while the signed status says NYSE is in regular hours. Outside them an asset has its 24/7 leg alone and its band is degraded, where Robinhood Chain's has two legs. The band there also follows the L2 sequencer: while it is down, and for an hour after it returns, every band is at most degraded, and `sequencerSettled()` says whether that grace has passed.
+
+## Limits
+
+The session can step a requirement up without notice in three unscheduled cases: a session that turns unknown, a band that missed the regular close, and a holiday eve signed as a short close. Replaying a month of real sessions every 15 minutes, the requirement rose only through the ramp.
+
+## Next
+
+- [The band](/concepts/band)
+- [Portfolio margin](/concepts/portfolio-margin)
+- [Liquidation](/concepts/liquidation)
+- [The reopening auction](/guides/auction)

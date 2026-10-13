@@ -1,0 +1,19 @@
+---
+title: "Addresses"
+description: "Every contract Tapehouse deployed on Robinhood Chain's testnet, read from the registry the SDKs use."
+---
+
+This table is generated from `deployments/46630.json` when the page is built. The SDKs read the same file at run time and compile in no address. Each address links to the block explorer, and the lending contracts (the supply vault, margin accounts, liquidator, gap backstop, reopening auction, stock lending vaults, short positions, basket and sponsor paymaster) are verified on [Sourcify](https://sourcify.dev), chain 46630, with an exact match. The Stylus programs are checked by reproducible build instead, as [Verification](/resources/verification) describes.
+
+<Deployments chain="46630" />
+
+A registry whose Chainlink feeds follow NYSE's regular hours says so with `"chainlinkRegularHours": true`. The testnet's does.
+
+<Note>
+A redeploy of a chain's contracts changes this file and publishes a new release of the SDKs and the MCP server, which carry each registry as it was when they were published. Read the registry in the repository when you need the current one.
+</Note>
+
+## Next
+
+- [Networks](/networks) lists the chains and their RPC endpoints.
+- [Contracts overview](/contracts/overview) says what each contract does.

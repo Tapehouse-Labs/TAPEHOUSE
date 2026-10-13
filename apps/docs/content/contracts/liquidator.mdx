@@ -1,0 +1,124 @@
+---
+title: "Liquidator"
+description: "The contract that sells the collateral of a margin position that falls short, in a Dutch auction that follows the market, with its functions, events and rules."
+---
+
+`Liquidator` is the margin accounts' liquidator. It sells the collateral of a position that falls short in a Dutch auction that follows the market. Anyone may start an auction, stop one and buy. The contract has no owner and no admin function other than the one-time setting of the reopening auction.
+
+## Address
+
+Robinhood Chain testnet, chain 46630, from `deployments/46630.json`, under `tapehouse.Liquidator`.
+
+| Name | Address |
+|---|---|
+| Liquidator | `0x53579Ef2b4F36E8E84F9776239db29156e4465aE` |
+
+Testnet, not audited.
+
+## Check a position
+
+```ts
+import { readFileSync } from 'node:fs'
+import { createPublicClient, http } from 'viem'
+import { CROSS, liquidatorAbi, parseDeployments } from '@tapehouse/sdk'
+
+const deployments = parseDeployments(JSON.parse(readFileSync('deployments/46630.json', 'utf8')))
+const client = createPublicClient({ transport: http('https://rpc.testnet.chain.robinhood.com') })
+
+const [equity, requirement, short, closed] = await client.readContract({
+  address: deployments.tapehouse.Liquidator,
+  abi: liquidatorAbi,
+  functionName: 'shortfall',
+  args: ['0xB986a345655097302cac8b4af6C948FfaF7f55FC', CROSS],
+})
+```
+
+Equity and requirement are USD with 18 decimals. `short` is true when the position falls short as the liquidator judges it now, and `closed` says which market state it was judged in. A position that cannot be judged reads as not short.
+
+## When a position falls short
+
+- The market is open while the band's 24/5 session is open and NYSE is in regular hours or between two trading days. A position falls short when its equity, with each Stock Token at its band's low edge, is below the engine's current requirement, as `health` reports it. WETH counts for 84% of its Chainlink price.
+- The market is closed from the regular close before a weekend or holiday to the regular open after it, and while the session is not known. A position falls short only if it does so at both edges of its bands, so a shortfall the band can still explain waits for the reopening.
+- Nothing is judged while a held asset's band is halted or its multiplier change is not yet confirmed, while WETH is held and its Chainlink price is missing, non-positive, from the future or more than a day and a minute old, and while the L2 sequencer is not settled. Such a position waits, because what it holds has no price.
+- An unknown session is judged against the open requirement with its 25% buffer, never the closed one.
+
+## The auction
+
+A Stock Token's price starts at its band's high edge and WETH's at its Chainlink price. It falls a basis point a second while the market is open and a basis point every four seconds while it is closed, down to 10% below the low edge or WETH's price. An auction runs an hour while open and four hours while closed. After that, or once the market changes state, it starts again from the top.
+
+A purchase repays at most half of what the position owes, or all of it once that is 2,000 USDG or less. Half a percent of the cost goes to the accounts' reserve, unless the position is worth less than it owes, and the rest repays the position, its debt first and its premium after. While the market is closed, at most a tenth of a position's holding of a Stock Token is sold an hour.
+
+## Functions
+
+| Function | Who may call | What it does | Key reverts |
+|---|---|---|---|
+| `start(address account, bytes32 position)` | Anyone | Syncs the position's assets and opens an auction if it falls short. An auction already running in the market's state runs on. Emits `AuctionStarted`. | `NotLiquidatable`, `PositionHeld` |
+| `stop(address account, bytes32 position)` | Anyone, the borrower included | Ends the auction once the position no longer falls short. Emits `AuctionStopped`. | `CannotJudge`, `StillShort` |
+| `buy(address account, bytes32 position, address token, uint256 amount, uint256 maxCost, address receiver)` | Anyone | Takes USDG from the caller at the auction's ask, at most `maxCost`, and sends up to `amount` of `token` to `receiver`. Returns `bought` and `cost`. Emits `Bought`. | `NotLiquidatable`, `NoAuction`, `NothingToBuy`, `NotForSale`, `CostAboveLimit(cost, maxCost)`, `PositionHeld` |
+| `settleCash(address account, bytes32 position)` | Anyone | Repays the position's debt, then its premium, with the USDG it holds, if it falls short. It sells nothing and takes no fee. Returns the amount. Emits `CashSettled`. | `NotLiquidatable`, `NothingToBuy` |
+| `recall(address account, bytes32 position, address token)` | Anyone | Recalls, once the position falls short, everything it lent of `token` and has not recalled yet. Returns the amount. | `NotLiquidatable`, `NothingToRecall` |
+| `writeOff(address account, bytes32 position)` | The backstop once the accounts have one, otherwise anyone | Writes off what a position owes once it holds nothing, or only holdings a burn left worthless. Holdings worth less than `DUST`, 1 USDG, are swept to the caller first when the position is worth less than it owes. | `NotBackstop` |
+| `setAuction(address newAuction)` | The accounts' owner, once | Sets the reopening auction. Emits `AuctionSet`. | `NotAccountsOwner`, `AuctionAlreadySet`, `InvalidAuction` |
+| `hold(address account, bytes32 position, uint64 until)` | The reopening auction | Holds a position out of the Dutch auction while the market is open. Emits `Held`. | `NotAuction` |
+| `settle(address account, bytes32 position, address token, uint256 amount, uint256 unitPrice)` | The reopening auction or the accounts' backstop | Sells up to `amount` of `token` to the caller at the auction's uniform price. Returns `sold` and `cost`. Emits `Settled`. | `NotAuction`, `NotForSale` |
+| `collect(uint256 amount)` | The reopening auction | Adds forfeited bids to the accounts' reserve. | `NotAuction` |
+
+### Views
+
+| Function | Returns |
+|---|---|
+| `shortfall(address account, bytes32 position)` | `int256 equity, uint256 requirement, bool short, bool closed` |
+| `price(address account, bytes32 position, address token)` | `uint256`, the ask in USD with 8 decimals per whole token; zero while no auction runs in the market's current state |
+| `hourlyAllowance(address account, bytes32 position, address token)` | `uint256 left`, how much of `token` a purchase may take now while the market is closed |
+| `auctions(address account, bytes32 position)` | `uint64 startedAt, bool closed` |
+| `heldUntil(address account, bytes32 position)` | `uint64`, until when the reopening auction holds the position |
+| `auction()` | `address`, the reopening auction |
+| `accounts()`, `band()`, `engine()`, `usdg()`, `weth()`, `ethUsd()`, `recallHaircut()` | The immutables it was built with |
+| `WETH_LIQUIDATION_BPS`, `OPEN_DECAY_BPS_PER_MINUTE`, `CLOSED_DECAY_BPS_PER_MINUTE`, `MAX_DISCOUNT_BPS`, `OPEN_AUCTION_LIFETIME`, `CLOSED_AUCTION_LIFETIME`, `FEE_BPS`, `CLOSE_FACTOR_BPS`, `FULL_CLOSE_OWED`, `CLOSED_HOURLY_BPS`, `HORIZON`, `MAX_FEED_AGE`, `DUST` | Constants |
+
+The contract does not rank positions. A keeper starts the deepest first, by the equity and requirement `shortfall` returns.
+
+## Baskets and lent collateral
+
+A basket in a position counts as the Stock Tokens its shares redeem for. Once a position falls short, every judgement redeems every basket share it holds into those Stock Tokens in the position first. What a position lent through a stock lending vault counts at the recall haircut less in its equity, and a purchase takes it back from the vault as far as the vault can return it. For the rest, anyone may call `recall`.
+
+## Events
+
+| Event | Emitted when |
+|---|---|
+| `AuctionStarted(address indexed account, bytes32 indexed position, bool closed)` | An auction opens, `closed` if the market was closed. |
+| `AuctionStopped(address indexed account, bytes32 indexed position)` | An auction ends because the position no longer falls short. |
+| `Bought(account, position, token, amount, cost, fee, buyer, receiver)` | A purchase; `account`, `position` and `token` are indexed. |
+| `CashSettled(address indexed account, bytes32 indexed position, uint256 amount)` | `settleCash` repays debt with the position's USDG. |
+| `AuctionSet(address indexed auction)` | The reopening auction is set. |
+| `Held(address indexed account, bytes32 indexed position, uint64 until)` | The reopening auction holds a position. |
+| `Settled(account, position, token, amount, price, cost, fee)` | The reopening auction or the backstop sells collateral. |
+
+## Roles and admin powers
+
+The contract has no owner and no upgrade path. Three addresses have special rights:
+
+- The **accounts' owner** sets the reopening auction once, and never to zero.
+- The **reopening auction** holds positions, settles at its uniform price and collects forfeited bids.
+- The **accounts' backstop**, once set, is the only address that writes off a position, after covering what it can. It may also call `settle` for what the auction's bids leave.
+
+Set as the accounts' liquidator, this contract is their only way into seizures and write-offs.
+
+## Invariants
+
+- A position is liquidated only if it falls short at the band's low edge while the market is open, or at both edges while it is closed.
+- A halted asset, an unconfirmed multiplier change, a missing or stale WETH price and an unsettled sequencer each stop judgement. A halt has no time limit.
+- A purchase never pays more than `maxCost`, and no purchase repays more than half of what the position owes unless the position owes 2,000 USDG or less.
+- While the market is closed, no more than a tenth of a position's holding of a Stock Token is sold an hour.
+- Lenders bear a write-off last, after the position's collateral and the backstop.
+
+## SDK
+
+No module wraps the liquidator's calls. Use `liquidatorAbi`, which `@tapehouse/sdk` exports, with viem and the address from `deployments.tapehouse.Liquidator`, as in the example above. The reopening auction's reads and the liquidator's greatest discount appear in the `auction` module, which reads the liquidator's `MAX_DISCOUNT_BPS`. Every position's health is in `accounts.health`.
+
+## Next
+
+- [Liquidation](/concepts/liquidation)
+- [Margin accounts](/contracts/margin-accounts)
+- [Reopening auction](/contracts/reopening-auction)
+- [Gap backstop](/contracts/gap-backstop)

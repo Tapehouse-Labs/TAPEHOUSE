@@ -5,6 +5,7 @@ The full technical reference: every component, its commands, its parameters and 
 ## Repository layout
 
 - `apps/landing` — the website at tapehouse.xyz (Next.js)
+- `apps/docs` — the documentation at docs.tapehouse.xyz (Next.js): guides, SDK and contract reference, and the indexer API reference generated from its OpenAPI specification
 - `apps/app` — the app (Next.js, wagmi)
 - `packages/brand` — the design tokens and base styles the landing and the app share
 - `contracts` — Solidity contracts (Foundry)

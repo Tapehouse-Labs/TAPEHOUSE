@@ -1,0 +1,88 @@
+---
+title: "Morpho oracle"
+description: "The Morpho Blue oracle that prices a Stock Token at the low edge of its band, with its functions, owner powers, failure modes and SDK calls."
+---
+
+`MorphoBandOracle` lets a Morpho Blue market take a Stock Token as collateral priced by its band. It implements Morpho's `IOracle`: `price()` is the price of one unit of the collateral token in units of the loan token, scaled by 1e36. It answers at the band's low edge, in every state that has a price, and reverts when the band has none. It never returns zero.
+
+## Address
+
+The testnet registry, `deployments/46630.json`, lists no Morpho oracle: it has no `morphoOracles` group, so there is no oracle address to give for chain 46630. One oracle exists per asset in a chain's `morphoOracles` group when it is deployed, and the SDK reads it from there by asset name. Everything on this page is unaudited.
+
+## Read a price
+
+```ts
+import { readFileSync } from 'node:fs'
+import { createPublicClient, http } from 'viem'
+import { morpho, parseDeployments } from '@tapehouse/sdk'
+
+// A registry file whose `morphoOracles` group lists the asset.
+const deployments = parseDeployments(JSON.parse(readFileSync('deployments/<chainId>.json', 'utf8')))
+const client = createPublicClient({ transport: http('<rpc url>') })
+
+const answer = await morpho.price(client, deployments, 'TSLA')
+
+if (answer.price === undefined) {
+  console.log(answer.noPrice) // 'stale', 'halted' or 'sequencerNotSettled'
+} else {
+  console.log(answer.price)
+}
+```
+
+`morpho.price` turns a `NoAnswer` or `SequencerNotSettled` revert into a result, and reads the halt sources at the same block to tell a stale band from a halt. Any other error is thrown.
+
+## Functions
+
+| Function | Who may call | What it does | Key reverts |
+|---|---|---|---|
+| `price()` | Anyone, view | The band's low edge times `scaleFactor`. Morpho Blue calls it to borrow, withdraw collateral against debt and liquidate. | `NoAnswer(symbol)` when the band is halted or has no live leg, `SequencerNotSettled()` where the band follows a sequencer-uptime feed that is not settled |
+| `halt()` | Anyone, view | The asset's halt as the band holds it: `bool signedHalt, uint64 until, uint64 issuedAt, bool oraclePaused`. | None |
+| `band()` | Anyone, view | The band program the oracle reads. | None |
+| `symbol()` | Anyone, view | The asset's symbol in the band. | None |
+| `collateralToken()`, `loanToken()` | Anyone, view | The market's two tokens. | None |
+| `scaleFactor()` | Anyone, view | What the band's price is multiplied by: 10^(36 + loan decimals − collateral decimals − 8). 1e16 for an 18-decimal Stock Token against USDG's 6 decimals. | None |
+| `BAND_DECIMALS()` | Anyone, view | 8. | None |
+| `setBand(address newBand)` | Owner | Points the oracle at a redeployed band that names the same Stock Token for the asset. Emits `BandSet`. | `OwnableUnauthorizedAccount`, `AssetMismatch(band, token)` |
+| `transferOwnership(address)`, `acceptOwnership()` | Owner; pending owner for `acceptOwnership` | OpenZeppelin `Ownable2Step` behaviour. | `OwnableUnauthorizedAccount` |
+| `renounceOwnership()` | Nobody | Always reverts. | `OwnershipCannotBeRenounced` |
+| `owner()`, `pendingOwner()` | Anyone, view | Ownership state. | None |
+
+The constructor takes the band, the asset's symbol, the loan token and the initial owner. It reverts with `NoStockToken` when the band names no Stock Token for the symbol and with `ScaleTooLarge` when the loan token has more than 29 decimals more than the collateral.
+
+## Events
+
+| Event | Emitted when |
+|---|---|
+| `BandSet(address indexed previousBand, address indexed newBand)` | The oracle is created, and whenever the owner re-points it. |
+| `OwnershipTransferStarted`, `OwnershipTransferred` | Ownership moves in two steps. |
+
+## Roles and admin powers
+
+The owner can re-point the oracle with `setBand`. The only check is that the new band names the same Stock Token for the asset. Nothing checks the new band's prices, so the owner can in effect set any price: raise it, lower it, or point the oracle at a band that reverts and stop every liquidation in the market. A market on this oracle trusts the owner with that. Create a market only once `owner()` is a timelock, so that every re-point waits out the timelock's delay and `BandSet` announces it.
+
+The band's own powers matter too. A signed halt comes from Tapehouse's halt signer and lasts an hour at a time, and the band's owner can replace that signer. See [Band](/contracts/band).
+
+## Invariants
+
+- The price is the low edge in every state that has a price: open, closed and degraded, a lapsed signed halt included. It is never zero.
+- A band with no price reverts. Morpho Blue then refuses to borrow, to withdraw collateral against debt and to liquidate, while supplying, repaying, withdrawing what is not lent and adding collateral go on.
+- No live leg is the most common cause. While the market is closed the band's one leg is the 24/7 price, live for 120 seconds after its RedStone package, so a band nobody has written to for two minutes has no price until someone calls `writePrices`.
+- The band's price is already the token's, its ERC-8056 multiplier applied. The oracle applies no multiplier of its own and takes the loan token at par with the US dollar.
+- A liquidator should call the band's `writePrices` with a fresh signed package and Morpho Blue's `liquidate` in the same transaction. A package no newer than the stored one reverts with `PackageNotNewer`, which means someone wrote first.
+
+## SDK
+
+TypeScript, module `morpho` in `@tapehouse/sdk`.
+
+| Contract function | SDK call |
+|---|---|
+| `price` | `morpho.price(client, deployments, asset)` returns `{ price }` or `{ price: undefined, noPrice, revert }` |
+| `halt` | `morpho.halt(client, deployments, asset)` |
+| `band`, `symbol`, `collateralToken`, `loanToken`, `scaleFactor`, `owner` | `morpho.oracle(client, deployments, asset)`, read at one block |
+| `setBand`, ownership | No wrapper. Use `morphoBandOracleAbi`, which the package exports. |
+
+## Next
+
+- [Use the band as a Morpho oracle](/guides/morpho-oracle)
+- [Band](/contracts/band)
+- [Band feeds](/contracts/band-feeds)

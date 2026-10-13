@@ -1,0 +1,82 @@
+---
+title: "Liquidation"
+description: "When a position is sold, how the Dutch auction and the sealed-bid reopening auction work, and who bears a loss in what order."
+---
+
+A position is liquidated when its equity falls below the margin engine's current requirement. Liquidation is a public auction anyone can start and buy from, and it is slower over a weekend than on a weekday because the band is wider and the books are thin. You can see the price at which it would happen before you borrow.
+
+## Know your liquidation price
+
+```ts
+import { accounts, CROSS } from '@tapehouse/sdk'
+
+const price = await accounts.liquidationPrice(client, deployments, account, CROSS, 'TSLA', 50_000_000n)
+```
+
+This is the price of TSLA, in USD with 8 decimals, at which the cross position stops meeting its requirement once it owes 50 USDG more, with every other price and pool held fixed. The contract finds it by searching through the engine, to within a 2^14th of the current price. While the band cannot tell the session, the requirement it meets is the closed one. `client` and `deployments` are built as in [the band](/concepts/band#read-a-band).
+
+## When a position falls short
+
+`Liquidator` judges a position against the engine's requirement, and what counts depends on the market.
+
+| Market | The position falls short when |
+|---|---|
+| Open | Equity, with each Stock Token at its band's low edge, is below the current requirement. WETH counts for 84% of its Chainlink price. |
+| Closed | It falls short at both edges of its bands. A shortfall the band can still explain waits, because the engine's liquidity add-on grows with the price above the pool's, so the high edge alone is not the most favourable. |
+| Session unknown | It is judged against the open requirement with its 25% buffer, never the closed one. |
+
+The market is open while the 24/5 session is open and NYSE is in regular hours or between two trading days. It is closed from the regular close before a weekend or holiday to the regular open after it, and while the session is not known, so a position the band still explains is not sold in the thin books before the regular open.
+
+Nothing is judged while a held asset's band is halted or has an unconfirmed multiplier change, while WETH is held without a fresh Chainlink price, or while the L2 sequencer is not settled. Such a position waits, because what it holds has no price.
+
+## The Dutch auction
+
+Anyone may call `start(account, position)`, which syncs the position's assets and opens an auction if the position falls short.
+
+- A Stock Token's price starts at its band's high edge and WETH's at its Chainlink price.
+- It falls one basis point a second while the market is open and one basis point every four seconds while it is closed, down to 10% below the low edge (or below WETH's price).
+- An auction runs an hour while open and four hours while closed, long enough to reach its floor from a band at its 15% cap. After that, or once the market changes state, it starts again from the top.
+- `stop` ends it once the position no longer falls short. Anyone may call it, the borrower included.
+
+`price(account, position, token)` gives the ask in USD with 8 decimals per token, and `shortfall(account, position)` gives a position's equity and requirement, which keepers use to start the deepest first.
+
+`buy(account, position, token, amount, maxCost, receiver)` takes USDG from the buyer at the ask, never more than `maxCost`, and sends the tokens to `receiver`. Half a percent of the cost goes to the reserve, unless the position is worth less than it owes, and the rest repays the position's debt first and its premium after. A purchase repays at most half of what the position owes, or all of it once that is 2,000 USDG or less, as Aave v3 does, and the next purchase judges the position again. While the market is closed, at most a tenth of a position's holding of a token is sold an hour.
+
+The backtest measured the decay: the price reaches its floor in 16.7 minutes with the market open and 66.7 with it closed ([the backtest](/resources/backtest)).
+
+## The reopening auction
+
+A race of liquidation bots at the reopening rewards whoever is fastest. `ReopeningAuction` sells, at NYSE's regular open after a weekend or holiday, the collateral of positions that fell short during the closure, in one sealed-bid, uniform-price batch per Stock Token.
+
+1. From the 24/5 session's reopen until half an hour before the regular open, anyone enrols a position that falls short at its bands' low edges, and bidders commit.
+2. In the half hour before the open, bidders reveal.
+3. In the first hour of regular trading, anyone submits the clearing price with `clear`, and the contract checks it in one pass over the bids.
+
+A commitment is `keccak256(abi.encode(bidder, symbol, openMs, quantity, price, salt))` with a deposit of at least 100 USDG, which may exceed the bid to hide its size. The floor is 10% below the low edge of the band sealed before the reopen (see [the seal](/concepts/band#the-seal)); no bid below it is taken. A deposit that is not revealed loses a tenth of itself, at least 100 USDG, to the reserve.
+
+The clearing price is the highest bid price at which the bids at or above it take the whole supply, or the lowest bid price when all of them together take less, or the floor with no bid. Every bid above it fills, and bids at it share what is left pro rata, so everyone fills at one price. What the bids do not take, the gap backstop buys at the same price, never above the band's low edge. What neither takes stays in the positions, which return to the Dutch auction.
+
+The [auction guide](/guides/auction) walks through a bid. A round keeps 32 lots and 64 bids, and a round nobody clears within its hour refunds every bid.
+
+## The loss cascade
+
+If a position's collateral is sold and it still owes, the loss falls in a fixed order:
+
+1. The borrower's collateral.
+2. [The gap backstop](/contracts/gap-backstop), a junior tranche funded by its depositors, which earns the weekend premium. `cover(account, position)` repays what an emptied position owes with the backstop's USDG, up to an exposure limit per closure.
+3. The supply vault's lenders. `writeOff` retires the position's borrow shares and the vault writes the same amount off, so every share loses its part at once.
+
+The backstop's limits are declared on chain (`exposureLimit`, `exposureLeft`), and a limit change applies only to closures that close 13 days or more later. A shortfall past a limit is written off to lenders.
+
+## Limits
+
+- Tapehouse is not a broker, and a Stock Token is a debt security. Only the issuer can pause a token or blocklist an address. A frozen token is still valued at its band but cannot be sold, so it backs no new loan.
+- The reopening auction is deployed on the testnet but its phases need a real reopening to run. It is tested with a warped clock in the contract suite and end to end against a node front that states each phase.
+- The backtest found no bad debt in 890 closures at the deployed five times cap. It also found the engine's linear liquidity charge below the cost NVDA's pool would have charged at the block measured. History is not a bound on the next closure; the backstop and the auction exist for that.
+
+## Next
+
+- [Weekend gap cover](/concepts/weekend-gap-cover)
+- [Run a keeper](/operate/keepers)
+- [Run a bidder](/operate/bidder)
+- [The liquidator contract](/contracts/liquidator)

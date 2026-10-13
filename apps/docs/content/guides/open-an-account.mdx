@@ -1,0 +1,198 @@
+---
+title: "Open an account"
+description: "Create a smart account that Tapehouse sponsors the first operations of, and deposit Stock Tokens into a margin position."
+---
+
+A margin account is where you hold collateral and borrow USDG from the supply vault. Each address has one cross position, and may open an isolated position for any asset. In this guide you create the account, which costs no ether, and deposit Stock Tokens into it, in the app and then from code.
+
+## Before you start
+
+- A wallet on Robinhood Chain's testnet, chain 46630, that holds a Stock Token. The registry `deployments/46630.json` lists TSLA and AMZN.
+- For the code path, an SDK as in the [quickstart](/quickstart) and the packages `permissionless` and `viem`.
+
+## In the app
+
+<Steps>
+<Step title="Connect your wallet">
+The app asks your wallet to switch to the chain it is built for if it is on another one. Once connected, it shows the smart account your wallet owns: its address, whether it exists yet, and the free actions the sponsor still pays for, drawn as notches.
+</Step>
+<Step title="Create the smart account">
+Creating it is a user operation your wallet signs and Tapehouse's sponsor service sponsors, so you need no ether. The account is eth-infinitism's SimpleAccount v0.7, owned by your wallet, and its address is known before it exists.
+</Step>
+<Step title="Deposit">
+Choose a position, the cross one or an asset's isolated one, then an asset and an amount. Your wallet signs a free permit, and one operation takes the tokens, approves the accounts and deposits them. Before the wallet is asked, the app shows the deposit cap, any pause or block by the token's issuer, and the liquidation price once you have typed a loan.
+</Step>
+</Steps>
+
+Creating the account itself counts nothing. Each smart account then has three sponsored operations, whether or not their calls succeed. After the third, operations are paid from the account's own ether, or you act from your wallet directly (see below). No keeper's, owner's or bidder's call is sponsored.
+
+The margin account is the smart account when the app has a bundler and a sponsor service, and your wallet otherwise.
+
+## From code
+
+The smart account is a SimpleAccount from the registry's factory. The TypeScript SDK reads its address and builds the calls; the sponsor service signs the operations it pays for over ERC-7677, so viem's `createPaymasterClient` is its client. The bundler and sponsor URLs are the ones your deployment runs, `TAPEHOUSE_BUNDLER_URL` and `TAPEHOUSE_SPONSOR_URL` in the app.
+
+<Steps>
+<Step title="Set up the clients">
+
+```ts
+import { readFileSync } from 'node:fs'
+import { createPublicClient, createWalletClient, defineChain, http, type Hex } from 'viem'
+import { createBundlerClient, createPaymasterClient } from 'viem/account-abstraction'
+import { privateKeyToAccount } from 'viem/accounts'
+import { toSimpleSmartAccount } from 'permissionless/accounts'
+import { accounts, CROSS, parseDeployments, sponsorship } from '@tapehouse/sdk'
+
+const deployments = parseDeployments(JSON.parse(readFileSync('deployments/46630.json', 'utf8')))
+const rpc = 'https://rpc.testnet.chain.robinhood.com'
+const chain = defineChain({
+  id: deployments.chainId,
+  name: 'Robinhood Chain testnet',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: { default: { http: [rpc] } },
+})
+const client = createPublicClient({ chain, transport: http(rpc) })
+const owner = privateKeyToAccount(process.env.PRIVATE_KEY as Hex)
+const wallet = createWalletClient({ account: owner, chain, transport: http(rpc) })
+
+const account = await toSimpleSmartAccount({
+  client,
+  owner,
+  factoryAddress: sponsorship.accountFactory(deployments),
+  entryPoint: sponsorship.entryPoint(deployments),
+})
+const bundler = createBundlerClient({
+  account,
+  client,
+  paymaster: createPaymasterClient({ transport: http(process.env.TAPEHOUSE_SPONSOR_URL) }),
+  transport: http(process.env.TAPEHOUSE_BUNDLER_URL),
+})
+```
+
+`sponsorship.accountAddress(client, deployments, owner.address)` reads the same address from the factory, and `sponsorship.freeOperationsLeft(client, deployments, account.address)` how many sponsored operations remain.
+</Step>
+<Step title="Sign a permit for the Stock Token">
+
+Your wallet signs a free EIP-2612 permit that lets the smart account take the tokens. The SDK reads the token's permit domain from the chain each time, since the issuer can rename a token.
+
+```ts
+const token = deployments.tokens.TSLA
+const amount = 10n ** 18n
+const deadline = BigInt(Math.floor(Date.now() / 1000) + 600)
+
+const signature = await wallet.signTypedData(
+  await sponsorship.permit(client, { token, owner: owner.address, account: account.address, value: amount, deadline }),
+)
+```
+</Step>
+<Step title="Deposit in one user operation">
+
+The operation takes the tokens by permit, approves the margin accounts and deposits into the cross position. The first operation also creates the smart account.
+
+```ts
+import { erc20Abi } from 'viem'
+
+const hash = await bundler.sendUserOperation({
+  calls: [
+    ...sponsorship.pull({ token, owner: owner.address, account: account.address, value: amount, deadline, signature }),
+    sponsorship.asCall({
+      address: token,
+      abi: erc20Abi,
+      functionName: 'approve',
+      args: [deployments.tapehouse.MarginAccounts, amount],
+    }),
+    sponsorship.asCall(accounts.deposit(deployments, { position: CROSS, token, amount, account: account.address })),
+  ],
+})
+await bundler.waitForUserOperationReceipt({ hash })
+```
+</Step>
+<Step title="Read the position">
+
+```ts
+const held = await accounts.collateral(client, deployments, account.address, CROSS, token)
+const { equity, requirement } = await accounts.health(client, deployments, account.address, CROSS)
+```
+
+`health` returns equity and requirement in USD with 18 decimals. `held` is in the token's raw units.
+</Step>
+</Steps>
+
+An isolated position is named by the asset's symbol: pass `toBytes32('TSLA')` as the position instead of `CROSS`. An asset sits in one position of an account at a time, and an isolated position is margined alone, so it gets no diversification and its loss never reaches the cross position.
+
+## From a wallet alone
+
+Without a smart account, your wallet is the margin account. It approves the token and deposits, or deposits with a permit in one transaction (`accounts.depositWithPermit`). Ether goes in as WETH: `accounts.wrap` wraps it for an account first.
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+const approve = await wallet.writeContract({
+  address: token,
+  abi: erc20Abi,
+  functionName: 'approve',
+  args: [deployments.tapehouse.MarginAccounts, amount],
+})
+await client.waitForTransactionReceipt({ hash: approve })
+const deposit = await wallet.writeContract(
+  accounts.deposit(deployments, { position: CROSS, token, amount, account: owner.address }),
+)
+```
+</Tab>
+<Tab title="Go">
+```go
+approve, err := client.Approve(token, margin, amount)
+deposit, err := client.Accounts().Deposit(sdk.Cross, token, amount, owner)
+for _, tx := range []sdk.Tx{approve, deposit} {
+	if _, err := client.Send(opts, tx); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+`opts` is a `*bind.TransactOpts` for your key, such as the one `bind.NewKeyedTransactorWithChainID` returns, and `margin` the registry's `.tapehouse.MarginAccounts`. Send the deposit once the approval has landed.
+</Tab>
+<Tab title="Rust">
+```rust
+let margin = tapehouse.deployments().tapehouse["MarginAccounts"];
+let token = tapehouse.deployments().tokens["TSLA"];
+tapehouse.stock_token("TSLA")?.approve(margin, amount).send().await?.get_receipt().await?;
+tapehouse
+    .accounts()?
+    .deposit(CROSS, token, amount, owner)
+    .send()
+    .await?
+    .get_receipt()
+    .await?;
+```
+
+`provider` must carry a wallet, as `ProviderBuilder::new().wallet(signer)` builds one.
+</Tab>
+</Tabs>
+
+## What to expect
+
+- Deposits and repayments stay open whatever the band, the session and the guardian. A deposit stops at its cap, at the issuer's pause or blocklist, and while USDG is paused.
+- Stock Tokens count at the low edge of their band. WETH counts for 80% of its Chainlink price, and USDG at par. A position holding USDG does not borrow: it repays with that USDG first.
+- Authorization is separate. `accounts.setAuthorization(deployments, address, true)` lets another address act for the account, and `accounts.setMandate` gives an agent a bounded authority. See [mandates](/agents/mandates).
+
+## Errors you may hit
+
+Decode a revert with `decodeRevert` in TypeScript, `sdk.DecodeRevert` in Go and `Error::Revert` in Rust.
+
+| Error | Cause |
+|---|---|
+| `AssetCapExceeded(symbol, cap)` | The deposit would pass the asset's cap. |
+| `AssetInOtherPosition(symbol, position)` | The account holds that asset in another position. |
+| `UnsupportedToken(token, position)` | The token is not USDG, WETH or a Stock Token the accounts take, or not allowed in that position. |
+| `IsPaused()`, `Blocked(address)` | The issuer paused the Stock Token, or blocklisted an address. |
+| `Unauthorized(caller, account)` | The caller is not the account or an address it authorized. |
+| `AA34 signature error` | A sponsored operation was changed after the service signed it, or signed by someone else. |
+| `AA32` | A sponsored operation is outside its ten-minute validity window. |
+| `CostAboveLimit(maxCost)` | The operation would cost the paymaster more than its per-operation limit. |
+
+## Next
+
+- [Borrow](/guides/borrow) with the liquidation price in front of you.
+- [Sponsor service](/operate/sponsor) and [the sponsor paymaster](/contracts/sponsor-paymaster).
+- [The margin accounts](/contracts/margin-accounts).

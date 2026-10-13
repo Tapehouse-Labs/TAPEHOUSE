@@ -1,0 +1,132 @@
+---
+title: "Gap backstop"
+description: "The junior ERC-4626 tranche behind the supply vault's lenders, with its functions, events, limits and SDK calls."
+---
+
+`GapBackstop` is an ERC-4626 vault over USDG. Depositors earn the weekend premium the margin accounts set aside for it, and in return it repays what a liquidated position still owes before the loss reaches the supply vault's lenders. Losses fall on the borrower's collateral first, then on the backstop, then on lenders.
+
+| | |
+|---|---|
+| Testnet address (46630) | `0x32acef0BBCB78b88d82b672DFE3F325105dAEd8E` |
+| Source | `contracts/src/GapBackstop.sol` |
+| Share token | `thGAP`, 12 decimals (USDG's 6 plus a 6-decimal offset) |
+| Owner | Two-step ownership that cannot be renounced |
+
+## Deposit and leave
+
+Approve USDG to the backstop, then deposit. Leaving takes a cooldown, so start it a week before you want out.
+
+```ts
+import { backstop } from '@tapehouse/sdk'
+
+await wallet.writeContract(backstop.deposit(deployments, { assets: 1_000_000_000n, receiver: wallet.account.address }))
+
+await wallet.writeContract(backstop.startCooldown(deployments))
+// from a week later, for six days, while redemptions are open:
+await wallet.writeContract(
+  backstop.redeem(deployments, { shares, receiver: wallet.account.address, owner: wallet.account.address }),
+)
+```
+
+`assets` is in USDG units (6 decimals), so the deposit above is 1,000 USDG. Each helper returns a viem contract call, so it goes to `writeContract` as is. `wallet` is a viem wallet client with an account; `deployments` comes from `parseDeployments`, as in the [quickstart](/quickstart).
+
+Read the pool and your own stake in one call each:
+
+```ts
+const pool = await backstop.state(publicClient, deployments)
+const mine = await backstop.depositor(publicClient, deployments, wallet.account.address, [tslaToken, amznToken])
+```
+
+`state` returns the USDG held, the shares, the exposure limits and what is left of each, the premium figures and the cooldown terms. `depositor` returns your shares, what they are worth, what you may withdraw, redeem and deposit now, your cooldown window, and the Stock Tokens you gained and have not claimed.
+
+## Functions
+
+Positions are named by a `bytes32` key: `CROSS` (`bytes32(0)`) for the cross positions together, or an asset's symbol as `bytes32` for its isolated positions. The SDK exports `CROSS` and `toBytes32`.
+
+| Function | What it does | Who may call | Key reverts |
+|---|---|---|---|
+| `deposit(uint256 assets, address receiver)` | Deposits USDG for shares | Anyone, while `maxDeposit` is above zero | `ERC4626ExceededMaxDeposit` |
+| `mint(uint256 shares, address receiver)` | Mints exact shares | Anyone, while `maxMint` is above zero | `ERC4626ExceededMaxMint` |
+| `startCooldown()` | Starts the caller's cooldown for all its shares; a new one replaces the last | Any holder | None |
+| `redeem(uint256 shares, address receiver, address owner)` | Redeems shares for USDG, within the owner's cooldown window | The owner, or an address with its allowance | `ERC4626ExceededMaxRedeem` |
+| `withdraw(uint256 assets, address receiver, address owner)` | Withdraws USDG, within the same window | The owner, or an address with its allowance | `ERC4626ExceededMaxWithdraw` |
+| `claim()` | Takes the premium the accounts set aside (`claimPremium`) and adds it to the shares at once; returns the amount | Anyone | None |
+| `claimGains(address token)` | Sends the caller the Stock Token it gained from remainders the backstop bought | Any holder | None |
+| `cover(address account, bytes32 position)` | Repays what an emptied position owes, up to the exposure left and the USDG held, then has the liquidator write off the rest to lenders; returns `(paid, written)` | Anyone | The liquidator's write-off reverts while the position still holds collateral |
+| `buyRemainder(address account, bytes32 position, address token, uint256 amount, uint256 price)` | Buys what the reopening auction's bids leave, at the clearing price; returns the amount taken | The liquidator's reopening auction only | `NotAuction` |
+| `setExposureLimit(bytes32 position, uint256 limit)` | Sets a position's exposure limit for closures that close 13 days or more from now | Owner | `InvalidPosition` |
+| `sync()` | Lowers the backstop's count of USDG to its balance after the issuer wipes it | Anyone | None |
+| `renounceOwnership()` | Always reverts | Nobody | `OwnershipCannotBeRenounced` |
+
+`cover` pays nothing while USDG's issuer has frozen the backstop, so lenders bear the shortfall rather than wait on the freeze. It repays the debt alone and forgives the position's premium.
+
+### Reads
+
+| Function | Returns |
+|---|---|
+| `totalAssets()` and `held()` | The USDG the backstop counts as its own. USDG sent to it directly changes no share's value |
+| `closureMs()` | The close, in milliseconds, of the closure the backstop last counted a cover against |
+| `exposureLimit(bytes32 position)` | The limit in force for the current closure, in USDG |
+| `exposureLimits(bytes32 position)` | `(current, next, fromMs)`: the limit before `fromMs` and the one from it on |
+| `exposureLeft(bytes32 position)` | What it may still cover now, at most the USDG held |
+| `covered(bytes32 position, uint64 closesMs)` | What it covered for the position in that closure |
+| `cooldowns(address owner)` | `(shares, startedAt)` |
+| `gains(address owner, address token)` | The token the owner gained and has not claimed |
+| `gainsPerShare(address token)` and `gainsEpoch()` | The accounting behind `gains` |
+| `maxDeposit`, `maxMint`, `maxRedeem` | The ERC-4626 limits, zero while the conditions under Parameters and limits apply |
+| `accounts()` | The margin accounts it backstops |
+
+## Parameters and limits
+
+| Name | Value | Meaning |
+|---|---|---|
+| `COOLDOWN` | 7 days | Wait after `startCooldown` before shares can be redeemed |
+| `WITHDRAWAL_WINDOW` | 6 days | How long redemption stays open after the cooldown |
+| `SETTLEMENT` | 1 day | Redemptions and deposits stay shut this long after a closure's reopening |
+| `MIN_CLOSURE_GAP` | 72 hours | Closes at least this far apart count as two closures |
+
+The exposure limit is the most the backstop covers in one closure for each kind of position: one limit for the cross positions together, and one for each Stock Token's isolated positions. A shortfall past the limit is written off to lenders. A closure is counted from the close it began with until one begins 72 hours or more later, so a long closure counts once.
+
+A new limit applies only to closures that close at least `COOLDOWN + WITHDRAWAL_WINDOW` (13 days) after the change, the longest a depositor who wanted out before it could need. Setting another limit before then replaces the pending one.
+
+Redemptions are shut while the market is closed or its session is unknown, from the moment the accounts record a coming close until `SETTLEMENT` after its reopening, and while USDG is paused, the backstop frozen or its USDG wiped. Deposits are zero until the accounts name this vault their backstop, while USDG is paused, the backstop frozen or its USDG wiped, and from the moment the accounts record a coming close until `SETTLEMENT` after its reopening. They stay open while the market is closed.
+
+## What the bids leave
+
+After the [reopening auction](/contracts/reopening-auction) clears, it calls `buyRemainder` for each lot. The backstop buys at the clearing price, never above the band's low edge, within the position's exposure left and the USDG it holds. It reverts, leaving the rest in the position, while the issuer freezes the backstop or blocks it from the Stock Token, or when it has no shares.
+
+The Stock Tokens it buys belong to the depositors at that moment, in proportion to their shares. Deposits are shut from the moment the accounts record a coming close until a day after its reopening, so nobody buys into gains the closure already made. `gains` shows what you may take and `claimGains` sends it. Shares you send away keep the gains already earned.
+
+## Events
+
+| Event | Emitted when |
+|---|---|
+| `ExposureLimitSet(bytes32 indexed position, uint256 limit, uint64 fromMs)` | A limit is set, including at deployment with `fromMs` of zero |
+| `PremiumAdded(uint256 amount)` | `claim` adds premium |
+| `Covered(address indexed account, bytes32 indexed position, uint64 indexed closesMs, uint256 paid, uint256 written)` | `cover` runs |
+| `CooldownStarted(address indexed owner, uint256 shares, uint64 from)` | A cooldown starts; `from` is when redemption opens |
+| `Sync(uint256 held)` | `sync` lowers the count |
+| `RemainderBought(address indexed account, bytes32 indexed position, address indexed token, uint256 amount, uint256 cost, uint64 closesMs)` | The backstop buys a remainder |
+| `GainsClaimed(address indexed owner, address indexed token, uint256 amount)` | `claimGains` runs |
+
+The ERC-4626 `Deposit` and `Withdraw` events and the ERC-20 events also apply. The first deposit is the team's seed, made from the owner's address when the backstop was deployed.
+
+## Errors
+
+| Error | Meaning |
+|---|---|
+| `InvalidPosition(bytes32 position)` | The key is neither `CROSS` nor an asset of the accounts |
+| `InvalidExposureLimits()` | The constructor's asset limits do not match the accounts' assets |
+| `OwnershipCannotBeRenounced()` | `renounceOwnership` was called |
+| `NotAuction(address caller)` | Only the liquidator's reopening auction may call `buyRemainder` |
+
+## Roles
+
+The owner's only power over the vault is setting exposure limits: it cannot move depositors' USDG, change the cooldown or pause the vault. The margin accounts' owner makes the backstop the accounts' backstop, and from then on only it may write off a position. USDG's issuer can pause USDG, freeze the backstop or wipe its balance. `sync` counts a wipe as a loss to the shares.
+
+## Next
+
+- [Reopening auction](/contracts/reopening-auction)
+- [Liquidator](/contracts/liquidator)
+- [Weekend gap cover](/concepts/weekend-gap-cover)
+- [Earn](/guides/earn)

@@ -1,0 +1,126 @@
+---
+title: "Rust SDK"
+description: "Read the band, margin accounts, shorts, baskets and gap cover and build their transactions with the tapehouse-sdk crate on alloy."
+---
+
+`tapehouse-sdk` gives you alloy contract instances for Tapehouse's contracts at the addresses of a chain's registry, plus typed helpers for the reads and quotes that need more than one call. A method on an instance builds a typed call or transaction, which you `.call()` or `.send()` through your own alloy provider and signer.
+
+<Warning title="Not on crates.io yet">
+The crate is in the repository at `crates/sdk`, version 0.1.0, and is not on crates.io. Depend on it by path, for example `tapehouse-sdk = { path = "crates/sdk" }` from a checkout. It needs Rust 1.94.1 and alloy 2.5.
+</Warning>
+
+## Read and send
+
+```rust
+use alloy::providers::ProviderBuilder;
+use tapehouse_sdk::{Deployments, Tapehouse, to_bytes32};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let deployments = Deployments::load("deployments/46630.json")?;
+    let provider = ProviderBuilder::new()
+        .connect_http("https://rpc.testnet.chain.robinhood.com".parse()?);
+    let tapehouse = Tapehouse::new(provider, deployments);
+
+    let quote = tapehouse.band()?.quote(to_bytes32("TSLA")?).call().await?;
+    println!("{} {} {}", quote.state, quote.low, quote.high);
+    Ok(())
+}
+```
+
+To send, give the provider a wallet (`ProviderBuilder::new().wallet(signer)`) and send the call the instance builds:
+
+```rust
+use alloy::primitives::U256;
+use tapehouse_sdk::CROSS;
+
+let receipt = tapehouse
+    .accounts()?
+    .borrow(CROSS, U256::from(50_000_000u64), account, account)
+    .send()
+    .await?
+    .get_receipt()
+    .await?;
+```
+
+An asset is its symbol as `&str`, turned into a `B256` with `to_bytes32`. A position is `CROSS` or an asset's `B256`. Amounts are `U256` in raw units. A fallible method returns `tapehouse_sdk::Result`.
+
+## Registry
+
+| Item | What it does |
+|---|---|
+| `Deployments::load(path)` | Reads `deployments/<chainId>.json` |
+| `Deployments::parse(json)` | The same from a `&str`. An address in mixed case must carry its checksum |
+| `deployments.share_prices()` | Whether the chain's Chainlink feeds price the share (`SHARE_PRICE_CHAINS`, Arbitrum One) |
+| `token_price_feed(name)`, `share_price_feed(name)` | A `.chainlink` feed as `TokenPriceFeed` or `SharePriceFeed` |
+| `to_bytes32(name)` | A symbol or feed ID as 32 bytes; an error above 32 bytes |
+| `CROSS` | The cross position |
+
+## Tapehouse
+
+`Tapehouse::new(provider, deployments)` takes an alloy `Provider + Clone`. Its accessors return alloy instances generated with `sol!` from the contracts' ABIs, so every function of the contract is a method on them.
+
+| Method | Returns |
+|---|---|
+| `band()` | The band: `quote`, `session`, `halt`, `price`, `writePrices` and the rest |
+| `band_feed(asset)` | An asset's `BandFeed`: `latestRoundData`, `latestBand`, `seal` |
+| `accounts()` | The margin accounts: `deposit`, `withdraw`, `borrow`, `repay`, `health`, `setAuthorization` and the rest |
+| `shorts()` | The short positions: `sell`, `cover`, `deposit`, `withdraw`, `liquidate` |
+| `basket(key)` | A basket of `.tapehouse.Baskets` |
+| `gap_cover()` | The gap cover |
+| `usdg()`, `stock_token(asset)` | USDG and an asset's Stock Token |
+| `morpho_oracle(asset)` | An asset's Morpho oracle from `.morphoOracles` |
+| `token_price(feed)`, `share_price(feed)` | A Chainlink aggregator, typed by what it prices |
+| `deployments()` | The registry |
+
+The bindings in `tapehouse_sdk::bindings` also cover the margin engine, the liquidator, the gap backstop, the reopening auction, the stock lending vault, the supply vault, Morpho Blue, Uniswap's QuoterV2, the sponsor paymaster, WETH and the Stock Token registry.
+
+## Helpers
+
+These are on `Tapehouse` and do what an instance cannot do in one call.
+
+| Method | Arguments | Does |
+|---|---|---|
+| `write_prices` | `source: &impl PackageSource, feed_ids: &[&str]` | The band's `writePrices` with the payload `source` returns. The crate holds no RedStone key |
+| `observe` | `asset` | The accounts' `observe` of an asset. Anyone may |
+| `set_mandate` | `agent, expires_at, max_debt, max_leverage` | Bounded authority for an agent; `expires_at` of 0 ends it |
+| `mandate`, `mandate_status` | `account, agent` (and `position`) | The mandate, and whether the agent may borrow now |
+| `recovery` | `asset` | When borrowing against an asset reopens |
+| `repayment` | `account, position` | `Repayment { debt, premium, assets }`, both read at one block |
+| `collateral` | `account, position, token` | What the position holds of a token |
+| `leverage` | `account, position` | Gross exposure over equity in basis points |
+| `liquidation_price` | `account, position, asset, borrowing` | The price at or above which the position meets its requirement once it owes `borrowing` more USDG |
+| `quote_sale`, `quote_cover` | `asset, amount, slippage_bps` | `Sale { proceeds, min_proceeds }` and `BuyBack { cost, max_cost }` from Uniswap's QuoterV2; slippage is 0 to 10,000 basis points |
+| `unwrap` | `account, key, shares` | Redeems basket shares in the cross position |
+| `basket_components`, `preview_mint`, `preview_redeem`, `basket_target`, `pending_target` | `key` (and `shares`) | A basket's reads |
+| `in_baskets` | `account, position` | What a position holds of each Stock Token through its baskets |
+| `quote_gap_cover` | `asset, layer` | `CoverQuote { premium, reserve }` |
+| `gap_cover_pricing_gap` | `asset` | The weekend gap the cover prices at |
+| `gap_cover_sales` | none | The closure on sale, if any |
+| `gap_cover_series` | `asset, closes_ms` | A `Series`: open, settled with its prices, or void |
+| `oracle_price` | `asset` | An `OraclePrice`: a price, or no price with `NoPrice::Stale`, `Halted` or `SequencerNotSettled`. Never zero |
+| `payout` | `layer, reference_price, price` | A free function: what a settled cover pays |
+
+`Layer` is `{ notional, deductible_bps, limit_bps }`. `PackageSource` is a trait with one method, `payload(&self, feed_ids: &[&str])`, that returns the signed RedStone payload as `Bytes`.
+
+## Errors
+
+`tapehouse_sdk::Error` is `Registry`, `Argument`, `Revert`, `Unexpected`, `Contract` and `Source`. A call that fails inside alloy converts to `Error::Revert` when its revert data matches an error of the contracts. `decode_revert(&alloy::contract::Error)` and `decode_revert_data(&[u8])` return the `Revert { name, args, data }`. See [errors](/sdks/errors).
+
+```rust
+use tapehouse_sdk::decode_revert;
+
+if let Some(revert) = decode_revert(&error) {
+    println!("{revert}");
+}
+```
+
+## Example
+
+`crates/sdk/examples/devnode.rs` runs the crate against a local Nitro dev node: `PRIVATE_KEY=0x… cargo run --example devnode -- RPC_URL DEPLOYMENTS_JSON PAYLOAD_FILE`. It reads the key from the environment, never from an argument.
+
+## Next
+
+- [SDKs overview](/sdks/overview): the three SDKs side by side.
+- [Errors](/sdks/errors): decode a revert and fix it.
+- [Quickstart](/quickstart): the first read in each language.

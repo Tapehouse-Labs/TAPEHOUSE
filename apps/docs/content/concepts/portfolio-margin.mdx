@@ -1,0 +1,112 @@
+---
+title: "Portfolio margin"
+description: "How the margin engine turns a whole portfolio of Stock Tokens into one requirement, and how that requirement changes with the session."
+---
+
+Tapehouse margins everything an account holds in its cross position as one portfolio. The margin engine prices the portfolio's loss in its worst scenarios, so a diversified portfolio needs less margin than the same assets taken one at a time, and a concentrated one needs more. You can ask the engine before you sign.
+
+## Ask the engine
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+
+```ts
+import { accounts, CROSS, engine } from '@tapehouse/sdk'
+
+const { equity, requirement, missing, regime } = await accounts.health(client, deployments, account, CROSS)
+
+const price = await accounts.liquidationPrice(client, deployments, account, CROSS, 'TSLA', 50_000_000n)
+
+const { margin } = await engine.currentRequirement(client, deployments, { quantities, prices })
+```
+
+</Tab>
+</Tabs>
+
+`health` returns equity and requirement in USD with 18 decimals. `liquidationPrice` is the price of `asset`, in USD with 8 decimals, at which the position stops meeting its requirement once it owes `borrowing` more USDG. `currentRequirement` takes signed token amounts with 18 decimals (negative for a short) and USD prices with 8 decimals, both in the order of the engine's `assets()`. `client` and `deployments` are built as in [the band](/concepts/band#read-a-band).
+
+## Positions
+
+An address has a cross position and, for any asset it chooses, an isolated position named by the asset's symbol. A position holds Stock Tokens, USDG and WETH and has its own debt.
+
+- Stock Tokens are valued at the low edge of their band, which already carries the token's multiplier. A degraded band backs debt at its low edge like any other, and a halted band counts for nothing.
+- WETH counts for 80% of its Chainlink price, and for nothing when that price is more than 86,460 seconds old.
+- USDG counts at par.
+- Borrowing, and withdrawing from a position in debt, need the position's equity (collateral less debt) to meet the engine's requirement.
+- An isolated position is margined alone: no diversification, and its loss never reaches the cross position. An asset sits in one position of an account at a time, because split in slices it would pay less liquidity add-on than whole.
+
+## Scenarios
+
+The engine draws a deterministic scenario set from its stored parameters on every call. Nothing is signed off chain, and anyone can rebuild the set. The parameters are each asset's daily volatility and weekend gap, each pair's correlation, and each asset's liquidation depth.
+
+| Scenarios | How each asset moves |
+|---|---|
+| 256 joint draws | Its daily volatility times the square root of the horizon in days, through the Cholesky factor of the correlation matrix, over 256 standard normal points |
+| 256 with every correlation 1 | Its share of one normal draw |
+| 256 with every correlation 0 | Its share of its own normal draw |
+| Market down, market up | β times the market moving by its expected shortfall at 99% over the horizon |
+| Weekend gap down, weekend gap up | Its weekend gap, together with every other asset |
+| Each asset alone, gap down and up | Its own gap while the others stay put |
+
+The normal points come from a rank-1 Korobov lattice, and the arithmetic is integer throughout. `scenario(index, horizon)` returns one scenario and `scenarioDigest(size, horizon)` the keccak-256 of a whole set. `stylus/contracts/margin/testdata/scenario-vectors.json` holds 144 digests computed independently of the program.
+
+## The requirement
+
+`requirement(quantities, prices, horizon, spansClosure)` is the largest of four numbers, plus a liquidity add-on.
+
+| Part | What it is |
+|---|---|
+| Expected shortfall | The mean loss in the worst 1% of the 256 joint draws, or of the draws with every correlation 0 where that is larger. |
+| Diversification cap | Diversification takes off at most 80% of the gap between that and the sum of each asset's own expected shortfall. |
+| Stress | The loss when the market moves down or up and, across a closure, when every asset gaps at once or one gaps alone. |
+| Single-position floor | The loss when one asset alone moves by the range of FINRA Rule 4210(g)'s portfolio margin: 15% for a stock, down 8% or up 6% for the market asset. |
+| Liquidity | What liquidating each position in its pool costs beyond its value: the pool's fee, its discount to the valuation price, and the price impact, which grows linearly to a 10% move at the pool's depth. |
+
+The floor, the cap and the horizon follow clearing-house practice: the cap on offsets after EMIR's RTS 153/2013, Article 27, and the two-day horizon after its two-day margin period of risk.
+
+## Parameters
+
+Each parameter has a floor set in the constructor that never changes. The volatility floor is the asset's 10-year volatility. The correlation floor gives 25% weight to the 60 sessions with SPY's worst return in ten years. The weekend-gap floor is the mean of the largest 1% of the asset's 521 weekend moves in ten years. All come from Yahoo Finance's daily adjusted closes to 25 September 2026 and are in `stylus/contracts/margin/parameters.json`.
+
+The owner replaces the parameters with `setParameters`: each stays at or above its floor, moves by at most a factor of 1.5 (a depth may fall by any amount, and rises by at most the same factor), and an update comes at least a day after the last. The correlation matrix must stay positive definite, checked exactly with Sylvester's criterion. Every value emits an event, so the history rebuilds from events alone. A calibration run proposes the updates, and refuses any that worsens the backtest (see [calibration](/resources/calibration)).
+
+## The current requirement
+
+`currentRequirement(quantities, prices)` reads the band's session and answers for the regime the account is in now.
+
+| Regime | Requirement |
+|---|---|
+| Open | The requirement over two days, plus a 25% buffer. |
+| Closing | From three hours before a weekend or holiday close to the end of its post-market, it rises in a straight line from the open value to the closed one. |
+| Closed | The largest of the buffered open requirement, the requirement across the closure, and a fifth of gross exposure plus the liquidity add-on. |
+| Unknown | As closed. |
+
+The horizon is two days in every regime. Over ten years, the move from a Friday close to the Monday open has less variance than one trading day, but its 99% expected shortfall matches 1.8 to 4.1 days of normal diffusion: the closure adds a jump on top of the diffusion. The weekend-gap scenarios carry the jump.
+
+### The weekend leverage cap
+
+Across a closure, and whenever the session is unknown, leverage (gross exposure over equity) is capped at five times: `weekendLeverage()` returns the cap in basis points, and the margin accounts apply it from the regular open on the last trading day before the closure. Shorts count in the gross exposure.
+
+The backtest gives the reason. At the model's own weekend limit, a median 10.7 times, 193 of 200 synthetic long-only portfolios would have lost more than their margin on their worst closure of the last ten years, every one on 16 March 2020. None does at five times. The cost is capacity: across the weekend those portfolios could borrow a median 80.0% of their stock's value, against 90.6% on a weekday, before the liquidity add-on. An account at its weekday limit must cut gross exposure by about half, or add margin, before the close. Method and caveats are in [the backtest](/resources/backtest).
+
+## When the accounts refuse a loan
+
+Deposits and repayments stay open whatever the band says. Borrowing, and withdrawing from a position in debt, close for a position that holds an asset whose band is halted, whose Stock Token has a multiplier change pending, or whose liquidity the engine cannot read. They close for every position while the L2 sequencer is not settled, and for a position holding Stock Tokens while the band cannot tell the session.
+
+A band that comes back is not trusted at once. Once anyone has recorded a halt or a pending multiplier change with `observe(symbol)` (the keepers do every minute), borrowing against the asset reverts with `AssetRecovering(symbol, until)` until thirty minutes after the last time it was seen so. Repayments, deposits and the valuation of existing positions are untouched, so a halt that lifts neither liquidates a position nor locks one in.
+
+The weekend premium is a rate in basis points a year that each position's debt carries while the 24/5 session is closed. Part goes to the fee reserve and the rest is set aside for [the gap backstop](/concepts/liquidation#the-loss-cascade).
+
+## Limits
+
+- The testnet runs two assets, TSLA and AMZN. The engine is written for up to eight and the launch set is six.
+- A bound on each parameter is not by itself a bound on a portfolio's margin.
+- The engine's linear liquidity charge covers the pools of TSLA, AAPL, GOOGL and SPY in the backtest's measurement, and does not cover NVDA's or MSFT's at the block measured.
+- The Solidity reference of the engine gives the same answers bit for bit, and the Stylus program costs 12.3 times less gas for the requirement on the testnet's two assets (see [Stylus vs Solidity](/resources/stylus-vs-solidity)).
+
+## Next
+
+- [The session](/concepts/session)
+- [Liquidation](/concepts/liquidation)
+- [Borrow](/guides/borrow)
+- [The margin engine contract](/contracts/margin-engine)

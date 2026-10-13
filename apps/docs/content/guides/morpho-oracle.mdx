@@ -1,0 +1,125 @@
+---
+title: "Price a Morpho market with the band"
+description: "Read a Stock Token's Morpho oracle, deploy one, create a Morpho Blue market on it, and liquidate against it."
+---
+
+`MorphoBandOracle` lets a Morpho Blue market take a Robinhood Stock Token as collateral, priced by its Tapehouse band. It implements Morpho's `IOracle`. In this guide you read an oracle's answer, deploy one, check it before you create a market on it, and write a fresh price before you liquidate.
+
+<Note title="No oracle is recorded yet">
+The registries in the repository record no `.morphoOracles` entry, and `deployments/46630.json` has no `.morpho` group, so reading an oracle there fails with a registry error until one is deployed. The commands below deploy oracles on a chain whose registry names a band and Morpho Blue, which the Makefile supports for chain 4663 and for a local dev node, 412346.
+</Note>
+
+## What the oracle answers
+
+`price()` is one whole unit of the Stock Token in units of the market's loan token, scaled by 1e36. It is the band's low edge in every state that has a price: open, closed and degraded. The loan token is taken at par with the US dollar. The oracle multiplies the band's 8-decimal price by `scaleFactor`, 10^(36 + loan decimals - collateral decimals - 8), which is 1e16 for an 18-decimal Stock Token against USDG's 6 decimals. The band's price on Robinhood Chain already carries the token's ERC-8056 multiplier, so the oracle applies none.
+
+A band with no price reverts with `NoAnswer`. That is no price, and never zero. Morpho Blue then refuses to borrow, to withdraw collateral against debt and to liquidate. Supplying, withdrawing what is not lent, repaying and adding collateral go on.
+
+## 1. Read an oracle
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+import { morpho } from '@tapehouse/sdk'
+
+const answer = await morpho.price(client, deployments, 'TSLA')
+if (answer.price === undefined) {
+  console.log(answer.noPrice, answer.revert.errorName)
+} else {
+  console.log(answer.price)
+}
+
+const halt = await morpho.halt(client, deployments, 'TSLA')
+const oracle = await morpho.oracle(client, deployments, 'TSLA')
+```
+</Tab>
+<Tab title="Go">
+```go
+answer, err := client.MorphoOracles().Price(nil, "TSLA")
+if answer.Price == nil {
+	fmt.Println(answer.NoPrice, answer.Revert)
+} else {
+	fmt.Println(answer.Price)
+}
+
+halt, err := client.MorphoOracles().Halt(nil, "TSLA")
+oracle, err := client.MorphoOracles().Oracle(nil, "TSLA")
+```
+</Tab>
+<Tab title="Rust">
+```rust
+use tapehouse_sdk::OraclePrice;
+
+match tapehouse.oracle_price("TSLA").await? {
+    OraclePrice::Price(price) => println!("{price}"),
+    OraclePrice::NoPrice { reason, revert } => println!("{reason:?} {revert}"),
+}
+```
+</Tab>
+</Tabs>
+
+`noPrice` says why there is no answer, read at one block:
+
+| Reason | Meaning |
+|---|---|
+| `stale` | The band has no live leg. While the market is closed its one leg is the 24/7 price, live for 120 seconds after its RedStone package, so a band nobody has written to for two minutes has no price until someone writes one. |
+| `halted` | The band holds a halt signed by Tapehouse's halt signer, the issuer's pause of the token's oracle, or an unconfirmed multiplier step. |
+| `sequencerNotSettled` | The L2 sequencer is down or came back an hour ago or less, on a band that follows a sequencer-uptime feed. |
+
+`oracle` returns the band the oracle reads, its symbol, its collateral and loan tokens, its `scaleFactor` and its owner. `halt` tells the halt's sources apart.
+
+## 2. Deploy and verify an oracle
+
+```bash
+make deploy-morpho-oracles CHAIN=<chainId> SIGNER='--account <name> --password-file <file>'
+make verify-morpho-oracles CHAIN=<chainId>
+```
+
+The first deploys an oracle for every launch asset whose Stock Token the registry's band names, priced in `.tokens.USDG` and owned by `.tapehouse.Owner`, and records it in `.morphoOracles`. `MORPHO_ASSETS='<ASSET> ...'` limits it to the assets named. It skips an asset the band prices as a share. The second reads each oracle's constructor arguments back from it, and you run it before an oracle is re-pointed or its ownership moves.
+
+## 3. Create a market
+
+Curators call Morpho Blue's `createMarket((loanToken, collateralToken, oracle, irm, lltv))` on `.morpho.Blue`, with `.tokens.USDG`, the oracle's `collateralToken()`, `.morphoOracles.<ASSET>`, `.morpho.AdaptiveCurveIrm` and an enabled LLTV. Before you do, check that:
+
+- the oracle's `band()` is the registry's `.tapehouse.Band` and its `loanToken()` the market's
+- its `owner()` is a timelock
+- `price()` answers
+- the oracle is verified on Sourcify
+
+<Warning title="Who can change the price">
+The oracle's owner can set any price: `setBand` takes any contract that names the same Stock Token, whatever quote it returns. Read `owner()` before you create a market, and do not create one on an oracle until its `owner()` is a timelock. Every re-point then waits out the timelock's `getMinDelay()`, and the `BandSet` event announces it.
+</Warning>
+
+Size the LLTV for the weekend. The band widens when the market closes, and Morpho Blue has no close factor: once a loan is past the LLTV a liquidator may repay all of it. Borrowers need headroom below the LLTV of at least the widening from the open half-width to the closed one, with room for the move on top. While the band has no price, nothing in the market can be liquidated, and a fall in the price meanwhile lands on the market's suppliers.
+
+## 4. Liquidate
+
+While the market is closed the band has a price only while someone writes RedStone packages to it, and `writePrices` is open to anyone. Liquidate from a contract that calls the band's `writePrices(feedIds, payload)` and then Morpho Blue's `liquidate`, in one transaction.
+
+```ts
+import { band } from '@tapehouse/sdk'
+
+const write = await band.writePrices(deployments, source, [feedId])
+```
+
+`source` is a `PackageSource` of your own, an object with `payload(feedIds)` that returns the signed packages as RedStone's EVM connector appends them. The SDK holds no API key and calls no gateway. The indexer's [RedStone payload endpoint](/api/get-red-stone-payload) serves signed packages for the feeds you name. The asset's 24/7 feed ID is the second value of the band's `asset(symbol)`, or the third, its index, where the second is zero.
+
+A package no newer than the one stored reverts with `PackageNotNewer(feedId, storedTimestampMs, packageTimestampMs)`. Someone wrote first, so the contract catches it and liquidates against the stored price. The band takes any signed package up to 180 seconds old that is newer than the one stored.
+
+## Errors you may hit
+
+| Error | Cause |
+|---|---|
+| `NoAnswer(symbol)` | The band has no price: halted, or no live leg. |
+| `SequencerNotSettled()` | The sequencer is down or came back an hour ago or less. |
+| `AssetMismatch(band, token)` | `setBand` was given a band that names another Stock Token for the asset. |
+| `NoStockToken(band, symbol)` | The band names no Stock Token for the symbol. |
+| `PackageNotNewer(feedId, stored, package)` | `writePrices` with a package no newer than the stored one. |
+| `OwnershipCannotBeRenounced()` | The oracle's ownership cannot be renounced. |
+| `The registry has no .morphoOracles.<asset>` | No oracle is recorded for the asset. |
+
+## Next
+
+- [The Morpho oracle contract](/contracts/morpho-oracle).
+- [Read a price](/guides/read-a-price) for the band the oracle reads.
+- [Keepers](/operate/keepers), which write the band's prices.

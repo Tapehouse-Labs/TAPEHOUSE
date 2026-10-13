@@ -1,0 +1,139 @@
+---
+title: "Stock lending"
+description: "The per-token vault that lends Stock Tokens to short sellers for a fee, with its recall queue, functions, events and SDK reads."
+---
+
+`StockLendingVault` lends one Stock Token. A holder's tokens earn a fee while they still back the holder's loan, and the fee is what short sellers pay. There is one vault per Stock Token, an ERC-4626 vault over the token in its raw units, so a dividend or split, which moves only the token's ERC-8056 multiplier, passes through every loan.
+
+| Vault | Testnet address (46630) |
+|---|---|
+| TSLA | `0xD7921e0C3D475647a384735a64aaB56C30fdEd03` |
+| AMZN | `0xF12432A8B6263D206D5d482ac1FA4bE29744D1A1` |
+
+Source: `contracts/src/StockLendingVault.sol`. Shares are named `thl<symbol>`, for example `thlTSLA`.
+
+## Who uses it
+
+The vault has two fixed counterparties, each set once by the owner.
+
+| Role | Address | What it does |
+|---|---|---|
+| Depositor | The margin accounts | Lends the tokens of positions that choose to lend, and recalls them. The vault's shares stay with the accounts, credited to each position |
+| Borrower | The short positions | Borrows open-term, repays, and writes off what it cannot return |
+
+You lend through the margin accounts, with `accounts.lend`, `accounts.unlend` and `accounts.recall`. You borrow by opening a [short](/contracts/short-positions). What you can call on the vault yourself is `buyIn`, `sync` and the reads. The vault's owner must be the accounts' owner, so nobody else chooses who borrows the tokens that back a loan.
+
+## Read a vault
+
+```ts
+import { stockLending } from '@tapehouse/sdk'
+
+const terms = await stockLending.terms(publicClient, deployments, 'TSLA')
+const ticket = await stockLending.ticket(publicClient, deployments, 'TSLA', 0n)
+```
+
+`terms` returns, at one block, `utilization` and the `borrowRate` and `supplyRate` (a year, 18 decimals), `locked`, `idle`, `debt` and `borrowable` in the token's raw units, `totalAssets`, the ticket next in turn (`head`), `maxUtilization`, `notice` in seconds and `feeShare` in basis points. `ticket` returns a ticket's span of the queue, what it has taken, when its notice runs out and what the vault holds for it.
+
+For any other call, use the generated ABI with the vault's address from the registry:
+
+```ts
+import { stockLendingVaultAbi } from '@tapehouse/sdk'
+
+const vault = deployments.stockLending.TSLA
+const owed = await publicClient.readContract({ address: vault, abi: stockLendingVaultAbi, functionName: 'debt' })
+```
+
+## Functions
+
+| Function | What it does | Who may call | Key reverts |
+|---|---|---|---|
+| `setDepositor(address)` | Sets the only address that may deposit; once, never zero | Owner | `AlreadySet`, `InvalidAddress` |
+| `setBorrower(address)` | Sets the only address that may borrow; once, never zero | Owner | `AlreadySet`, `InvalidAddress` |
+| `setRateModel((uint16 optimal, uint32 base, uint32 slope1, uint32 slope2))` | Sets the rate curve at once, accruing the fee at the old rate first | Owner | `InvalidRateModel` |
+| `deposit`, `mint` | Deposit tokens for shares | The depositor only | `NotDepositor`, ERC-4626 `ExceededMax` errors |
+| `redeem`, `withdraw` | Take tokens out, up to what the vault holds free | A share owner, within `max*` | ERC-4626 `ExceededMax` errors |
+| `borrow(uint256 assets, address receiver)` | Lends tokens, within `MAX_UTILIZATION` | The borrower only | `NotBorrower`, `InsufficientLiquidity` |
+| `repay(uint256 assets)` | Repays up to `assets` of the debt; returns what it repaid | The borrower only | `NotBorrower` |
+| `writeOff(uint256 assets)` | Writes off debt the borrower could not return, a loss to lenders; returns the amount | The borrower only | `NotBorrower` |
+| `recall(uint256 assets)` | Adds a ticket at the end of the recall queue and returns its id | The depositor only | `NotDepositor` |
+| `reclaim(uint256[] ids, uint256 assets, address receiver)` | Takes recalled tokens and burns their shares | The depositor only | `NotDepositor`, `Unavailable`, `OutOfReach` |
+| `forfeit(uint256 id)` | Gives up what is left of the ticket next in turn | The depositor only | `NotDepositor`, `NotHead` |
+| `buyIn(uint256 id)` | Has the borrower buy in and return what the queue up to that ticket is owed | Anyone, once the ticket's notice has run out | `NotDue`, `Unavailable`, `BuyInFailed` |
+| `sync()` | Lowers the vault's count to its balance after a burn by the issuer | Anyone | None |
+| `renounceOwnership()` | Always reverts | Nobody | `OwnershipCannotBeRenounced` |
+
+### Reads
+
+`depositor`, `borrower`, `rateModel`, `feeShare`, `idle`, `locked`, `debt`, `scaledDebt`, `borrowIndex`, `lastAccrual`, `borrowable`, `utilization`, `borrowRate`, `supplyRate`, `tickets`, `head`, `requested`, `assigned`, `served`, `ticket(id)`, `claimable(id)`, `reachable(ids)`, the constants below, and the ERC-4626 views.
+
+## The fee
+
+The fee accrues on the debt in the token itself, through a borrow index with 27 decimals. The rate follows utilisation on a two-slope curve, in basis points a year:
+
+- `base` when nothing is lent.
+- `base + slope1` at `optimal` utilisation.
+- `base + slope1 + slope2` when everything is lent, which the vault reaches only once lenders take back what the borrower left idle.
+
+Nothing accrues while nothing is lent. The owner takes `feeShare` of the fee as shares minted at each accrual, and every conversion counts those pending shares, so no deposit or redemption takes part of them. `supplyRate` is the fee on the share lent, less the owner's share.
+
+## Recall and buy-in
+
+What lenders want back comes, in order, from the tokens the vault holds, from new lending and repayments, from the borrower within a notice, and last from a forced buy-in. Each recall is a ticket at the end of one queue. Every token that comes into the vault is held for the tickets in their order (`locked`, up to `assigned`) before any is free to borrow or withdraw (`idle`).
+
+Each ticket has a notice of one day. Once it runs out, anyone may call `buyIn(ticket)`, which has the borrower buy in and return all the vault does not yet hold of the queue up to that ticket's end, as far as the borrower owes it, or reverts with `BuyInFailed`. The recall is in raw units, so a dividend or split during the notice changes nothing owed. The [short positions](/contracts/short-positions) contract is the borrower and pays for the buy-in from its shorts' USDG.
+
+The depositor takes what came back with `reclaim` and gives up the rest of a ticket with `forfeit`. A lender leaves with `unlend` and then the accounts' `withdraw`, to its own address.
+
+## Parameters and limits
+
+| Name | Value |
+|---|---|
+| `MAX_UTILIZATION` | 9,000 basis points: the borrower takes at most 90% of the vault |
+| `MAX_FEE_SHARE` | 2,000 basis points: the owner takes at most 20% of the fee |
+| `MIN_OPTIMAL` and `MAX_OPTIMAL` | 100 and 9,900 basis points |
+| `MAX_RATE` | 100,000 basis points a year, 1,000%, for `base + slope1 + slope2` |
+| `NOTICE` | 1 day |
+
+`slope1` may not exceed `slope2`. A rate model outside these bounds reverts with `InvalidRateModel`. `feeShare` is fixed at deployment.
+
+## The issuer's controls
+
+While the token is paused, the vault is blocklisted, or its balance is below its count, every `max*` view returns zero and nothing enters or leaves. A burn from the vault falls on this vault's lenders in proportion to their shares and on no other asset's holders. `sync()` brings the count down to the balance. Until it runs, a position that lent through the vault borrows nothing, as from a blocklisted vault. Tokens sent to the vault directly change no share's value.
+
+## Events
+
+| Event | Emitted when |
+|---|---|
+| `DepositorSet(address indexed depositor)` and `BorrowerSet(address indexed borrower)` | The one-time setters run |
+| `RateModelSet(uint16 optimal, uint32 base, uint32 slope1, uint32 slope2)` | The rate model changes |
+| `FeeAccrued(uint256 fee, uint256 index, uint256 shares)` | The fee accrues; `shares` is the owner's cut |
+| `Borrow(address indexed receiver, uint256 assets)` | The borrower borrows |
+| `Repay(uint256 assets)` | The borrower repays |
+| `WriteOff(uint256 assets)` | The borrower writes off debt |
+| `Sync(uint256 idle)` | The count falls to the balance |
+| `Recall(uint256 indexed ticket, uint256 assets, uint64 dueAt)` | A ticket is added |
+| `Take(uint256 indexed ticket, uint256 assets)` | The depositor takes recalled tokens |
+| `Forfeit(uint256 indexed ticket, uint256 assets)` | The depositor gives up part of a ticket |
+| `BuyIn(uint256 indexed ticket, uint256 assets)` | A buy-in returns `assets` |
+
+## Errors
+
+| Error | Meaning |
+|---|---|
+| `NotDepositor(address)`, `NotBorrower(address)` | The caller is not the vault's depositor or borrower |
+| `AlreadySet(address current)`, `InvalidAddress()` | A one-time setter was called again, or with the zero address |
+| `InsufficientLiquidity(uint256 requested, uint256 available)` | A borrow would pass `MAX_UTILIZATION` |
+| `InvalidRateModel()`, `InvalidFeeShare()` | A parameter is outside its bounds |
+| `NotDue()` | The ticket's notice has not run out, the vault already holds the queue up to it, or the borrower owes nothing |
+| `NotHead(uint256 head)` | Only the ticket next in turn may be given up |
+| `BuyInFailed(uint256 outstanding)` | The borrower's buy-in left `outstanding` unreturned |
+| `Unavailable()` | The token is paused, the vault blocklisted or its tokens burnt |
+| `OutOfReach(uint256 assets, uint256 reachable)` | The depositor asked for more than the tickets reach |
+| `OwnershipCannotBeRenounced()` | `renounceOwnership` was called |
+
+## Next
+
+- [Short positions](/contracts/short-positions)
+- [Margin accounts](/contracts/margin-accounts)
+- [Short and baskets](/guides/short-and-baskets)
+- [Earn](/guides/earn)

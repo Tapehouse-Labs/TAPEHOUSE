@@ -1,0 +1,104 @@
+---
+title: "Glossary"
+description: "The terms Tapehouse's contracts, SDKs and documentation use, each defined as the repository uses it, with a link to the page that explains it."
+---
+
+Terms are listed alphabetically. Each definition follows the repository's own usage, and each link goes to the page that explains the term in full.
+
+## A
+
+**Authorization.** The margin accounts' `setAuthorization` lets an address borrow, withdraw and repay with collateral for an account, and deposit into it. A [mandate](#m) hands it less. See [margin accounts](/contracts/margin-accounts).
+
+## B
+
+**Backstop.** The gap backstop, `GapBackstop`: an ERC-4626 vault over USDG that sits behind the supply vault's lenders as junior capital. It earns the weekend premium and covers first what a position emptied by liquidation still owes, up to a declared exposure limit. Losses fall on the borrower's collateral first, then on the backstop, then on lenders. See [the gap backstop](/contracts/gap-backstop).
+
+**Band.** The price Tapehouse reads for a Stock Token: a centre, a half-width in basis points that states how large the doubt is, a lower and an upper edge, and a state (0 halted, 1 degraded, 2 closed, 3 open). The band program, written in Stylus, derives it from Chainlink's feed and RedStone's 24/7 feed, and never averages with a sleeping leg. See [the band](/concepts/band) and [the band contract](/contracts/band).
+
+**Basket.** `Basket`, a share of a fixed set of up to eight Stock Tokens, minted and redeemed in kind. The margin accounts margin a basket share as the Stock Tokens it redeems for. See [short positions and baskets](/guides/short-and-baskets) and [baskets](/contracts/baskets).
+
+**Bidder.** A participant in the [reopening auction](#r). The repository includes a reference bidder in `services/cmd/bidder`. See [running a bidder](/operate/bidder).
+
+## C
+
+**Capacity.** Two uses. For a borrower, the share of a portfolio's collateral value it may borrow: the backtest reports 80% for the engine against 75% at a 4x weekend cap and 50% for Regulation T's flat rule. For the gap cover, the USDG its writers have free to back a new cover (`capacity`); a purchase beyond it reverts with `NoCapacity`. See [the backtest](/resources/backtest) and [gap cover](/contracts/gap-cover).
+
+**Cross position.** A position the margin engine margins as one portfolio of several assets. An isolated position holds one Stock Token. See [margin accounts](/contracts/margin-accounts).
+
+## D
+
+**Dutch auction.** The liquidator's way of selling a position's collateral: a Stock Token's price starts at its band's high edge and falls a basis point a second while the market is open and a basis point every four seconds while it is closed, down to 10% below the low edge. See [liquidation](/concepts/liquidation).
+
+## E
+
+**Expected shortfall.** The mean loss in the worst 1% of the margin engine's 256 joint scenario draws. It is the first part of the requirement. See [portfolio margin](/concepts/portfolio-margin).
+
+## G
+
+**Gap backstop.** See [backstop](#b).
+
+**Gap cover.** `GapCover`: cover against a Stock Token's fall over a market closure, paid in USDG, written by depositors into an ERC-4626 vault. A purchase buys a layer, a notional with a deductible and a limit, for the coming closure, and a rise pays nothing. See [weekend gap cover](/concepts/weekend-gap-cover) and [the gap cover contract](/contracts/gap-cover).
+
+## H
+
+**Halt.** A trading halt on a Stock Token's underlying. The band returns all zeros while a halt holds. It comes from a halt signed by Tapehouse's halt signer and written with `writeHalt`, or from the issuer's oracle pause. See [the band](/concepts/band).
+
+## L
+
+**Liquidation price.** The price of one asset at which a position stops meeting its requirement once it owes a given amount more, found by the margin accounts' `liquidationPrice` through the engine. See [liquidation](/concepts/liquidation).
+
+**Liquidator.** `Liquidator`: sells the collateral of a position that falls short, in a Dutch auction that follows the market. Anyone may start, stop and buy. See [the liquidator](/contracts/liquidator).
+
+## M
+
+**Mandate.** A bounded authorization for an agent such as a bot or an AI agent. `setMandate(agent, expiresAt, maxDebt, maxLeverage)` lets the agent deposit, repay and lend, and borrow and withdraw only to the account itself, until the expiry and within the debt and leverage limits. A breach reverts with `MandateDebtLimit`, `MandateLeverageLimit`, `MandateReceiver` or `MandateExpired`. See [mandates](/agents/mandates).
+
+**Margin accounts.** `MarginAccounts`: hold the positions, borrow USDG from the supply vault and take the requirement from the margin engine. See [margin accounts](/contracts/margin-accounts).
+
+**Margin engine.** The Stylus program that margins a portfolio of Stock Tokens as one position and returns one requirement. See [the margin engine](/contracts/margin-engine).
+
+## P
+
+**Portfolio margin.** Margining all of an account's positions together, so that diversification between them lowers the requirement, within a cap. See [portfolio margin](/concepts/portfolio-margin).
+
+## R
+
+**Ramp.** The rise of the requirement in a straight line from the open value to the closed one, from three hours before a weekend or holiday close to the end of its four-hour post-market. See [portfolio margin](/concepts/portfolio-margin).
+
+**Recall.** A lender's call on Stock Tokens that a position lent through a stock lending vault. What the vault holds free comes back at once and the rest is queued as a ticket, and a position that falls short has its lent tokens recalled so they can be sold. See [stock lending](/contracts/stock-lending).
+
+**Regime.** The state in which the engine's `currentRequirement` computes: 0 unknown, 1 closed, 2 open, 3 closing. See [portfolio margin](/concepts/portfolio-margin).
+
+**Reopening auction.** `ReopeningAuction`: sells, at NYSE's regular open, the collateral of positions that fell short over a closure, in one sealed-bid, uniform-price batch per Stock Token, in place of a race of liquidation bots. See [the auction guide](/guides/auction) and [the reopening auction contract](/contracts/reopening-auction).
+
+**Requirement.** The margin a portfolio needs, in USD with 18 decimals: the largest of the expected shortfall, the stress loss and the single-position floor, plus a liquidity add-on. `currentRequirement` applies it to the session. See [portfolio margin](/concepts/portfolio-margin).
+
+## S
+
+**Scenario.** One of the price paths the margin engine generates for a portfolio from the assets' volatilities, correlations and weekend gaps. The engine walks a lattice of 256 joint draws and adds weekend-gap scenarios across a closure. See [the margin engine](/contracts/margin-engine).
+
+**Seal.** The record of the band that `seal()` writes on a band feed before the session reopens. Anyone may call it while the session is closed and its reopen is at most ten minutes away; the reopening auction takes its floor from the sealed band. See [the band](/concepts/band) and [the session](/concepts/session).
+
+**Session.** The 24/5 trading session the band reads, from 20:00 ET on the evening before each trading day to 20:00 ET on it, closed over weekends and NYSE holidays. The band derives it from RedStone's signed New York market status. `session()` returns it. See [the session](/concepts/session).
+
+**Short position.** `ShortPositions`: lets an address short a Stock Token on its own margin by borrowing the token from the accounts' lending vault, selling it through a Uniswap v3 pool and keeping the USDG. See [short positions and baskets](/guides/short-and-baskets) and [short positions](/contracts/short-positions).
+
+**Stock lending.** `StockLendingVault`: one ERC-4626 vault for each Stock Token that pays a holder's tokens a fee while they still back the holder's loan. See [stock lending](/contracts/stock-lending) and [earning](/guides/earn).
+
+**Stock Token.** Robinhood's tokenized share on Robinhood Chain. Its price is the share's price times the token's ERC-8056 multiplier, so a dividend or a split changes the multiplier while the balance stays. See [the band](/concepts/band).
+
+**Supply vault.** `SupplyVault`: holds the USDG that margin accounts borrow. Lenders deposit USDG and receive `thUSDG` shares, in an ERC-4626 vault, and earn the interest the borrower pays. See [the supply vault](/contracts/supply-vault).
+
+## T
+
+**Tapehouse.** Portfolio margin for Stock Tokens on Robinhood Chain. It is not a broker. See [the introduction](/).
+
+## U
+
+**USDG.** Paxos' dollar stablecoin on Robinhood Chain, the only asset Tapehouse lends and borrows. Test USDG on the testnet comes from Paxos' faucet. See [borrowing](/guides/borrow).
+
+## W
+
+**Weekend gap.** A move from the last close before the market shuts for two days or more to the next open, in the engine's units centi-basis-points. Each asset has one, with a floor. See [weekend gap cover](/concepts/weekend-gap-cover).
+
+**Wrapped Stock Token.** `StockTokenWrapper`: an ERC-20 over a Stock Token, one to one, that adds the `oraclePaused` view the band reads. The testnet's collateral is `wTSLA` and `wAMZN`, which wrap Robinhood's testnet TSLA and AMZN. See [networks](/networks).

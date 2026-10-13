@@ -1,0 +1,210 @@
+---
+title: "Margin accounts"
+description: "The contract where you hold collateral and borrow USDG against a portfolio of Stock Tokens, with every external function, its events, roles and SDK calls."
+---
+
+`MarginAccounts` is where a borrower holds collateral and borrows USDG from the [supply vault](/contracts/supply-vault), which has these accounts as its one borrower. Each address has a cross position and, for any asset it chooses, an isolated position. A position holds Stock Tokens, USDG and WETH, owns a share of the vault's debt, and is margined by the [margin engine](/contracts/margin-engine).
+
+## Address
+
+Robinhood Chain testnet, chain 46630, from `deployments/46630.json`, under `tapehouse.MarginAccounts`.
+
+| Name | Address |
+|---|---|
+| Margin accounts | `0xcE8C3CB4E1A8b944BC607353055cE5a3D07eC101` |
+
+Testnet, not audited.
+
+## Read a position
+
+```ts
+import { readFileSync } from 'node:fs'
+import { createPublicClient, http } from 'viem'
+import { accounts, CROSS, parseDeployments } from '@tapehouse/sdk'
+
+const deployments = parseDeployments(JSON.parse(readFileSync('deployments/46630.json', 'utf8')))
+const client = createPublicClient({ transport: http('https://rpc.testnet.chain.robinhood.com') })
+const account = '0xB986a345655097302cac8b4af6C948FfaF7f55FC'
+
+const { equity, requirement, missing, regime } = await accounts.health(client, deployments, account, CROSS)
+const price = await accounts.liquidationPrice(client, deployments, account, CROSS, 'TSLA', 50_000_000n)
+```
+
+`CROSS` is `bytes32(0)`. An isolated position is named by its asset's symbol as `bytes32`, which `toBytes32('TSLA')` produces. Equity and requirement are USD with 18 decimals. The liquidation price is USD with 8 decimals.
+
+## Positions and checks
+
+- An asset sits in one position of an account at a time, because a split holding would pay a smaller liquidity add-on than the whole. An isolated position is margined alone, so it gets no diversification and its loss never reaches the cross position.
+- Stock Tokens are held in raw units and valued at the low edge of their band, which already carries the token's multiplier. A halted band counts for nothing. WETH counts for 80% of its Chainlink price, and for nothing when that price is over a day old. USDG counts at par.
+- Borrowing, and withdrawing from a position in debt, need the position's equity to meet the engine's `currentRequirement` over its Stock Tokens at those prices. A position without Stock Tokens needs only non-negative equity. A position holding USDG does not borrow: it repays with `repayWithCollateral`.
+- Deposits and repayments stay open whatever the band, the session and the guardian. Borrowing and withdrawing from a position in debt close for a position holding an asset whose band is halted, whose Stock Token has a multiplier change pending or whose liquidity the engine cannot read; for any position while the L2 sequencer is not settled; and for a position holding Stock Tokens while the band cannot tell the session.
+- After a band was last seen halted or with a multiplier change pending, borrowing and withdrawing against it stay closed for `RECOVERY`, 30 minutes, and revert with `AssetRecovering(symbol, until)`. `observe(symbol)` records the sighting.
+- From the regular open on the last trading day before a weekend or holiday close until the reopening, a loan or withdrawal must leave gross exposure to Stock Tokens at most `weekendLeverage` over equity.
+- While the 24/5 session is closed, each position's debt carries a premium of `premiumRate` basis points a year on top of the vault's interest. A repayment pays the debt first and the premium after.
+
+## Functions
+
+`position` is `CROSS` or an asset's symbol. `account` is the account's owner. Where the table says "Account or authorized", the caller is the account, an address it passed to `setAuthorization`, or an agent with an unexpired mandate.
+
+### Deposit and withdraw
+
+| Function | Who may call | What it does | Key reverts |
+|---|---|---|---|
+| `deposit(bytes32 position, address token, uint256 amount, address account)` | Anyone for WETH; account or authorized for USDG, Stock Tokens and basket shares | Moves `amount` of `token` from the caller into the position. Stock Tokens, held or through a basket, count against their caps. | `ZeroAmount`, `UnknownPosition`, `UnsupportedToken`, `AssetInOtherPosition`, `AssetCapExceeded`, `AssetWrittenOff`, `Blocked`, `Unauthorized` |
+| `depositWithPermit(bytes32 position, address token, uint256 amount, address account, uint256 deadline, uint8 v, bytes32 r, bytes32 s)` | As `deposit` | Deposits with an EIP-2612 permit from the caller for the token. A permit already used does not stop the deposit if the allowance stands. | As `deposit` |
+| `withdraw(bytes32 position, address token, uint256 amount, address account, address receiver)` | Account or authorized | Sends collateral to `receiver`. A position in debt must then pass its checks. | `InsufficientCollateral`, `InsufficientMargin`, `WeekendLeverageExceeded`, `BorrowingIsPaused`, `AssetRecovering`, `AssetFrozen`, `Blocked`, `Unauthorized`, `MandateExpired`, `MandateReceiver`, `MandateDebtLimit`, `MandateLeverageLimit` |
+| `unwrap(address account, address basket, uint256 shares)` | The account, an authorized address or the liquidator; anyone once the position falls short | Redeems basket shares in the cross position for the Stock Tokens they hold, which the position then holds. Returns the amounts. | `UnsupportedToken`, `Unauthorized`, `AssetWrittenOff` |
+
+### Borrow and repay
+
+| Function | Who may call | What it does | Key reverts |
+|---|---|---|---|
+| `borrow(bytes32 position, uint256 assets, address account, address receiver)` | Account or authorized | Borrows USDG from the vault to `receiver`. The position must hold no USDG and must then pass its checks. | `ZeroAmount`, `BorrowingIsPaused`, `BorrowingAgainstUsdg`, `DebtCapExceeded`, `WeekendDebtCapExceeded`, `InsufficientMargin`, `WeekendLeverageExceeded`, `SessionUnknown`, `LiquidityUnknown`, `SequencerNotSettled`, `AssetHalted`, `CorporateActionPending`, `AssetRecovering`, `AssetFrozen`, `Unauthorized`, `Mandate*` |
+| `repay(bytes32 position, uint256 assets, address account)` | Anyone | Repays up to `assets` of the position's debt with the caller's USDG, then its premium with what is left. Returns what it paid. | USDG's own `ContractPaused()` or `AddressFrozen()` |
+| `repayWithCollateral(bytes32 position, uint256 assets, address account)` | Account or authorized | Repays with the USDG the position holds. It needs no check and stays open while an asset is halted. Returns what it paid. | `Unauthorized` |
+
+### Lending the position's Stock Tokens
+
+| Function | Who may call | What it does | Key reverts |
+|---|---|---|---|
+| `lend(bytes32 position, address token, uint256 amount, address account)` | Account or authorized | Lends the position's Stock Tokens through the asset's stock lending vault for its shares. A position in debt must then pass its checks. | `NoLending`, `UnsupportedToken`, `InsufficientCollateral`, `Blocked`, `BorrowingIsPaused` |
+| `unlend(bytes32 position, address token, uint256 amount, address account)` | Account or authorized | Takes lent tokens back into the holding, as far as the vault can return them. | `OutOfReach(symbol, amount, reachable)` |
+| `recall(bytes32 position, address token, uint256 amount, address account)` | Account or authorized, or the liquidator | Recalls lent tokens. What the vault holds free comes back at once and the rest queues as a ticket. | `NoLending`, `ZeroAmount`, `InsufficientCollateral`, `RecallTooSmall`, `TooManyRecalls` |
+| `settle(address account, bytes32 position, address token)` | Anyone | Takes into the holding what the vault holds for the position's next recall. | `NoLending`, `NothingToSettle` |
+
+### Authorization and mandates
+
+| Function | Who may call | What it does | Key reverts |
+|---|---|---|---|
+| `setAuthorization(address authorized, bool allowed)` | Anyone, for its own account | Lets `authorized` borrow, withdraw, repay with collateral and deposit for the caller. Emits `AuthorizationSet`. | None |
+| `setMandate(address agent, uint64 expiresAt, uint128 maxDebt, uint32 maxLeverage)` | Anyone, for its own account | Gives `agent` a bounded authority until `expiresAt`: it may deposit, repay and lend, and borrow and withdraw only to the account itself while the position's debt is at most `maxDebt` USDG and its leverage at most `maxLeverage`, in basis points of at least 10,000. A zero `expiresAt` ends the mandate. | `InvalidMandate` |
+
+An address authorized in full is not bound by a mandate. A call outside a mandate reverts with `MandateDebtLimit`, `MandateLeverageLimit` or `MandateReceiver`, and after `expiresAt` with `MandateExpired`.
+
+### Permissionless upkeep
+
+| Function | What it does |
+|---|---|
+| `observe(bytes32 symbol)` | Records the time when the asset's band is halted or has a multiplier change pending. Reverts with `UnknownAsset`. |
+| `accruePremium()` | Accrues the premium up to now and records the closure the band's session shows. Returns the premium index. |
+| `sync(bytes32 symbol)` | Brings every position's holding of `symbol` down in proportion when the issuer has burned from the accounts, and syncs the asset's lending vault. Reverts with `UnknownAsset`. |
+| `clear(address account, bytes32 position, bytes32 symbol)` | Clears a holding a burn left worth less than a raw unit. Reverts with `HoldingNotEmpty`. |
+
+### Liquidator only
+
+| Function | What it does |
+|---|---|
+| `seize(bytes32 position, address token, uint256 amount, address account, address receiver)` | Takes collateral from a position, whatever its health, from its holding first and then straight from the lending vault. |
+| `writeOff(address account, bytes32 position)` | Writes off what an empty position owes. Lenders bear it and the premium is forgiven. Returns what it wrote off. Reverts with `PositionNotEmpty`. |
+| `collectFee(uint256 amount)` | Adds the liquidator's fees to the reserve. |
+
+Everything here reverts with `NotLiquidator(caller)` for any other caller.
+
+### Owner, guardian and backstop
+
+| Function | Who may call | What it does | Key reverts |
+|---|---|---|---|
+| `setLiquidator(address)` | Owner, once | Sets the one address that seizes and writes off. | `LiquidatorAlreadySet`, `InvalidLiquidator` |
+| `setBackstop(address)` | Owner, once | Sets the address that claims the premium set aside. | `BackstopAlreadySet`, `InvalidBackstop` |
+| `setLending(bytes32 symbol, address vault)` | Owner, once per asset | Sets the stock lending vault for an asset. | `UnknownAsset`, `LendingAlreadySet`, `InvalidLending` |
+| `addBasket(address basket)` | Owner | Adds a basket whose shares the cross position takes, up to `MAX_BASKETS`, 8. | `BasketAlreadyAdded`, `TooManyBaskets`, `InvalidBasket` |
+| `setPremiumRate(uint32 rate)` | Owner | Sets the premium rate, at most 10,000 basis points a year, from now on. Only while the band can tell the session. | `InvalidPremium`, `SessionUnknown` |
+| `withdrawReserve(address receiver, uint256 amount)` | Owner | Sends part of the fee reserve to `receiver`. | `InvalidReceiver`, `InsufficientReserve` |
+| `setGuardian(address)` | Owner | Sets the address that may pause new borrowing. Zero leaves none. | None |
+| `setBorrowingPaused(bool paused)` | Guardian | Pauses or resumes new borrowing and withdrawals from positions in debt. Deposits, repayments, seizures and write-offs stay open. | `NotGuardian` |
+| `claimPremium()` | Backstop | Sends the backstop the premium set aside and returns the amount. | `NotBackstop` |
+| `transferOwnership(address)`, `acceptOwnership()` | Owner; pending owner for `acceptOwnership` | `Ownable2Step` behaviour. | `OwnableUnauthorizedAccount` |
+| `renounceOwnership()` | Nobody | Always reverts. | `OwnershipCannotBeRenounced` |
+
+### Views
+
+| Function | Returns |
+|---|---|
+| `health(address account, bytes32 position)` | `int256 equity, uint256 requirement, uint8 missing, uint8 regime`: equity net of debt, premium and the recall haircut, and the engine's requirement, in USD with 18 decimals |
+| `liquidationPrice(address account, bytes32 position, bytes32 symbol, uint256 borrowing)` | `uint256`, USD with 8 decimals: the price of one asset at or above which the position meets its requirement once it owes `borrowing` more USDG, found to within a 2^14th of the current price. Zero where no price leaves it short. |
+| `leverage(address account, bytes32 position)` | `uint256`, gross exposure over equity in basis points; the largest value for a position without equity |
+| `debt(address account, bytes32 position)`, `premium(...)`, `debtShares(...)` | What a full repayment takes, the premium owed in USDG, and the borrow shares |
+| `collateral(address account, bytes32 position, address token)` | What the position holds of USDG, WETH, a Stock Token or basket shares |
+| `mandateStatus(address account, address agent, bytes32 position)` | `uint8 reason, uint256 debtRoom`; reason is 0 Ok, 1 None, 2 Expired, 3 DebtLimit, 4 LeverageLimit |
+| `mandates(address account, address agent)` | `uint64 expiresAt, uint128 maxDebt, uint32 maxLeverage` |
+| `isAuthorized(address account, address authorized)` | `bool` |
+| `stocks()` | `bytes32[] symbols, address[] tokens`, in the engine's order |
+| `holding(bytes32 symbol)` | `uint256 units, uint256 scale, uint256 cap` |
+| `lent(...)`, `sellable(...)`, `claim(...)`, `recalls(...)`, `lending(bytes32 symbol)` | What a position lent, what the liquidator may take now, what it recalled, its open tickets, and the lending vault of an asset |
+| `inBaskets(address account, bytes32 position)`, `baskets()` | What a position holds through its baskets, and the baskets taken |
+| `unusableAt(bytes32 symbol)` | When `observe` last saw the asset unusable |
+| `closure()`, `closureStart()`, `premiumRate()`, `premiumIndex()`, `totalDebtShares()` | The premium's closure and accounting |
+| `debtCap()`, `weekendDebtCap()`, `weekendLeverage()`, `reserveShare()` | Constants fixed at deployment |
+| `reserve()`, `backstopPremium()`, `borrowingPaused()`, `guardian()`, `liquidator()`, `backstop()`, `owner()`, `pendingOwner()` | State and roles |
+| `band()`, `engine()`, `vault()`, `usdg()`, `weth()`, `ethUsd()` | The immutables the accounts were built with |
+| `RECOVERY()`, `RECALL_HAIRCUT()`, `MAX_RECALLS()`, `MIN_RECALL()`, `MAX_BASKETS()`, `WETH_COLLATERAL_BPS()`, `MAX_FEED_AGE()`, `MAX_PREMIUM_RATE()`, `LIQUIDATION_PRICE_STEPS()` | Constants |
+
+## Events
+
+| Event | Emitted when |
+|---|---|
+| `Deposit(caller, account, position, token, amount)` | A deposit. |
+| `Withdraw(caller, account, position, token, amount, receiver)` | A withdrawal. |
+| `Borrow(caller, account, position, assets, shares, receiver)` | A loan. |
+| `Repay(caller, account, position, assets, shares)` | A repayment. |
+| `PremiumPaid(account, position, premium, toReserve)`, `PremiumAccrued(index)`, `ClosureSet(closesMs, reopensMs)`, `PremiumRateSet(rate)`, `PremiumClaimed(backstop, amount)` | The weekend premium. |
+| `Lend`, `Unlend`, `Recall`, `LendingSet` | Lending a position's Stock Tokens. |
+| `Seize`, `WriteOff`, `FeeCollected`, `ReserveWithdrawn`, `HoldingCleared` | Liquidation and the reserve. |
+| `AuthorizationSet`, `MandateSet` | Who may act for an account. |
+| `AssetUnusable(symbol, at)`, `AssetWrittenDown(symbol, counted, balance)` | A band recovery begins, or a burn lowers every holding of an asset. |
+| `LiquidatorSet`, `BackstopSet`, `GuardianSet`, `BorrowingPausedSet`, `BasketAdded`, `Unwrap` | Roles and baskets. |
+| `OwnershipTransferStarted`, `OwnershipTransferred` | Ownership moves in two steps. |
+
+## Roles and admin powers
+
+- The owner sets the liquidator, backstop and each lending vault once, adds baskets, sets the premium rate (at most 100% a year), withdraws the fee reserve and names the guardian. It cannot move a position's collateral, and the band, engine, vault, caps and reserve share are fixed at deployment.
+- The guardian can pause new borrowing and withdrawals from positions in debt. Deposits, repayments, seizures and write-offs stay open.
+- The liquidator is the only address that seizes collateral and writes off debt.
+- The backstop claims the premium set aside for it. Of each premium paid, `reserveShare` goes to the fee reserve and the rest is set aside for the backstop.
+- USDG's and Stock Tokens' issuer can pause tokens, blocklist addresses and burn balances. A paused Stock Token, or one whose issuer has blocklisted the accounts, backs no new risk (`AssetFrozen`). If the issuer burns from the accounts, every holding of the asset falls in proportion once `sync` runs.
+
+## Invariants
+
+- Each position's debt is a share of the vault's debt, kept as borrow shares with Morpho Blue's virtual offsets. Only the accounts repay the vault.
+- The accounts hold each asset up to a cap fixed at deployment, and the positions' total debt is capped by `debtCap`, with `weekendDebtCap` bounding a new loan before and across a closure.
+- Collateral USDG is never lent.
+- A write-off retires the position's borrow shares and the vault writes the same amount off, so lenders bear it and no other position's debt moves.
+
+## SDK
+
+TypeScript, module `accounts` in `@tapehouse/sdk`. Transactions return viem contract calls for `simulateContract` and `writeContract`.
+
+| Contract function | SDK call |
+|---|---|
+| `setAuthorization` | `accounts.setAuthorization(deployments, authorized, allowed)` |
+| `setMandate` | `accounts.setMandate(deployments, { agent, expiresAt, maxDebt, maxLeverage })` |
+| `deposit` | `accounts.deposit(deployments, { position, token, amount, account })` |
+| `depositWithPermit` | `accounts.depositWithPermit(deployments, { position, token, amount, account, deadline, signature })` |
+| WETH for deposit | `accounts.wrap(deployments, { account, value })` |
+| `withdraw` | `accounts.withdraw(deployments, { position, token, amount, account, receiver })` |
+| `borrow` | `accounts.borrow(deployments, { position, assets, account, receiver })` |
+| `repay` | `accounts.repay(deployments, { position, assets, account })` |
+| `unwrap` | `accounts.unwrap(deployments, { account, basket, shares })`, with the basket's registry name |
+| `lend`, `unlend`, `recall` | `accounts.lend`, `accounts.unlend`, `accounts.recall`, each with `{ position, token, amount, account }` |
+| `settle` | `accounts.settle(deployments, { account, position, token })` |
+| `observe` | `accounts.observe(deployments, { asset })` |
+| `health` | `accounts.health(client, deployments, account, position)` |
+| `liquidationPrice` | `accounts.liquidationPrice(client, deployments, account, position, asset, borrowing)` |
+| `leverage`, `collateral`, `isAuthorized` | `accounts.leverage`, `accounts.collateral`, `accounts.isAuthorized` |
+| `mandates`, `mandateStatus` | `accounts.mandate(client, deployments, { account, agent })`, `accounts.mandateStatus(client, deployments, { account, agent, position })` |
+| `debt` and `premium` | `accounts.repayment(client, deployments, account, position)`, read at one block |
+| `stocks` | `accounts.stocks(client, deployments)`, and `accounts.positions` for every position an account may hold |
+| `lent`, `sellable`, `claim`, `recalls` | `accounts.lending(client, deployments, account, position, token)` |
+| `holding` | `accounts.holding(client, deployments, asset, token)` |
+| `debtCap`, `weekendDebtCap`, `weekendLeverage`, `borrowingPaused`, `premiumRate` | `accounts.limits(client, deployments)` |
+| `unusableAt`, `RECOVERY` | `accounts.recovery(client, deployments, asset)` |
+| `inBaskets` | `accounts.inBaskets(client, deployments, account, position)` |
+
+`repayWithCollateral`, `accruePremium`, `sync`, `clear` and the owner, guardian and liquidator functions have no wrapper: use `marginAccountsAbi`, which the package exports.
+
+## Next
+
+- [Open an account](/guides/open-an-account)
+- [Borrow](/guides/borrow)
+- [Liquidator](/contracts/liquidator)
+- [Margin engine](/contracts/margin-engine)

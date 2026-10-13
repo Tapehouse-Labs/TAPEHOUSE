@@ -1,0 +1,91 @@
+---
+title: "Run the sponsor"
+description: "Run the sponsor service that signs ERC-4337 paymaster data, with its environment variables, limits, keys and the dev-node setup."
+---
+
+The sponsor service lets a new user act without holding ether. It serves ERC-7677's `pm_getPaymasterStubData` and `pm_getPaymasterData` over JSON-RPC, so viem's `createPaymasterClient` is its client, and it signs the operations that `SponsorPaymaster` then pays for. The paymaster is OpenZeppelin's `PaymasterSigner`, which accepts only operations this service signed. See [Sponsor paymaster](/contracts/sponsor-paymaster) for the contract.
+
+## Run it
+
+The service starts only as the paymaster's signer, on the paymaster's EntryPoint, and refuses otherwise. You need the registry, an RPC URL and the signer's keystore.
+
+```bash
+export ROBINHOOD_TESTNET_RPC_URL=https://rpc.testnet.chain.robinhood.com
+export TAPEHOUSE_SPONSOR_KEYSTORE=~/.foundry/keystores/tapehouse-sponsor
+export TAPEHOUSE_SPONSOR_PASSWORD_FILE=~/.tapehouse/sponsor.password
+make run-sponsor CHAIN=46630
+```
+
+`CHAIN` is 4663, 46630 or 412346, and `REGISTRY=<file>` overrides the registry. The service answers JSON-RPC `POST` requests, and `OPTIONS` for CORS preflight.
+
+## Environment variables
+
+| Variable | Meaning | Default |
+| --- | --- | --- |
+| `TAPEHOUSE_DEPLOYMENTS` | Path of the registry file. Required. | none |
+| `TAPEHOUSE_RPC_URL` | RPC of the registry's chain. Required. | none |
+| `TAPEHOUSE_SPONSOR_ADDR` | Address to listen on. | `127.0.0.1:4338` |
+| `TAPEHOUSE_SPONSOR_KEYSTORE`, `TAPEHOUSE_SPONSOR_PASSWORD_FILE` | The signer's keystore and the file that holds its password. | none |
+| `TAPEHOUSE_SPONSOR_KEY` | A hex key, for a dev node only. | none |
+| `TAPEHOUSE_SPONSOR_DAILY` | Signatures a day for each client. | 30 |
+| `TAPEHOUSE_TRUSTED_PROXIES` | CIDR networks whose forwarding headers give the client's address, separated by commas. | none |
+
+## What it signs
+
+The service signs an operation of an account that the registry's factory makes, or whose code is the factory's proxy and whose ERC-1967 implementation is the factory's. The operation must either only create the account, or consist entirely of calls like these:
+
+- a user's call to a Tapehouse contract: the margin accounts' deposits, withdrawals, loans, repayments, authorizations, lending, recalls and settlements, the supply vault, the stock lending vaults, the gap backstop, the gap cover, the shorts and the baskets;
+- an approval that lets one of those contracts spend a token or a basket's shares of the registry;
+- a permit or a transfer of a registry token to the account itself;
+- a transfer to the account's owner of a token the account claimed from the backstop's gains earlier in the same operation, once per claim.
+
+No call may send value, and the account must still have free operations left: `FREE_OPERATIONS`, three per account on chain. No keeper's, owner's or bidder's call is sponsored. A refusal says why, as a JSON-RPC error.
+
+Signing the whole operation matters because a paymaster that checks only the operation would pay whoever submits it what it claims to cost. The signature covers the gas limits, fees and pre-verification gas, and a validity window of ten minutes. An operation changed after signing, or signed by anyone else, fails with `AA34 signature error`; one outside its window fails with `AA32`.
+
+## Limits
+
+| Limit | Value |
+| --- | --- |
+| Paymaster verification gas | 75,000 |
+| Paymaster post-operation gas | 0 |
+| Account verification gas | at most 1,000,000 |
+| Call gas, operation that only creates the account | at most 50,000 |
+| Call gas, operation that also calls | at most 2,000,000 |
+| Priority fee | none |
+| Fee cap | at most three times the latest base fee |
+| Pre-verification gas | at most 130% of the L1 gas Arbitrum's NodeInterface estimates, plus 60,000 and 16 for each byte of calldata |
+| Signatures a day for each client | 30 (`TAPEHOUSE_SPONSOR_DAILY`) |
+| Signatures a day for all clients | 5,000 |
+| Estimates | one a second, bursts of 20 |
+
+A client is an IPv4 address or an IPv6 /64, taken from the connection or, through `TAPEHOUSE_TRUSTED_PROXIES`, from the forwarding header. The call gas for a call is 160% of the calls' L2 gas, split from the L1 gas by Arbitrum's NodeInterface, plus 20,000 for an existing account.
+
+The limits bound what each account costs, not each person. Addresses are free, so a determined user can spend the paymaster's deposit at what operations really cost, within the daily budgets. The deposit in the EntryPoint is the overall budget, and the paymaster's owner can pause sponsorship and rotate the signer with `setSigner`.
+
+## Run it on a dev node
+
+The dev node has no EntryPoint. Deploy one with its factory, run a bundler, then the service:
+
+```bash
+make deploy-contracts-devnode
+make bundler
+make sponsor
+make test-sponsorship-devnode
+```
+
+`make bundler` runs Alto in Docker on the deployed EntryPoint, and `make sponsor` builds and starts the service on `http://127.0.0.1:4338` with a dev key and `TAPEHOUSE_SPONSOR_DAILY=1000`. `make sponsor-stop` and `make bundler-stop` stop them. Alto's safe mode fails to decode the EntryPoint's `DelegateAndRevert` on this node, so the dev-node bundler runs with it off.
+
+## Deploy on Railway
+
+`sponsor` deploys from `services/Dockerfile` with `SERVICE=sponsor`. Set `TAPEHOUSE_SPONSOR_ADDR=[::]:4338`, `TAPEHOUSE_SPONSOR_KEYSTORE_B64` and `TAPEHOUSE_SPONSOR_PASSWORD_B64`; the image turns them into the keystore file and `TAPEHOUSE_SPONSOR_PASSWORD_FILE`. It keeps no state, needs no volume and has no health check, because it answers only `POST` and `OPTIONS`. Set `TAPEHOUSE_TRUSTED_PROXIES` to your platform's proxy network so that the daily limit counts real clients.
+
+## Security
+
+The signer's key can authorise spending of the paymaster's deposit within the limits above, so keep it in a keystore, read its password only from a file, and never use `TAPEHOUSE_SPONSOR_KEY` outside a dev node. If the key leaks, call `setSigner` from the paymaster's owner and restart the service with the new key.
+
+## Next
+
+- [Sponsor paymaster](/contracts/sponsor-paymaster)
+- [Open an account](/guides/open-an-account)
+- [Run the indexer](/operate/indexer)

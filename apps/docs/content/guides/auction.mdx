@@ -1,0 +1,159 @@
+---
+title: "Bid in the reopening auction"
+description: "Commit, reveal and claim a sealed bid for the collateral of positions that fell short over a weekend, or run the reference bidder that does it for you."
+---
+
+After a weekend or holiday closure, the Stock Tokens of positions that fell short are sold at NYSE's regular open in one sealed-bid, uniform-price batch per token, instead of a race of liquidation bots. In this guide you place a bid with the SDK, and then run the reference bidder that bids for you. In the app, `/auction` does the same with a wallet.
+
+## Before you start
+
+- USDG in your wallet. A bid needs a deposit of at least 100 USDG, the bond.
+- The `client`, `deployments` and `wallet` of [open an account](/guides/open-an-account). The bidder is an ordinary wallet address, never a smart account.
+- A way to keep a small file across restarts. A bid's quantity, price and salt must survive until you reveal it.
+
+## How a round runs
+
+A round is keyed by a Stock Token and the regular open, in milliseconds. It follows the band's session:
+
+| Phase | When | What happens |
+|---|---|---|
+| Commit | From the 24/5 session's reopen before the regular open, until half an hour before it | Positions are enrolled and hidden bids committed |
+| Reveal | The half hour before the regular open | Bids are revealed |
+| Clear | The first hour of regular trading | Anyone submits the clearing price |
+
+The clearing price is the highest bid price at which the bids at or above it take the whole supply. When all of them together take less, it is the lowest bid price, and with no bid it is the floor. Every bid above it fills, bids at it share what is left pro rata, and every winner pays that one price. The floor is 10% below the low edge of the band sealed at the reopen, and no bid below it is taken. The gap backstop buys what the bids leave, at the same price and at most the band's low edge.
+
+## 1. Find the round
+
+```ts
+import { auction } from '@tapehouse/sdk'
+
+const { openMs, revealing } = await auction.phase(client, deployments)
+const { bond, minBid, revealMs, clearMs } = await auction.constants(client, deployments)
+const round = await auction.round(client, deployments, { asset: 'TSLA', openMs })
+```
+
+`phase` returns the regular open that bids are being committed or revealed for, and whether they are being revealed. Both are zero outside a round. `round` returns the round's floor, supply, price and whether it is cleared, with its `lots` and `bids`. Before anything opens a round, `auction.previewFloor(client, deployments, { asset, openMs })` gives the floor it will open with.
+
+In Go, `client.ReopeningAuction()` has `Phase`, `Constants`, `Round`, `Lots` and `Bids`.
+
+## 2. Commit
+
+The commitment is a hash of your bid and your address, so nobody else can reveal it. `quantity` has 18 decimals and `price` is USD with 8 decimals per token. The deposit may exceed what the bid escrows, which hides its size.
+
+```ts
+import { erc20Abi, toHex } from 'viem'
+
+const quantity = 5n * 10n ** 18n
+const price = 250n * 10n ** 8n
+const salt = toHex(crypto.getRandomValues(new Uint8Array(32)))
+const deposit = 2_000n * 10n ** 6n
+
+// Save { asset, openMs, quantity, price, salt } to disk before you send anything.
+
+const commitment = auction.commitment({ bidder: wallet.account.address, asset: 'TSLA', openMs, quantity, price, salt })
+
+await wallet.writeContract({
+  address: deployments.tokens.USDG,
+  abi: erc20Abi,
+  functionName: 'approve',
+  args: [deployments.tapehouse.ReopeningAuction, deposit],
+})
+await wallet.writeContract(auction.commit(deployments, { asset: 'TSLA', commitment, deposit }))
+```
+
+<Tabs group="sdk">
+<Tab title="Go">
+```go
+commitment, err := sdk.Commitment(bidder, "TSLA", openMs, quantity, price, salt)
+tx, err := client.ReopeningAuction().Commit("TSLA", commitment, deposit)
+```
+</Tab>
+</Tabs>
+
+Check three things before you commit, since a reveal the auction refuses leaves the commitment unrevealed and it forfeits: the price is at or above the floor, the bid is worth at least the minimum bid, 100 USDG, at the floor, and the escrow, price times quantity, is within the deposit.
+
+## 3. Reveal
+
+In the half hour before the regular open, reveal with the same values. The auction keeps from the deposit what the bid is worth at its price and returns the rest.
+
+```ts
+await wallet.writeContract(auction.reveal(deployments, { asset: 'TSLA', openMs, quantity, price, salt }))
+```
+
+A deposit you do not reveal loses a tenth of itself, at least the bond, to the accounts' reserve. A round keeps 64 bids. Past that, a higher bid takes the lowest one's place, whose escrow goes back, and a bid that finds no place gets its whole deposit back with an `Outbid` event, which is no error.
+
+## 4. Clear and claim
+
+In the first hour of regular trading anyone submits the clearing price, and the contract checks it in one pass over the bids.
+
+```ts
+const { supply, floor, bids } = await auction.round(client, deployments, { asset: 'TSLA', openMs })
+const clearing = auction.clearingPrice(bids, supply, floor)
+
+if (clearing !== undefined) {
+  await wallet.writeContract(auction.clear(deployments, { asset: 'TSLA', openMs, price: clearing }))
+}
+```
+
+Then each bidder claims its tokens and the rest of its escrow. `index` is the position of your bid in `round.bids`.
+
+```ts
+const index = BigInt(bids.findIndex((bid) => bid.bidder === wallet.account.address))
+await wallet.writeContract(auction.claim(deployments, { asset: 'TSLA', openMs, index }))
+```
+
+A round that nobody clears in its hour refunds every bid, and its positions return to the Dutch auction. In Go, `sdk.ClearingPrice(bids, supply, floor)` returns the price and whether one clears, and `Clear` and `Claim` pack the transactions.
+
+Anyone may also enroll a position that falls short at its bands' low edges while bids are committed, with `auction.enroll(deployments, { account, position, asset })`, and forfeit an unrevealed commitment with `auction.forfeit`.
+
+## Run the reference bidder
+
+`services/cmd/bidder` bids in the reopening auction and buys in the liquidation auctions. It is built only on the Go SDK, go-ethereum and the indexer's public API, imports nothing else from the repository, and is meant to be copied out and run against the published SDK.
+
+```bash
+export PRIVATE_KEY=0x... TAPEHOUSE_INDEXER_URL=https://indexer-production-f5dc.up.railway.app
+make run-bidder CHAIN=46630
+```
+
+`PRIVATE_KEY` is for a dev node. Elsewhere, set `TAPEHOUSE_BIDDER_KEYSTORE` and `TAPEHOUSE_BIDDER_PASSWORD_FILE`, which it reads the password from only. Keys are never arguments and never logged.
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `TAPEHOUSE_RPC_URL`, `TAPEHOUSE_DEPLOYMENTS` | The chain's RPC and registry. `make run-bidder` sets both from `CHAIN`. | |
+| `TAPEHOUSE_INDEXER_URL`, `TAPEHOUSE_INDEXER_KEY` | The indexer. Without a URL the liquidation auctions are not watched. | |
+| `TAPEHOUSE_BIDDER_STATE` | The state file. | `bidder-<chainId>.json` |
+| `TAPEHOUSE_BIDDER_BUDGET` | USDG in raw units for each round and each purchase. | 1,000 USDG |
+| `TAPEHOUSE_BIDDER_DISCOUNT_BPS` | Discount from its price, in basis points. | 300 |
+| `TAPEHOUSE_BIDDER_COMMIT_LEAD` | How long before the commit phase ends it commits. | 15 minutes |
+| `TAPEHOUSE_BIDDER_ASSETS` | The assets it bids on. | Every asset of the accounts |
+| `TAPEHOUSE_BIDDER_DRY_RUN` | `true` simulates every transaction and sends none. | |
+
+How it bids:
+
+- A Stock Token is worth to the bot the lower of the low edge of the band sealed before the reopen and of the band now, less the discount. With neither, it has no price and makes no bid.
+- It commits once for each asset and round, late in the commit phase so the price carries the latest 24/7 leg, for as much as the budget buys at its price, at most the round's supply. The deposit is the budget, at least the bond.
+- It checks the three refusals above against the round's floor before it commits, and reads the bond, the minimum bid and the windows from the auction.
+- It writes the bid's quantity, price and salt to the state file, syncs it and renames it over the old one before it sends the commit. Keep the file across restarts: without it a committed bid cannot be revealed.
+- It reveals each bid at the first tick inside the half hour before the open, and claims once the round is cleared or its hour has lapsed.
+- Every 15 seconds it reads the liquidation auctions started in the last four hours and buys each Stock Token once the ask has fallen to its own price. It never buys WETH, whose price is Chainlink's.
+- Before each commit or purchase it approves exactly the deposit or the limit, never an unlimited allowance.
+
+## Errors you may hit
+
+| Error | Cause |
+|---|---|
+| `WrongPhase()` | The call is outside its phase: committing after the commit phase, or revealing before it. |
+| `WrongState()` | The round is cleared already, or a bid cannot be claimed yet or was claimed already. |
+| `InvalidCommitment(commitment)` | The commitment is already pending, or the deposit is below the bond. |
+| `UnknownCommitment(commitment)` | The reveal matches no commitment of yours: a different salt, price, quantity or address. |
+| `InvalidBid()` | The bid is below the floor, worth less than the minimum, or worth more than its deposit. |
+| `NotClearingPrice(price)` | The price submitted is not the one the bids yield. Use `clearingPrice`. |
+| `NoPrice(symbol)` | The band has no price for the asset. |
+| `NotEnrollable(account, position)` | The position meets its requirement at its bands' low edges, can sell none of the Stock Token, or has a lot in the round already. |
+
+## Next
+
+- [Liquidation](/concepts/liquidation) and [weekend gap cover](/concepts/weekend-gap-cover).
+- [The bidder](/operate/bidder), which runs it in production.
+- [The reopening auction contract](/contracts/reopening-auction).

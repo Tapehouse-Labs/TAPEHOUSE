@@ -1,0 +1,127 @@
+---
+title: "Contracts overview"
+description: "How the Tapehouse contracts fit together, which are Solidity and which are Stylus, where the source lives and how to build, test and verify it."
+---
+
+Tapehouse is a set of contracts on Robinhood Chain. Two are Stylus programs written in Rust, the band and the margin engine. The rest are Solidity contracts that read them. This page maps the set. Each contract has its own reference page, and [Addresses](/contracts/addresses) lists every deployed address.
+
+Everything here runs on the Robinhood Chain testnet (chain ID 46630) and is unaudited.
+
+## How they relate
+
+```text
+                    Stylus                                  Solidity
+              +------------------+
+              |  Band            |---- BandFeed (one per asset, seals the band before each reopen)
+              |  price + session |---- MorphoBandOracle
+              +--------+---------+
+                       |
+              +--------v---------+      +-----------------+
+              |  Margin engine   |<-----|  MarginAccounts |---- SupplyVault (USDG lenders)
+              |  portfolio rules |      |  positions      |---- StockLendingVault (one per Stock Token)
+              +------------------+      +----+-----+------+---- Basket (index shares as collateral)
+                                             |     |
+                          +------------------+     +------------+
+                          |                                     |
+                    +-----v-----+   hold / settle / writeOff   +v-------------+
+                    | Liquidator|<-----------------------------| GapBackstop  |
+                    +-----+-----+                              +^-------------+
+                          |  Dutch auction                      | buyRemainder, cover
+                    +-----v--------------+                      |
+                    | ReopeningAuction   |----------------------+
+                    +--------------------+
+
+    ShortPositions: borrows from each StockLendingVault, sells through Uniswap v3
+    GapCover:       reads the band and the margin engine, pays USDG after a closure
+    SponsorPaymaster: pays gas through the ERC-4337 EntryPoint
+```
+
+The margin accounts hold every position and call the engine to decide what a position may borrow. The liquidator sells what falls short, in a Dutch auction while the market is open. Over a weekend or holiday closure, the reopening auction sells it in one sealed-bid batch at NYSE's open, and the gap backstop buys what the bids leave and covers what a position still owes after that.
+
+## What each contract is for
+
+| Contract | Language | What it does | Page |
+|---|---|---|---|
+| Band | Stylus | Prices each Stock Token as a band and reports the session | [Band](/contracts/band) |
+| Margin engine | Stylus | Margins a portfolio and returns its requirement | [Margin engine](/contracts/margin-engine) |
+| `BandFeed` | Solidity | Serves one asset's band behind Chainlink's `AggregatorV3Interface` and seals it before each reopen | [Band feeds](/contracts/band-feeds) |
+| `MorphoBandOracle` | Solidity | Prices a Stock Token for a Morpho Blue market at the band's low edge | [Morpho oracle](/contracts/morpho-oracle) |
+| `SupplyVault` | Solidity | ERC-4626 vault where lenders deposit USDG for the accounts to borrow | [Supply vault](/contracts/supply-vault) |
+| `MarginAccounts` | Solidity | Holds cross and isolated positions, deposits, loans and repayments | [Margin accounts](/contracts/margin-accounts) |
+| `Liquidator` | Solidity | Sells a position that falls short in a Dutch auction | [Liquidator](/contracts/liquidator) |
+| `GapBackstop` | Solidity | Junior ERC-4626 tranche that covers shortfalls and buys what the reopening bids leave | [Gap backstop](/contracts/gap-backstop) |
+| `ReopeningAuction` | Solidity | Sealed-bid, uniform-price batch at NYSE's regular open after a closure | [Reopening auction](/contracts/reopening-auction) |
+| `StockLendingVault` | Solidity | Lends one Stock Token for a fee, one vault per token | [Stock lending](/contracts/stock-lending) |
+| `ShortPositions` | Solidity | Shorts a Stock Token against USDG margin | [Short positions](/contracts/short-positions) |
+| `Basket` | Solidity | An ERC-20 share of a fixed set of Stock Tokens, minted and redeemed in kind | [Baskets](/contracts/baskets) |
+| `GapCover` | Solidity | Sells cover against a Stock Token's fall over a closure | [Gap cover](/contracts/gap-cover) |
+| `SponsorPaymaster` | Solidity | ERC-4337 paymaster that pays gas for a new account's first operations | [Sponsor paymaster](/contracts/sponsor-paymaster) |
+
+Two more Solidity contracts have no page of their own. `RedStoneRoundFeed` is a Chainlink-compatible feed with rounds, for a chain where an asset has no Chainlink feed, and the gap cover reads it through the band. `StockTokenWrapper` is a one-to-one ERC-20 over a Stock Token with the views the band and the accounts read.
+
+## Repository directories
+
+| Directory | Contents |
+|---|---|
+| `contracts/src` | Solidity sources, with interfaces in `contracts/src/interfaces` |
+| `contracts/test` | Foundry unit, invariant and fork tests |
+| `contracts/script` | Deploy and verify scripts the `make` targets call |
+| `stylus/contracts/band` and `stylus/contracts/margin` | The two Stylus programs |
+| `stylus/crates` | Rust code the programs share |
+| `deployments` | One registry file per chain, named by chain ID, for example `deployments/46630.json` |
+
+The Solidity contracts are compiled with solc 0.8.37 and the Osaka EVM target, built on OpenZeppelin, and tested with Foundry 1.8.3. The SDKs read every address from the registry file and compile none in.
+
+## Build and test
+
+Clone the repository and run:
+
+```bash
+git clone https://github.com/Tapehouse-Labs/TAPEHOUSE.git tapehouse
+cd tapehouse
+make build
+make test
+```
+
+`make build` initialises git submodules and installs JavaScript dependencies on first run. It stops with a message if Node, Foundry or cargo-stylus does not match the pinned versions.
+
+| Target | What it does |
+|---|---|
+| `make build-contracts` | `forge build` in `contracts` |
+| `make test-contracts` | `forge test` in `contracts`, plus the Uniswap testnet deployment's tests |
+| `make lint-contracts` | `forge fmt --check`, `forge lint --deny warnings` and Slither |
+| `make coverage-contracts` | Solidity coverage, failing below 95% of lines or branches |
+| `make gas-contracts` | Contract sizes and gas snapshots, failing on any change |
+| `make build-stylus` and `make test-stylus` | The Stylus programs only |
+| `make bindings` | Rebuilds the contracts and regenerates the SDKs' bindings from their ABIs |
+| `make check-activation` | `cargo stylus check` of every program against Robinhood Chain, its testnet and Arbitrum One |
+
+Fork tests read the chain through the `ROBINHOOD_RPC_URL` endpoint that `contracts/foundry.toml` names.
+
+## Verify a deployment
+
+Each Solidity contract has a `make verify-*` target that rebuilds its constructor arguments from the chain and verifies it on [Sourcify](https://sourcify.dev), which supports the three chains the repository targets and the compiler it pins:
+
+```bash
+make verify-gap-backstop CHAIN=46630
+make verify-reopening-auction CHAIN=46630
+make verify-stock-lending CHAIN=46630
+make verify-short-positions CHAIN=46630
+make verify-baskets CHAIN=46630
+make verify-sponsor-paymaster CHAIN=46630
+```
+
+The other targets are `verify-band-feeds`, `verify-supply-vault`, `verify-margin-accounts` and `verify-liquidator`. `verify-gap-cover` and `verify-morpho-oracles` accept only `CHAIN=4663`. A Stylus program verifies by rebuilding it in the reproducible Docker image and comparing it with the code on chain:
+
+```bash
+make verify-stylus CHAIN=46630 TX=<deployment tx> CONTRACT=<band|margin>
+```
+
+It passes only when `cargo-stylus` prints `Verification successful`. [Verification](/resources/verification) covers the procedure.
+
+## Next
+
+- [Addresses](/contracts/addresses)
+- [Gap backstop](/contracts/gap-backstop)
+- [Reopening auction](/contracts/reopening-auction)
+- [Quickstart](/quickstart)

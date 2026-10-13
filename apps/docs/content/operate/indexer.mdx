@@ -1,0 +1,120 @@
+---
+title: "Run the indexer"
+description: "Run the Tapehouse indexer, its public API and its x402 facilitator yourself, with every environment variable, the tiers and the health check."
+---
+
+The indexer reads a chain's Tapehouse contracts, stores their events in a SQLite file and serves them over REST and a WebSocket stream, with RedStone's signed packages relayed beside them. You can run your own against any chain that has a registry in `deployments/`, or read the public one at `https://indexer-production-f5dc.up.railway.app`.
+
+## Run it
+
+You need Go (the toolchain pinned in `services/go.mod`), a registry file and an RPC URL for the same chain. `make run-indexer` takes the registry from `deployments/<CHAIN>.json` and the RPC URL from the chain's variable (`ROBINHOOD_TESTNET_RPC_URL` for 46630).
+
+```bash
+export ROBINHOOD_TESTNET_RPC_URL=https://rpc.testnet.chain.robinhood.com
+make run-indexer CHAIN=46630
+curl http://127.0.0.1:8080/v1/status
+```
+
+`CHAIN` is one of 4663, 46630, 42161 or 412346. Add `REGISTRY=<file>` to use another registry. Without `make`:
+
+```bash
+cd services
+TAPEHOUSE_DEPLOYMENTS=../deployments/46630.json \
+TAPEHOUSE_RPC_URL=https://rpc.testnet.chain.robinhood.com \
+go run ./cmd/indexer
+```
+
+The service refuses to start when the registry and the RPC are of different chains. Logs are JSON on standard error, and the RPC URL never appears in them.
+
+## Environment variables
+
+| Variable | Meaning | Default |
+| --- | --- | --- |
+| `TAPEHOUSE_DEPLOYMENTS` | Path of the registry file. Required. | none |
+| `TAPEHOUSE_RPC_URL` | RPC of the registry's chain. Required. | none |
+| `TAPEHOUSE_DB` | The SQLite index file. | `tapehouse-<chainId>.db` |
+| `TAPEHOUSE_LISTEN` | Address to listen on. | `127.0.0.1:8080` |
+| `TAPEHOUSE_RPC_RATE` | Most requests a second sent to the RPC. | 20 |
+| `TAPEHOUSE_API_KEYS` | SHA-256 digests of the keyed tier's keys, separated by commas. | none |
+| `TAPEHOUSE_TRUSTED_PROXIES` | CIDR networks whose forwarding headers are trusted, separated by commas. | none |
+| `TAPEHOUSE_CLIENT_IP_HEADER` | Header in which a trusted proxy puts the client's address. | none |
+| `REDSTONE_API_KEY`, `REDSTONE_BACKUP_API_KEY` | Keys for RedStone's keyed gateways. Without them the relay uses RedStone's public ones. | none |
+| `TAPEHOUSE_X402_FACILITATOR` | URL of the x402 facilitator. Turns on paid requests. | none |
+| `TAPEHOUSE_X402_FACILITATOR_TOKEN` | Bearer token the indexer presents. Required with the facilitator. | none |
+| `TAPEHOUSE_X402_PAY_TO` | Address that receives the payments. Required with the facilitator. | none |
+| `TAPEHOUSE_X402_PRICE` | Price of one request in USDG atomic units. | 1000 (0.001 USDG) |
+
+## What it indexes
+
+Every contract under the registry's `.tapehouse`, the stock lending vaults and baskets, each `.bandFeeds` and `.morphoOracles` entry, with every event of each. It also indexes each Stock Token's `OraclePaused`, `OracleUnpaused`, `Paused`, `Unpaused` and `UIMultiplierUpdated`, the events that halt the band or move its multiplier. Each log is decoded with the ABI of the SDKs' binding of its contract, so a contract the bindings do not know is refused, never skipped.
+
+Indexing starts at the earliest block at which one of the contracts has code, found by bisection over `eth_getCode`. The SQLite file is written by nothing else, so you can delete it and the indexer rebuilds it from the chain.
+
+Every event carries `finalized`, true once its block is at or below the block the RPC reports as finalized. Above that block the indexer checks its head's hash at every step. When the chain replaces a block it rewinds to the newest block whose hash the chain still has, and the stream sends `rewind`. A dev node reports no finalized block, so nothing there is final.
+
+## Tiers
+
+| | Public | Keyed |
+| --- | --- | --- |
+| Requests a second | 10 | 1,000 |
+| Burst | 20 | 2,000 |
+| Streams | 2 per client address | 50 per key |
+
+A client sends a key as `X-API-Key`. You issue a key yourself and configure only its SHA-256 digest, so the server holds no key:
+
+```bash
+KEY=$(openssl rand -hex 32)
+printf %s "$KEY" | shasum -a 256
+```
+
+Put the digest in `TAPEHOUSE_API_KEYS` and give the key to the integrator.
+
+Behind a reverse proxy the client address would otherwise be the proxy's. List the proxy's network in `TAPEHOUSE_TRUSTED_PROXIES`. The address is then the one in the header that `TAPEHOUSE_CLIENT_IP_HEADER` names, where set and present, else the last address in `X-Forwarded-For` that is not a proxy. An IPv6 client counts as its /64. On Railway the values are `100.64.0.0/10` and `X-Real-IP`.
+
+A public client over its allowance gets 429, or 402 where the operator sells requests (below). The stream and the OpenAPI specification (`/v1/openapi.yaml`) are not sold, so over the allowance they answer 429 even where x402 is on.
+
+## Sell requests with x402
+
+Set `TAPEHOUSE_X402_FACILITATOR` and a public client over its allowance gets 402 on the API's reads, with a `PAYMENT-REQUIRED` header, instead of 429. It pays 0.001 USDG a request by default, signed as an EIP-3009 authorization, and the response is released only after the payment settles on chain. Clients within the allowance and clients with a key are never charged. [x402 for agents](/agents/x402) shows the payer's side.
+
+Robinhood Chain has no x402 facilitator, so `services/cmd/facilitator` is one. It serves `GET /supported`, `POST /verify` and `POST /settle` to the holder of its bearer token only, settles USDG only, and accepts a smart account's signature through ERC-1271. It reads `authorizationState` before it verifies and again before it settles, and refuses a used nonce.
+
+| Variable | Meaning | Default |
+| --- | --- | --- |
+| `TAPEHOUSE_DEPLOYMENTS` | Registry path. Required. | none |
+| `TAPEHOUSE_RPC_URL` | RPC of the registry's chain. Required. | none |
+| `TAPEHOUSE_FACILITATOR_TOKEN` | Bearer token the indexer presents. Required. | none |
+| `TAPEHOUSE_FACILITATOR_ADDR` | Address to listen on. | `127.0.0.1:4402` |
+| `TAPEHOUSE_FACILITATOR_KEYSTORE`, `TAPEHOUSE_FACILITATOR_PASSWORD_FILE` | The settling account's keystore and the file that holds its password. | none |
+| `TAPEHOUSE_FACILITATOR_KEY` | A hex key, for a dev node only. | none |
+
+The facilitator's account pays the gas of each settlement, about 85,000 gas for one `transferWithAuthorization`, so keep it funded with ether and nothing else. The payments go to `TAPEHOUSE_X402_PAY_TO`, not to it.
+
+## Health and monitoring
+
+`GET /v1/status` is the health endpoint. It returns the chain ID, the block indexing started at, the index's head and the chain's finalized block. After a deployment you can run the check script, which verifies that the API answers, that the head is within `MAX_LAG` blocks (default 20) of the chain's, and that each URL in `SERVICE_URLS` answers with a status below 500:
+
+```bash
+TAPEHOUSE_RPC_URL=<chain rpc> MAX_LAG=20 \
+SERVICE_URLS="https://sponsor.example https://alerts.example" \
+scripts/verify-deployment.sh https://indexer.example
+```
+
+## Deploy on Railway
+
+The repository builds every service from `services/Dockerfile`, with the binary chosen by the `SERVICE` build argument. The image is static, runs as a non-root user and carries `deployments/*.json`, so variables alone choose the network. Point `TAPEHOUSE_DEPLOYMENTS` at `/deployments/46630.json` and set `TAPEHOUSE_LISTEN=[::]:8080` and `TAPEHOUSE_DB=/data/index.db`.
+
+The indexer needs a volume mounted at `/data`, `RAILWAY_RUN_UID=0` because Railway mounts volumes as root, and exactly one replica: the config sets `numReplicas` to 1, and the SQLite file allows no more. Its health check path is `/v1/status`. Create the indexer first, wait until `/v1/status` answers, and then create the services that depend on it.
+
+Secrets reach the services only as files. Store a secret as a variable `NAME_B64`, base64-encoded with `base64 < file | tr -d '\n'`, and the image's entrypoint writes it to a `0600` file under `/run/secrets/` and sets the variable the service reads.
+
+## Security
+
+The indexer holds no private key and sends no transaction. The keyed tier's keys exist only with their holders, since the server stores digests. Keep the facilitator token out of logs and out of the repository, and give the facilitator its own account.
+
+## Next
+
+- [API overview](/api/overview)
+- [Stream endpoint](/api/stream)
+- [x402 for agents](/agents/x402)
+- [Run the keepers](/operate/keepers)

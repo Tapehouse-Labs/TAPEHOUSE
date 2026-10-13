@@ -1,0 +1,67 @@
+---
+title: "Calibration"
+description: "How the margin engine's parameters are proposed from history, stepped within bounds, gated by the backtest and applied."
+---
+
+`services/cmd/calibrate` proposes the margin engine's next parameters by the method its first values came from, keeps them within what `setParameters` accepts, and applies them where its key owns the engine. Run it to see the proposal for a chain, or read this page to know what the parameters on chain were derived from.
+
+## Run it
+
+The calibrator reads two environment variables, `TAPEHOUSE_RPC_URL` and `TAPEHOUSE_DEPLOYMENTS`. The `make` targets set them from the chain's registry. `CHAIN` is one of 4663, 46630, 42161 or 412346, and the chain's RPC variable must be set (`ROBINHOOD_TESTNET_RPC_URL` for 46630).
+
+```bash
+make calibrate-snapshot CHAIN=46630   # record each pool's state; run it each Saturday and Sunday at 12:00 UTC, and each Wednesday
+make calibrate CHAIN=46630            # writes services/calibrate/proposal-46630.json
+```
+
+Run directly, from `services/`, the command has three subcommands:
+
+| Command | What it does |
+|---|---|
+| `calibrate snapshot` | Records each of the engine's pools at the latest block, to the directory `TAPEHOUSE_CALIBRATOR_DIR` names (`calibrate/` by default). |
+| `calibrate propose [-out FILE] [-as-of DATE] [-deployments FILE]` | Estimates every parameter `setParameters` takes, steps them within what the engine accepts, backtests the current and the proposed parameters and simulates the call from the engine's owner. Writes the proposal to `FILE` (`proposal.json`) and prints it. `-as-of` fixes the method's last session. |
+| `calibrate apply FILE` | Sends a proposal, only where the engine has not been updated since the proposal was made and `PRIVATE_KEY` is the owner. |
+
+Where the owner is a timelock, its proposer takes the calldata from the proposal instead.
+
+## The method
+
+Over the latest ten years of Yahoo Finance's daily adjusted closes:
+
+- An asset's volatility is the sample standard deviation of its log returns. It is floored by the decade's figure and set by the larger of that and the last 252 sessions' figure.
+- A pair's correlation is Pearson's. It is floored by 0.75 of the decade's figure and 0.25 of its figure over the stress window, the 60 sessions on which SPY fell furthest, and set by the larger of that and the last 252 sessions' figure.
+- A weekend gap is the mean of the largest 1% of absolute moves from a close to the open after a closure of three days less an hour or more, up or down, capped at 100%.
+
+Every figure is rounded half to even into the engine's integers. Run on the data of the ten years to 25 September 2026, the method gives `parameters.json`'s volatilities, gaps and correlations to the unit. That file is in `stylus/contracts/margin`, and the engine's floors are described in [the margin engine](/contracts/margin-engine).
+
+## Depths
+
+Each pool's selling and buying depth is what it pays out and takes in, fee included. The calibrator walks the pool's initialized ticks with Uniswap v3's swap math to a 10% move of the price, with the quote token valued at Chainlink's ETH/USD where it is WETH.
+
+No RPC keeps the weekend's trough for long, so `calibrate-snapshot` records each pool's state, with the liquidity of every initialized tick within 10% either way. A depth is the lowest of the last 28 days' snapshots, at least one of them taken on a weekend. Without a weekend snapshot the depths are kept.
+
+## A bounded step
+
+Each target is clamped to its floor or ceiling, then to the engine's step, a factor of 1.5 up or down from the current value, in integers. A target beyond one step is reached over several days. A depth falls to its target at once and rises at most 1.5 times.
+
+If the clamped correlations are not positive definite, the proposal takes the first of the halves, quarters and so on of the way from the current matrix to them that passes the engine's own test. A proposal is refused until a day has passed since the last update, so one is never in flight.
+
+## The gate
+
+The current and the proposed parameters are run through the [backtest](/resources/backtest) over the same history. A proposal is refused if it leaves more portfolios losing more than their margin at the deployed weekend cap, or a higher bad-debt rate. Both reports go into `proposal.json` with the calldata, and the call is simulated from the engine's owner. `calibrate apply` checks that the engine still holds the values the proposal stepped from before it sends anything.
+
+## A reference band
+
+A local-level state-space model of each asset's log price, observed with noise and fitted by maximum likelihood, gives a volatility reported beside each proposed one. Over RedStone's 24/7 values it also gives a reference band: its prediction plus or minus three standard deviations over the band's three minutes of latency.
+
+For each asset the report gives how far the band's centre is from the reference's, the ratio of their half-widths and how often each held the next value. The band's constants have no setter, so the report flags a redeployment where the band holds the next value less than 99% of the time or is more than twice as wide as the reference.
+
+## Only reported
+
+The gap cover's tail, refitted over the decade's weekend falls with the reopen ratio bootstrapped over the weeks since launch, and the weekend leverage cap's rule, are reported beside the deployed values. Each would need a redeployment, since neither is a parameter `setParameters` takes.
+
+## Next
+
+- [The margin engine](/contracts/margin-engine)
+- [Backtest](/resources/backtest)
+- [Portfolio margin](/concepts/portfolio-margin)

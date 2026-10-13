@@ -1,0 +1,120 @@
+---
+title: "Band"
+description: "The Stylus program that prices each Stock Token as a band, with its functions, events, roles and the SDK calls that read it."
+---
+
+The band is the Stylus (Rust) program that prices every Stock Token as a low and a high edge around a centre, and says whether that price is open, closed, degraded or halted. Anyone can read it, and anyone can write the signed RedStone prices and the signed halts that feed it. For what the numbers mean, read [the band](/concepts/band) and [the session](/concepts/session).
+
+## Address
+
+Robinhood Chain testnet, chain 46630, from `deployments/46630.json`.
+
+| Name | Address |
+|---|---|
+| Band | `0xCAB25d6C9460BEE96997A1Df664b14daC2c49359` |
+| Halt signer | `0x56972f8bd78C46F782E19d8c2E09a5894356a18C` |
+| Owner | `0x8A2631c8226D7EA5612798e6E8C34F4DC703d0ac` |
+
+Everything here is a testnet deployment and is not audited. Symbols and feed IDs are `bytes32`: the ASCII bytes right-padded to 32, which `toBytes32('TSLA')` in the TypeScript SDK produces. Prices have 8 decimals.
+
+## Read a band
+
+```ts
+import { readFileSync } from 'node:fs'
+import { createPublicClient, http } from 'viem'
+import { band, parseDeployments } from '@tapehouse/sdk'
+
+const deployments = parseDeployments(JSON.parse(readFileSync('deployments/46630.json', 'utf8')))
+const client = createPublicClient({ transport: http('https://rpc.testnet.chain.robinhood.com') })
+
+const { state, live, mid, halfBps, low, high } = await band.quote(client, deployments, 'TSLA')
+```
+
+`state` is 0 halted, 1 degraded, 2 closed, 3 open. A halted band returns all zeros, so check `state` before you use an edge.
+
+## Functions
+
+### Reads
+
+| Function | Returns | Notes |
+|---|---|---|
+| `quote(bytes32 symbol)` | `uint8 state, uint8 live, uint64 mid, uint64 halfBps, uint64 low, uint128 high` | State, live legs, centre, half-width in basis points and the two edges. All zero while halted. |
+| `session()` | `uint8 state, uint8 nyse, uint8 nyseNext, uint64 changeMs, uint64 boundaryMs` | Chainlink's 24/5 session (0 not known, 1 closed, 2 open), NYSE's state and next state (0 not known, 1 regular hours, 2 short close, 3 weekend or holiday), when NYSE changes state and the session's next boundary. Times in milliseconds, zero when not known. |
+| `corporateAction(bytes32 symbol)` | `uint8 status, uint64 effectiveAt, uint128 multiplierBefore, uint128 multiplierAfter` | Status 0 none, 1 scheduled, 2 not yet confirmed by Chainlink. The multiplier before is zero when the size of the change is not known. |
+| `halt(bytes32 symbol)` | `bool signedHalt, uint64 until, uint64 issuedAt, bool oraclePaused` | Whether a signed halt holds, until when, when its last message was issued, and whether the issuer paused the token's oracle. A non-zero `until` in the past is a halt that lapsed without a lift. |
+| `asset(bytes32 symbol)` | `address chainlinkFeed, bytes32 redstoneFeedId, bytes32 indexFeedId, address token` | All zero for an unknown symbol. |
+| `price(bytes32 feedId)` | `uint256 value, uint64 packageTimestampMs, uint64 writtenAt` | The stored RedStone value, its package timestamp and the block timestamp it was written at. All zero for a feed never written. Never reverts. |
+| `variance(bytes32 feedId)` | `uint128` | The EWMA variance of a 24/7 feed, in centi-basis-points squared per minute. |
+| `chainConfig()` | `address sequencerUptimeFeed, bool chainlinkRegularHours` | The L2 sequencer-uptime feed the band follows and whether its Chainlink feeds follow NYSE regular hours. |
+| `sequencerSettled()` | `bool` | Whether the sequencer is up and has been for over an hour. True without a feed. |
+| `haltSigner()` | `address` | The address whose signed halts the band accepts. |
+| `legs(bytes32 symbol)` | `uint256 chainlinkAnswer, uint64 chainlinkUpdatedAt, uint256 price247, uint64 packageTimestampMs` | The two legs before the band judges them: Chainlink's answer and `updatedAt` in seconds, then the 24/7 price and its package timestamp in milliseconds. Zero for a leg that is unset or unreadable. Never reverts and never judges staleness. |
+| `anchor(bytes32 symbol)` | `uint64, uint64, uint64` | For an asset priced from an index: the Chainlink print, the index price at that print and the print's `updatedAt`. All zero before the first anchor. |
+| `pauseSource(bytes32 symbol)` | `bool` | True when the token's pause is read from `tokenPaused()`, false when from `oraclePaused()`. |
+| `owner()`, `pendingOwner()` | `address` | The two-step ownership state. |
+
+### Writes
+
+| Function | Who may call | What it does | Key reverts |
+|---|---|---|---|
+| `writePrices(bytes32[] feedIds, bytes payload)` | Anyone | Verifies the signed RedStone data packages in `payload` for `feedIds`, stores each feed's median and returns the values. Emits `PriceWritten`, and `Anchored` for an index-priced asset. | `PackageNotNewer`, `IncompleteStatus`, `InsufficientNumberOfUniqueSigners`, `SignerNotAuthorised`, `InvalidSignature`, `TimestampIsTooOld`, `TimestampFromTooLongFuture`, `TimestampsMustBeEqual` |
+| `writeHalt(bytes32 symbol, bool halted, uint64 issuedAt, uint64 expiresAt, bytes signature)` | Anyone, with the halt signer's signature | Stores a signed trading halt, or lifts one when `halted` is false. Emits `HaltWritten`. | `UnknownAsset`, `SignerNotAuthorised`, `InvalidSignature`, `HaltOutsideWindow`, `HaltNotNewer` |
+| `syncMultiplier(bytes32 symbol)` | Anyone | Confirms a halted multiplier change once Chainlink agrees, then records the token's latest change. Returns the status of the change in force. Emits `MultiplierConfirmed` and `MultiplierRecorded`. | `NoToken`, `InvalidToken` |
+| `setHaltSigner(address newSigner)` | Owner | Replaces the halt signer. Emits `HaltSignerUpdated`. | `OwnableUnauthorizedAccount`, `InvalidHaltSigner` |
+| `transferOwnership(address)`, `acceptOwnership()`, `renounceOwnership()` | Owner; pending owner for `acceptOwnership` | OpenZeppelin `Ownable2Step` behaviour. | `OwnableUnauthorizedAccount` |
+
+A signed halt is the EIP-712 message `HaltState(bytes32 symbol,bool halted,uint64 issuedAt,uint64 expiresAt)` under the domain name "Tapehouse Band", version "1", the chain and this band's address, so it is valid for one band only. The signature is 65 bytes, with a `v` of 27 or 28 and a low `s`. The band accepts a message issued no later than the block, expiring after it, spanning at most an hour and issued after the last message written for the asset.
+
+The verification errors of `writePrices` keep the names and selectors of RedStone's reference contract. The band accepts five authorised signers from RedStone's primary production set, requires at least three unique signers per feed, and takes packages at most 180 seconds old and 60 seconds ahead of the block.
+
+## Events
+
+| Event | Emitted when |
+|---|---|
+| `PriceWritten(bytes32 indexed feedId, uint256 value, uint64 packageTimestampMs)` | `writePrices` stores a value. |
+| `Anchored(bytes32 indexed symbol, uint64 chainlinkPrice, uint64 indexPrice, uint64 updatedAt)` | The 24/7 leg of an index-priced asset is anchored to a Chainlink print. |
+| `MultiplierRecorded(bytes32 indexed symbol, uint128 multiplierBefore, uint128 multiplierAfter, uint64 effectiveAt)` | A multiplier change is recorded. |
+| `MultiplierConfirmed(bytes32 indexed symbol, uint64 effectiveAt)` | A Chainlink round confirms a change that took effect at `effectiveAt`. |
+| `HaltWritten(bytes32 indexed symbol, bool halted, uint64 issuedAt, uint64 expiresAt)` | A signed halt is stored. |
+| `HaltSignerUpdated(address indexed previousSigner, address indexed newSigner)` | The owner replaces the signer. |
+| `OwnershipTransferStarted`, `OwnershipTransferred` | Ownership moves in two steps. |
+
+## Roles and admin powers
+
+- Anyone writes prices, signed halts and multiplier syncs, and reads every view.
+- The halt signer holds one power: signing halts. It cannot write a price.
+- The owner can rotate the halt signer with `setHaltSigner` and move ownership. It cannot set a price, and the per-asset configuration is fixed at deployment: a different configuration is a new band at a new address.
+
+In effect the owner can halt an asset, never price one. Whoever writes prices chooses among the packages RedStone signed in the last 180 seconds that are newer than the one stored.
+
+## Invariants
+
+- A package no newer than the stored one reverts with `PackageNotNewer`, so a stored price never moves back in time.
+- The three market-status feeds are written together or not at all.
+- A halted band returns all zeros from `quote`. A halt that is not refreshed lapses within an hour and leaves the band at most degraded until a message lifts it.
+- The band prices the Stock Token, its ERC-8056 multiplier applied. A multiplier change of 50 basis points or more, or of unknown size, halts the asset until `syncMultiplier` sees Chainlink confirm it.
+- While the sequencer is not settled, every band is at most degraded.
+- The 24/7 leg is live for 120 seconds after its package and Chainlink's only while its session is open, so while the market is closed a band nobody has written to for two minutes has no live leg.
+
+## SDK
+
+TypeScript, module `band` in `@tapehouse/sdk`.
+
+| Contract function | SDK call |
+|---|---|
+| `quote` | `band.quote(client, deployments, asset)` |
+| `session` | `band.session(client, deployments)` |
+| `halt` | `band.halt(client, deployments, asset)` |
+| `price` | `band.price(client, deployments, feedId)` |
+| `writePrices` | `band.writePrices(deployments, source, feedIds)`, with a `PackageSource` of your own that returns the signed payload |
+| `corporateAction`, `asset`, `variance`, `chainConfig`, `sequencerSettled`, `haltSigner`, `writeHalt`, `syncMultiplier` | No wrapper. Use `bandAbi`, which the package exports, with viem's `readContract` or `writeContract`. |
+| `legs`, `anchor`, `pauseSource`, `setHaltSigner` | Not in the exported ABI. |
+
+`band.writePrices` returns a viem contract call that you pass to `simulateContract` and `writeContract`. The SDK holds no RedStone key and calls no gateway.
+
+## Next
+
+- [The band](/concepts/band)
+- [Read a price](/guides/read-a-price)
+- [Band feeds](/contracts/band-feeds)
+- [Morpho oracle](/contracts/morpho-oracle)

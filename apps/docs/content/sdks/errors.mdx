@@ -1,0 +1,256 @@
+---
+title: "Errors"
+description: "Decode a revert from any Tapehouse contract into a named error with arguments, and look up what each custom error means and how to fix it."
+---
+
+Every contract reverts with a named custom error that carries the values behind the refusal. Each SDK decodes the revert data of the contracts, the baskets, the band, the Stock Tokens and USDG into that name and its arguments, and also decodes Solidity's `Error(string)` and `Panic(uint256)`.
+
+## Decode a revert
+
+<Tabs group="sdk">
+<Tab title="TypeScript">
+```ts
+import { accounts, CROSS, decodeRevert } from '@tapehouse/sdk'
+
+try {
+  await client.simulateContract({
+    ...accounts.borrow(deployments, { position: CROSS, assets: 500_000_000n, account, receiver: account }),
+    account,
+  })
+} catch (error) {
+  const revert = decodeRevert(error)
+  if (revert?.errorName === 'InsufficientMargin') {
+    const [equity, requirement] = revert.args
+  }
+  throw error
+}
+```
+
+`decodeRevert(error)` takes the error viem throws from `simulateContract`, `writeContract` or `readContract` and returns `{ errorName, args }`, or `undefined` if the revert is not one of the contracts'. `decodeRevertData(data)` does the same for raw revert data, and `errorsAbi` is the list of every error the SDK knows, as a viem ABI.
+</Tab>
+<Tab title="Go">
+```go
+tx, _ := client.Accounts().Borrow(sdk.Cross, amount, account, account)
+if err := client.Simulate(&bind.CallOpts{Context: ctx, From: account}, tx); err != nil {
+	var revert *sdk.Revert
+	if errors.As(err, &revert) && revert.Name == "InsufficientMargin" {
+		equity, requirement := revert.Args[0], revert.Args[1]
+		_, _ = equity, requirement
+	}
+}
+```
+
+`client.Simulate` and `client.Send` return a `*sdk.Revert` when the data decodes. `sdk.DecodeRevert(err)` decodes an error from any go-ethereum call, and `sdk.DecodeRevertData(data)` decodes raw bytes. A `Revert` has `Name`, `Args` and `Data`, and its `Error()` reads like `InsufficientMargin(-120, 340)`.
+</Tab>
+<Tab title="Rust">
+```rust
+use tapehouse_sdk::decode_revert;
+
+match tapehouse.accounts()?.borrow(position, assets, account, account).call().await {
+    Err(error) => {
+        if let Some(revert) = decode_revert(&error) {
+            println!("{}: {:?}", revert.name, revert.args);
+        }
+    }
+    Ok(_) => {}
+}
+```
+
+`decode_revert(&alloy::contract::Error)` and `decode_revert_data(&[u8])` return a `Revert { name, args, data }`. The SDK's own helpers convert a failing call to `Error::Revert(Revert)` for you.
+</Tab>
+</Tabs>
+
+The error list the SDKs decode comes from the ABIs of `ShortPositions`, `GapCover`, `MarginAccounts`, `Liquidator`, `GapBackstop`, `ReopeningAuction`, `StockLendingVault`, `SupplyVault`, `Basket`, `BandFeed`, `MorphoBandOracle`, the band, the Stock Tokens and USDG. The Go SDK also decodes the margin engine's and the round feeds' errors. A selector that two contracts share decodes once, under the same name.
+
+The sponsor paymaster's own errors (`FreeOperationsUsed`, `SponsorshipPaused`, `PaymasterUnauthorized`) are in none of the SDKs' lists. The RedStone round feed's (`InvalidPayload`, `NotNewer` and the rest of its payload checks) and the margin engine's (`UpdateTooSoon`, `InvalidVolatility` and others) are in the Go SDK's only. An error outside an SDK's list comes back undecoded, as raw data.
+
+## Errors that many contracts share
+
+These appear in several contracts with the same meaning.
+
+| Error | Meaning | Fix |
+|---|---|---|
+| `AssetHalted(symbol)` | The asset's band is halted | Wait for the halt to lift. [The band](/concepts/band) says who can halt |
+| `CorporateActionPending(symbol)` | The Stock Token has a multiplier change pending | Wait until it is confirmed |
+| `SequencerNotSettled()` | The L2 sequencer is down or came back within the hour | Retry after an hour of uptime |
+| `SessionUnknown()` | The band cannot tell whether the session is open | Retry later |
+| `LiquidityUnknown(symbol)` | The engine could not read the asset's liquidity | Retry later; the engine reads the asset's Uniswap pool |
+| `ZeroAmount()` | An amount of zero | Pass a positive amount |
+| `Unauthorized(caller, account)` | The caller may not act for the account | The owner calls `setAuthorization(caller, true)` first |
+| `Blocked(account)` | The issuer has blocklisted the account | Nothing on Tapehouse's side lifts it |
+| `BorrowingIsPaused()` | The guardian paused new borrowing | Wait until the guardian lifts the pause |
+| `InsufficientMargin(equity, requirement)` | The position's equity is below its requirement, both USD with 18 decimals | Borrow less, deposit more collateral, or read `liquidationPrice` first |
+| `WeekendLeverageExceeded(gross, equity)` | Exposure passes equity times the weekend leverage cap, from the regular open before a closure until the reopening | Reduce exposure or add equity |
+| `OwnershipCannotBeRenounced()` | Owner-only: the contract needs its owner | Not a caller error |
+
+Contracts that inherit OpenZeppelin also revert with its standard errors: `OwnableUnauthorizedAccount(account)`, `OwnableInvalidOwner(owner)`, `ERC20InsufficientBalance`, `ERC20InsufficientAllowance`, the other `ERC20Invalid*` errors, `SafeERC20FailedOperation(token)` and the `SafeCast*` overflow errors. The vaults' `ERC4626ExceededMaxDeposit`, `ERC4626ExceededMaxMint`, `ERC4626ExceededMaxWithdraw` and `ERC4626ExceededMaxRedeem` (`receiver or owner, amount, max`) mean the amount is above what the vault allows now: read `maxDeposit`, `maxWithdraw` or `maxRedeem` and ask for at most that.
+
+## MarginAccounts
+
+| Error | Meaning | Fix |
+|---|---|---|
+| `UnknownPosition(position)` | The position is neither `CROSS` nor an asset with a Stock Token | Use an entry of `accounts.positions` |
+| `UnknownAsset(symbol)` | The symbol is not one of the engine's assets | Check the symbol |
+| `UnsupportedToken(token, position)` | The token is not collateral here, or not in this position | Deposit it in the position the engine allows |
+| `AssetInOtherPosition(symbol, position)` | The account holds the asset in another position already | Use that position, or empty it first |
+| `InsufficientCollateral(token, amount)` | The position holds less than `amount` of the token | Ask for less |
+| `BorrowingAgainstUsdg()` | A position holding USDG does not borrow USDG | Repay with it instead |
+| `AssetRecovering(symbol, until)` | The band was seen halted or with a multiplier change pending less than the recovery window ago | No new risk against the asset until `until` (Unix seconds). `accounts.recovery` reads it |
+| `AssetFrozen(symbol)` | The issuer paused the Stock Token or blocklisted the accounts, so it cannot be seized | No new loan or withdrawal in debt against it |
+| `AssetWrittenOff(symbol)` | Every unit the accounts held was burned | The asset takes no deposit |
+| `HoldingNotEmpty(symbol)` | The holding in the position is still worth a raw unit or more | Not a caller error |
+| `AssetCapExceeded(symbol, cap)` | The accounts would hold more than the asset's cap | Deposit less; `accounts.holding` reads the cap |
+| `DebtCapExceeded(debt, cap)` | The positions together would owe more than the debt cap | Borrow less; `accounts.limits` reads the cap |
+| `WeekendDebtCapExceeded(debt, cap)` | The same across a closure | Borrow less before a closure |
+| `Mandate*`: `MandateExpired(account, agent, expiresAt)`, `MandateDebtLimit(debt, maxDebt)`, `MandateLeverageLimit(leverage, maxLeverage)`, `MandateReceiver(receiver, account)` | An agent acted outside its mandate | Stay within the debt and leverage limits, before the end time, and send to the account itself. `accounts.mandateStatus` says which stops it |
+| `InvalidMandate()` | A mandate must end in the future and allow leverage of at least 10,000 basis points | Fix the arguments of `setMandate` |
+| `NoLending(symbol)`, `InvalidLending()` | The asset has no lending vault, or it does not lend this token to the accounts | Do not lend that asset |
+| `OutOfReach(symbol, amount, reachable)` | The vault can return only `reachable` now | `unlend` at most `reachable`, or `recall` the rest |
+| `TooManyRecalls(symbol)` | The position has the maximum open recalls of the asset | Wait for one to settle, then `settle` |
+| `RecallTooSmall(amount)` | The recall is under the minimum and is not the first and whole one | Recall more |
+| `NothingToSettle()` | Nothing the position recalled is back yet | Wait |
+| `InvalidBasket(basket)`, `BasketAlreadyAdded(basket)`, `TooManyBaskets()` | The basket is not accepted, is accepted already, or the accounts take the maximum | Owner-side |
+| `BasketFrozen(basket)` | The issuer paused one of the basket's tokens or blocklisted the accounts or the basket | Its shares back no new loan or withdrawal in debt |
+| `TooManyAssets(count)` | The engine has more assets than the accounts take (eight) | Owner-side |
+| `LengthMismatch()`, `InvalidDebtCaps()`, `InvalidPremium()`, `InsufficientReserve(reserve)`, `InvalidReceiver()` | Owner-side arguments out of range | Not a caller error |
+| `NotLiquidator(caller)`, `NotBackstop(caller)`, `NotGuardian(caller)`, `PositionNotEmpty()` | A call reserved for the liquidator, the backstop or the guardian, or a write-off of a position that still holds collateral | Not a caller error |
+| `LiquidatorAlreadySet`, `InvalidLiquidator`, `BackstopAlreadySet`, `InvalidBackstop`, `LendingAlreadySet`, `BandMismatch` | Set-once wiring | Not a caller error |
+
+## ShortPositions
+
+Besides the shared errors above:
+
+| Error | Meaning | Fix |
+|---|---|---|
+| `NotShortable(symbol)` | No Stock Token, no pool to short through, or no lending vault | Pick another asset |
+| `InvalidPool(token, fee)` | The router's factory has no pool of the token and USDG at that fee | Owner-side |
+| `InsufficientCollateral(amount)` | The short holds less than `amount` of USDG | Ask for less, or deposit |
+| `Insolvent()` | The short owes more of the buy-in cost than it holds | Only a liquidation closes it |
+| `DeficitOpen()` | Another short of the book owes more than it holds, so the book cannot pay out | Wait until that short is liquidated |
+| `NoShort()` | The account has no short of the asset | Check the account and asset |
+| `NotShortfall(equity, requirement)` | A liquidation of a short whose equity is not below its requirement | Not liquidatable |
+| `AboveLimit()` | The pool asks more than a liquidation may pay | Retry later |
+| `NotLending(caller)` | The caller is not the asset's lending vault | Not a caller error |
+| `LengthMismatch()` | The fees are not one per asset | Owner-side |
+
+A sale that the pool would fill below `minProceeds`, or a buy-back above `maxCost`, reverts in the router with `Error("Too little received")` or `Error("Too much requested")`. Quote again with `quoteSale` or `quoteCover`, or accept more slippage.
+
+## GapCover
+
+| Error | Meaning | Fix |
+|---|---|---|
+| `NotCoverable(symbol)` | The engine has no Chainlink feed in the band for the asset | Pick another asset |
+| `SalesClosed()` | No cover is sold now | Wait for the sales window before a closure |
+| `InvalidHolder()` | The holder is the zero address | Pass a holder |
+| `InvalidLayer(deductibleBps, limitBps, minimum)` | The deductible must be at least `minimum` and below the limit, and the limit at most 10,000 basis points | Fix the layer; `gapCover.minDeductible` reads the minimum |
+| `StaleReference(deductibleBps, minimum)` | The feed's last answer stands above the band's centre, so the deductible must be at least `minimum` | Raise the deductible |
+| `PremiumAboveLimit(premium, maxPremium)` | The premium is above the buyer's limit | Quote again with `gapCover.quote` and raise `maxPremium` |
+| `NoCapacity(need, free)` | The cover would reserve more of the writers' USDG than is free | Buy less; `gapCover.capacity` reads it |
+| `NothingCovered(symbol, closesMs)` | No cover was sold on the series | Nothing to settle |
+| `SeriesClosed(symbol, closesMs)` | The series settled or is void | Nothing to do |
+| `NotReopened(closesMs)` | The reopen is not recorded or not yet reached | Wait, then `record` |
+| `WindowOpen(endMs)`, `WindowClosed(endMs)` | The settlement window ends at, or ended at, `endMs` | Call within the window |
+| `InvalidReference(roundId)`, `InvalidLastRound(roundId)` | The round is not the feed's last round started before the close or before the reopen | Name the right rounds in `settle` |
+| `TooEarlyToVoid(fromMs)`, `TooEarlyToMeasure(fromMs)` | The call opens only from `fromMs` | Wait |
+| `InsufficientGas()` | A read of a Chainlink feed ran out of gas | Send with more gas |
+| `NoCover(id)` | The cover does not exist or was released | Check the id |
+| `NotSettled(id)` | The cover's series has not settled | Wait for settlement |
+
+## Liquidator
+
+| Error | Meaning | Fix |
+|---|---|---|
+| `NotLiquidatable(account, position)` | The position meets its requirement, or cannot be judged now | Nothing to liquidate |
+| `CannotJudge(account, position)` | A held asset is halted or its multiplier change is unconfirmed, or the sequencer is not settled | Wait |
+| `NoAuction(account, position)` | No auction runs on the position | Start one, if it is liquidatable |
+| `StillShort(account, position)` | The auction still runs on a position that falls short | Not stoppable |
+| `NotForSale(token)` | The token is not sold in auctions; USDG settles through `settleCash` | Call `settleCash` |
+| `CostAboveLimit(cost, maxCost)` | The purchase costs more than `maxCost` | Raise `maxCost` or wait for the price to fall |
+| `NothingToBuy()` | The position owes nothing, holds none of the token, or the hour's share is spent | Wait for the next hour |
+| `NothingToRecall()` | The position lent none of the token that it has not recalled, or less than the least recall | Nothing to recall |
+| `PositionHeld(account, position, until)` | The reopening auction holds the position until `until` | Wait |
+| `NotBackstop`, `NotAuction`, `NotAccountsOwner`, `AuctionAlreadySet`, `InvalidAuction` | Reserved or set-once calls | Not a caller error |
+
+## ReopeningAuction
+
+| Error | Meaning | Fix |
+|---|---|---|
+| `WrongPhase()` | The session or the clock is not in the phase the call needs | Check `auction.phase`; commit, reveal and clear each have a window |
+| `WrongState()` | The round is cleared already, or cannot be claimed yet | Wait for the clearing |
+| `NoPrice(symbol)` | The band of the asset gives no price | Wait for a price write |
+| `NotEnrollable(account, position)` | The position meets its requirement at its bands' low edges, can sell none of the Stock Token, or has a lot in the round already | Not enrollable |
+| `TooManyLots()` | The round sells its maximum lots, none smaller than this one | Not enrollable |
+| `InvalidCommitment(commitment)` | The commitment is pending already, or its deposit is below the bond | Raise the deposit; `auction.constants` reads the bond |
+| `UnknownCommitment(commitment)` | No pending commitment matches the bid | Reveal with the exact `quantity`, `price` and `salt` that `auction.commitment` hashed |
+| `InvalidBid()` | The bid is below the floor, worth less than the minimum bid at the floor, or more than its deposit | Bid within the limits; `auction.previewFloor` reads the floor |
+| `NotClearingPrice(price)` | The price is not the round's clearing price | Compute it with `auction.clearingPrice` |
+| `UnknownAsset(symbol)`, `InvalidFeeds()` | The accounts have no Stock Token for the symbol, or the feeds do not match | Check the asset |
+
+## GapBackstop, SupplyVault and StockLendingVault
+
+| Error | Meaning | Fix |
+|---|---|---|
+| `InvalidPosition(position)` | The position is neither `CROSS` nor an asset of the accounts | Use a real position |
+| `InvalidExposureLimits()` | The limits do not match the accounts' assets | Owner-side |
+| `NotAuction(caller)` | Only the liquidator's reopening auction may | Not a caller error |
+| `InsufficientLiquidity(requested, available)` | The vault holds, or may lend, less than requested | Ask for at most `available` |
+| `NotBorrower(account)`, `NotDepositor(account)` | The caller is not the vault's borrower or depositor | Not a caller error |
+| `BorrowerAlreadySet`, `InvalidBorrower`, `AlreadySet`, `InvalidAddress`, `InvalidRateModel`, `InvalidFeeShare` | Set-once wiring or owner arguments out of range | Not a caller error |
+| `NotDue()` | A recall ticket's notice has not run out, the vault holds all of the queue up to its end, or the borrower owes nothing | Wait for the notice |
+| `NotHead(head)` | Only the ticket next in turn may be given up | Use ticket `head` |
+| `BuyInFailed(outstanding)` | The borrower's buy-in left `outstanding` unreturned | The borrower returns the rest of what it was asked |
+| `Unavailable()` | The token is paused, the vault is blocklisted or its tokens were burned | Nothing can come back until the issuer lifts it |
+| `OutOfReach(assets, reachable)` | The depositor may take only `reachable` of the vault's tokens with these tickets | Take at most `reachable` |
+
+## Basket
+
+| Error | Meaning | Fix |
+|---|---|---|
+| `AboveMaximum(token, amount, maxAmount)` | A mint would take more of a token than the caller's `maxAmount` | Read `baskets.previewMint` and pass at least that as `maxAssets` |
+| `ComponentPaused()` | One of the basket's tokens is paused, and a share moves only as its tokens could | Wait for the issuer |
+| `EmptyBasket()` | Every token the basket holds was burned | It takes no mint |
+| `UnknownAsset(symbol)`, `DuplicateComponent(symbol)`, `InvalidComponents()`, `InvalidTarget()`, `LengthMismatch()` | Construction or target arguments out of range | Not a caller error |
+| `PastTarget(symbol)` | A rebalance would take the asset past its target, or away from it | Owner-side |
+| `ValueLost(valueIn, valueOut)` | A rebalance would take more value out at the high edges than it gets in at the low edges | Owner-side |
+
+## Band, BandFeed and the Morpho oracle
+
+| Error | Meaning | Fix |
+|---|---|---|
+| `NoAnswer(symbol)` | The band of the asset is halted, or has no live leg, most often because no one wrote a 24/7 price for two minutes while the market is closed | `band.writePrices` a fresh payload. A Morpho oracle returns this as no price, never zero |
+| `NoRound(roundId)` | Only the current round, the block's timestamp, has an answer | Read `latestRound` |
+| `NotSealWindow(session, reopenMs)` | A band is sealed only while the session is closed, within the window before its reopen | Call `seal` in the ten minutes before the reopen |
+| `UnknownAsset(symbol)` | The band does not configure the symbol | Check the asset |
+| `NoToken(symbol)` | The asset has no Stock Token | Pick another asset |
+| `InvalidToken(token)` | The Stock Token's multipliers cannot be read | Not a caller error |
+| `PoolWithoutToken(pool, token)`, `PoolNotInitialized(pool)` | The pool does not trade the asset's token, or was never initialised | Not a caller error |
+| `NoStockToken(band, symbol)`, `AssetMismatch(band, token)`, `ScaleTooLarge(scaleFactor)` | The Morpho oracle's band names no token, another token, or the scale could overflow | Owner-side |
+
+`writePrices` also reverts with RedStone's payload checks:
+
+| Error | Meaning |
+|---|---|
+| `CalldataMustHaveValidPayload()`, `CalldataOverOrUnderFlow()`, `IncorrectUnsignedMetadataSize()` | The payload is malformed, truncated or does not end with RedStone's marker |
+| `InvalidSignature(signedHash)`, `SignerNotAuthorised(receivedSigner)` | A package's signature does not recover, or its signer is outside RedStone's primary production set |
+| `InsufficientNumberOfUniqueSigners(received, required)` | A feed has fewer unique signers than the band requires |
+| `TooLargeValueByteSize(valueByteSize)`, `DataTimestampCannotBeZero()`, `TimestampsMustBeEqual()` | A value is over 32 bytes, a package has no timestamp, or the packages' timestamps differ |
+| `TimestampFromTooLongFuture(received, blockTimestamp)`, `TimestampIsTooOld(received, blockTimestamp)` | The packages are more than a minute ahead of the block, or more than three minutes behind it. Fetch a fresh payload |
+| `PackageNotNewer(feedId, storedTimestampMs, packageTimestampMs)` | The band stores a package of the feed at least as new. Another writer got there first |
+| `IncompleteStatus()` | The three market-status feeds are written together or not at all |
+| `HaltOutsideWindow(issuedAt, expiresAt, blockTimestamp)`, `HaltNotNewer(symbol, storedIssuedAt, issuedAt)` | A halt message must be issued no later than now, expire after now and span at most an hour, and be newer than the stored one |
+
+## Stock Tokens and USDG
+
+| Error | Meaning |
+|---|---|
+| `IsPaused()` | The issuer paused the Stock Token |
+| `Blocked(account)` | The issuer's registry blocks the account |
+| `AccessControlUnauthorizedAccount(account, neededRole)` | The account lacks the role the call needs |
+| `ContractPaused()` | USDG is paused: transfers, approvals and permits revert |
+| `AddressFrozen()` | A frozen address neither sends nor receives USDG |
+
+## Next
+
+- [TypeScript SDK](/sdks/typescript), [Go SDK](/sdks/go) and [Rust SDK](/sdks/rust): the calls that revert.
+- [Liquidation](/concepts/liquidation): why a position becomes liquidatable.
+- [The band](/concepts/band): halted, degraded and the other states behind `NoAnswer`.
