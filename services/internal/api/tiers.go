@@ -51,11 +51,14 @@ var DefaultAttempts = Limit{Rate: 5, Burst: 10}
 type Tiers struct {
 	Public, Keyed Limit
 	Payment       *Payment
-	keys          map[[32]byte]bool
-	proxies       []netip.Prefix
-	mu            sync.Mutex
-	clients       map[string]*client
-	now           func() time.Time
+	// ClientIPHeader names the header in which a trusted proxy puts the client's address, which is read in place of
+	// X-Forwarded-For where the proxy sets it itself, as Railway's edge sets X-Real-IP.
+	ClientIPHeader string
+	keys           map[[32]byte]bool
+	proxies        []netip.Prefix
+	mu             sync.Mutex
+	clients        map[string]*client
+	now            func() time.Time
 }
 
 type client struct {
@@ -189,8 +192,8 @@ func (c *client) reserve(now time.Time) time.Duration {
 	return 0
 }
 
-// address is the request's client: its remote address, or, through a trusted proxy, the last address in
-// X-Forwarded-For that is not a trusted proxy.
+// address is the request's client: its remote address, or, through a trusted proxy, the address in ClientIPHeader
+// where one is named and present, else the last address in X-Forwarded-For that is not a trusted proxy.
 func (t *Tiers) address(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -199,6 +202,11 @@ func (t *Tiers) address(r *http.Request) string {
 	remote, err := netip.ParseAddr(host)
 	if err != nil || !t.trusted(remote) {
 		return subnet(host)
+	}
+	if t.ClientIPHeader != "" {
+		if client, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get(t.ClientIPHeader))); err == nil {
+			return subnet(client.String())
+		}
 	}
 	hops := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
 	for i := len(hops) - 1; i >= 0; i-- {

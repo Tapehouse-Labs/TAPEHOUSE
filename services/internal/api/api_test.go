@@ -859,3 +859,40 @@ func TestAnIPv6SubscriberHoldsOneAllowanceForItsWholeSubnet(t *testing.T) {
 		t.Fatal("another subnet, or an IPv4 client, was limited with it")
 	}
 }
+
+func TestAProxyNamedClientHeaderIsTheClientOnlyBehindATrustedProxy(t *testing.T) {
+	tiers, err := api.NewTiers(nil, []netip.Prefix{netip.MustParsePrefix("100.64.0.0/10")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tiers.ClientIPHeader = "X-Real-IP"
+	handler := tiers.Middleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	status := func(peer, client string) int {
+		r := httptest.NewRequest(http.MethodGet, "/v1/status", nil)
+		r.RemoteAddr = peer
+		r.Header.Set("X-Real-IP", client)
+		r.Header.Set("X-Forwarded-For", fmt.Sprintf("198.51.100.%d, 100.64.0.9", len(client)))
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, r)
+		return recorder.Code
+	}
+	for i := range api.PublicLimit.Burst + 5 {
+		if got := status("100.64.0.9:443", fmt.Sprintf("203.0.113.%d", i+1)); got != http.StatusOK {
+			t.Fatalf("client %d behind the proxy shared another's allowance: %d", i, got)
+		}
+	}
+	limited := false
+	for range api.PublicLimit.Burst + 5 {
+		limited = limited || status("100.64.0.9:443", "203.0.113.200") == http.StatusTooManyRequests
+	}
+	if !limited {
+		t.Fatal("one client behind the proxy was not limited")
+	}
+	spoofed := false
+	for i := range api.PublicLimit.Burst + 5 {
+		spoofed = spoofed || status("192.0.2.5:443", fmt.Sprintf("203.0.113.%d", i+1)) == http.StatusTooManyRequests
+	}
+	if !spoofed {
+		t.Fatal("a client that is not behind the proxy named its own address")
+	}
+}

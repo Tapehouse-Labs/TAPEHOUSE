@@ -30,9 +30,13 @@ import { wrapFetchWithPayment, x402Client } from '@x402/fetch'
 import { ExactEvmScheme } from '@x402/evm/exact/client'
 import { privateKeyToAccount } from 'viem/accounts'
 
-const client = new x402Client().register('eip155:46630', new ExactEvmScheme(privateKeyToAccount(process.env.PAYER_KEY as `0x${string}`)))
+const usdg = '0x7E955252E15c84f5768B83c41a71F9eba181802F'
+const client = x402Client.fromConfig({
+  schemes: [{ network: 'eip155:46630', client: new ExactEvmScheme(privateKeyToAccount(process.env.PAYER_KEY as `0x${string}`)) }],
+  spendControls: { allowedAssets: [{ network: 'eip155:46630', asset: usdg, maxAmountPerPayment: '10000' }] },
+})
 const fetchWithPayment = wrapFetchWithPayment(fetch, client)
-const response = await fetchWithPayment('https://indexer-production-f5dc.up.railway.app/v1/status')
+const response = await fetchWithPayment('https://indexer-production-f5dc.up.railway.app/v1/contracts')
 ```
 
 Go, with `github.com/x402-foundation/x402/go/v2`: `x402.Newx402Client(x402.WithSpendControls(x402.SpendControls{AllowedAssets: []x402.SpendControlAsset{{Network: "eip155:46630", Asset: usdg, MaxAmountPerPayment: "10000"}}}))`, registered with `exactclient.NewExactEvmScheme(signer, nil)` and wrapped with `x402http.WrapHTTPClientWithPayment`.

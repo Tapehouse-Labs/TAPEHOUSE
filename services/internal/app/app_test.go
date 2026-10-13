@@ -20,14 +20,14 @@ func TestTheConfigurationComesFromTheEnvironment(t *testing.T) {
 	cfg, err := app.ConfigFromEnv(env(map[string]string{
 		"TAPEHOUSE_DEPLOYMENTS": "deployments/4663.json", "TAPEHOUSE_RPC_URL": "https://rpc.example/key",
 		"TAPEHOUSE_API_KEYS": " aa , bb,", "TAPEHOUSE_TRUSTED_PROXIES": "10.0.0.0/8, 192.168.0.0/16",
-		"REDSTONE_API_KEY": "redstone",
+		"REDSTONE_API_KEY": "redstone", "TAPEHOUSE_CLIENT_IP_HEADER": " X-Real-IP ",
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Listen != "127.0.0.1:8080" || cfg.DB != "" || len(cfg.KeyDigests) != 2 || cfg.KeyDigests[1] != "bb" ||
 		cfg.Proxies[1] != netip.MustParsePrefix("192.168.0.0/16") || cfg.Gateways[0].Key != "redstone" ||
-		len(cfg.Gateways) != 3 {
+		len(cfg.Gateways) != 3 || cfg.ClientIPHeader != "X-Real-IP" {
 		t.Fatalf("configuration %+v", cfg)
 	}
 	if _, err := app.ConfigFromEnv(env(map[string]string{"TAPEHOUSE_DEPLOYMENTS": "deployments/4663.json"})); err == nil {

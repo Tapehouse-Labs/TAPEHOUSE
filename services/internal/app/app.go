@@ -48,6 +48,9 @@ type Config struct {
 	// Proxies are the networks of the proxies whose X-Forwarded-For is trusted, separated by commas:
 	// TAPEHOUSE_TRUSTED_PROXIES.
 	Proxies []netip.Prefix
+	// ClientIPHeader is the header in which a trusted proxy puts the client's address, read in place of
+	// X-Forwarded-For: TAPEHOUSE_CLIENT_IP_HEADER.
+	ClientIPHeader string
 	// Gateways are RedStone's gateways, the keyed ones with REDSTONE_API_KEY and REDSTONE_BACKUP_API_KEY where set.
 	Gateways []redstone.Gateway
 	// Interval is how often the indexer polls the chain once it has caught up.
@@ -76,13 +79,14 @@ type Payments struct {
 // ConfigFromEnv reads the configuration from the environment.
 func ConfigFromEnv(getenv func(string) string) (Config, error) {
 	cfg := Config{
-		Deployments: getenv("TAPEHOUSE_DEPLOYMENTS"),
-		RPCURL:      getenv("TAPEHOUSE_RPC_URL"),
-		DB:          getenv("TAPEHOUSE_DB"),
-		Listen:      getenv("TAPEHOUSE_LISTEN"),
-		Gateways:    redstone.Gateways(getenv),
-		Interval:    time.Second,
-		RPCRate:     20,
+		Deployments:    getenv("TAPEHOUSE_DEPLOYMENTS"),
+		RPCURL:         getenv("TAPEHOUSE_RPC_URL"),
+		DB:             getenv("TAPEHOUSE_DB"),
+		ClientIPHeader: strings.TrimSpace(getenv("TAPEHOUSE_CLIENT_IP_HEADER")),
+		Listen:         getenv("TAPEHOUSE_LISTEN"),
+		Gateways:       redstone.Gateways(getenv),
+		Interval:       time.Second,
+		RPCRate:        20,
 	}
 	if cfg.Deployments == "" || cfg.RPCURL == "" {
 		return cfg, errors.New("TAPEHOUSE_DEPLOYMENTS and TAPEHOUSE_RPC_URL are required")
@@ -174,6 +178,7 @@ func run(ctx context.Context, cfg Config, log *slog.Logger, ready func(net.Addr)
 	if err != nil {
 		return err
 	}
+	tiers.ClientIPHeader = cfg.ClientIPHeader
 	dialed, err := ethclient.DialContext(ctx, cfg.RPCURL)
 	if err != nil {
 		return errors.New("the RPC URL does not parse")
