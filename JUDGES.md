@@ -33,14 +33,14 @@ cast call 0xCAB25d6C9460BEE96997A1Df664b14daC2c49359 \
 **4. See that USDG is the unit.** The supply vault lends USDG, and the margin accounts borrow it.
 
 ```bash
-cast call 0x1579c3DAc0B97bAD5be998fb4C1e9063466303c3 "asset()(address)" --rpc-url $R   # 0x7E955252…802F, Paxos USDG
-cast call 0x1579c3DAc0B97bAD5be998fb4C1e9063466303c3 "totalAssets()(uint256)" --rpc-url $R
+cast call 0xDa62E570B6d1A038C1b3b011555BdA1fFd82038F "asset()(address)" --rpc-url $R   # 0x7E955252…802F, Paxos USDG
+cast call 0xDa62E570B6d1A038C1b3b011555BdA1fFd82038F "totalAssets()(uint256)" --rpc-url $R
 ```
 
 **5. See the reopening auction's phase.** It reads zero outside the window between the 24/5 session's reopen and the regular open (see [the table](#what-is-live-what-is-tested-what-is-not)).
 
 ```bash
-cast call 0x58F39a807ea6CFbeBCBd71995b1dA2E0608BF642 "phase()(uint64,bool)" --rpc-url $R
+cast call 0x8fcE1e7d2D5e470A5ae7569F803d2957b3A771CB "phase()(uint64,bool)" --rpc-url $R
 ```
 
 **6. Check that the program on chain is the code here.** Needs Docker.

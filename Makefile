@@ -601,8 +601,8 @@ verify-stock-lending: check-foundry submodules
 	@contracts/script/verify-stock-lending.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
 
 verify-short-positions: check-foundry submodules
-	@case "$(CHAIN)" in 4663) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
-		{ echo "Usage: make verify-short-positions CHAIN=4663, with the chain's RPC URL set"; exit 1; }
+	@case "$(CHAIN)" in 4663|46630) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
+		{ echo "Usage: make verify-short-positions CHAIN=<4663|46630>, with the chain's RPC URL set"; exit 1; }
 	@contracts/script/verify-short-positions.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
 
 verify-morpho-oracles: check-foundry submodules
@@ -611,8 +611,8 @@ verify-morpho-oracles: check-foundry submodules
 	@contracts/script/verify-morpho-oracles.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
 
 verify-baskets: check-foundry submodules
-	@case "$(CHAIN)" in 4663) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
-		{ echo "Usage: make verify-baskets CHAIN=4663, with the chain's RPC URL set"; exit 1; }
+	@case "$(CHAIN)" in 4663|46630) test -n "$(RPC_URL_$(CHAIN))" ;; *) false ;; esac || \
+		{ echo "Usage: make verify-baskets CHAIN=<4663|46630>, with the chain's RPC URL set"; exit 1; }
 	@contracts/script/verify-baskets.sh $(RPC_URL_$(CHAIN)) deployments/$(CHAIN).json
 
 verify-gap-cover: check-foundry submodules

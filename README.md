@@ -143,16 +143,16 @@ Robinhood Chain testnet (46630). Each address links to its page on the [explorer
 |---|---|
 | Band (Stylus) | [`0xCAB25d6C9460BEE96997A1Df664b14daC2c49359`](https://explorer.testnet.chain.robinhood.com/address/0xCAB25d6C9460BEE96997A1Df664b14daC2c49359) |
 | Margin engine (Stylus) | [`0x85cbe267eF0c5dEC5Fc2aFc0b439cc62caB94982`](https://explorer.testnet.chain.robinhood.com/address/0x85cbe267eF0c5dEC5Fc2aFc0b439cc62caB94982) |
-| Margin accounts | [`0x4594CF325603eBD1dac7B0f3ef8bCaA59660DBB7`](https://explorer.testnet.chain.robinhood.com/address/0x4594CF325603eBD1dac7B0f3ef8bCaA59660DBB7) |
-| Supply vault | [`0x1579c3DAc0B97bAD5be998fb4C1e9063466303c3`](https://explorer.testnet.chain.robinhood.com/address/0x1579c3DAc0B97bAD5be998fb4C1e9063466303c3) |
-| Liquidator | [`0xB0df45ca7626D390DF99a934F3e125C23A189cbb`](https://explorer.testnet.chain.robinhood.com/address/0xB0df45ca7626D390DF99a934F3e125C23A189cbb) |
-| Gap backstop | [`0x3604C18f302Cf6d6dDDCBB534cd132310B2bf7C4`](https://explorer.testnet.chain.robinhood.com/address/0x3604C18f302Cf6d6dDDCBB534cd132310B2bf7C4) |
-| Reopening auction | [`0x58F39a807ea6CFbeBCBd71995b1dA2E0608BF642`](https://explorer.testnet.chain.robinhood.com/address/0x58F39a807ea6CFbeBCBd71995b1dA2E0608BF642) |
-| Stock lending, TSLA | [`0xf281f0051bEC503F507d6b9Df10535e4787B610e`](https://explorer.testnet.chain.robinhood.com/address/0xf281f0051bEC503F507d6b9Df10535e4787B610e) |
-| Stock lending, AMZN | [`0x46acce332E1D390c3E4E43bE16665Dd005a09EB5`](https://explorer.testnet.chain.robinhood.com/address/0x46acce332E1D390c3E4E43bE16665Dd005a09EB5) |
+| Margin accounts | [`0xcE8C3CB4E1A8b944BC607353055cE5a3D07eC101`](https://explorer.testnet.chain.robinhood.com/address/0xcE8C3CB4E1A8b944BC607353055cE5a3D07eC101) |
+| Supply vault | [`0xDa62E570B6d1A038C1b3b011555BdA1fFd82038F`](https://explorer.testnet.chain.robinhood.com/address/0xDa62E570B6d1A038C1b3b011555BdA1fFd82038F) |
+| Liquidator | [`0x53579Ef2b4F36E8E84F9776239db29156e4465aE`](https://explorer.testnet.chain.robinhood.com/address/0x53579Ef2b4F36E8E84F9776239db29156e4465aE) |
+| Gap backstop | [`0x32acef0BBCB78b88d82b672DFE3F325105dAEd8E`](https://explorer.testnet.chain.robinhood.com/address/0x32acef0BBCB78b88d82b672DFE3F325105dAEd8E) |
+| Reopening auction | [`0x8fcE1e7d2D5e470A5ae7569F803d2957b3A771CB`](https://explorer.testnet.chain.robinhood.com/address/0x8fcE1e7d2D5e470A5ae7569F803d2957b3A771CB) |
+| Stock lending, TSLA | [`0xD7921e0C3D475647a384735a64aaB56C30fdEd03`](https://explorer.testnet.chain.robinhood.com/address/0xD7921e0C3D475647a384735a64aaB56C30fdEd03) |
+| Stock lending, AMZN | [`0xF12432A8B6263D206D5d482ac1FA4bE29744D1A1`](https://explorer.testnet.chain.robinhood.com/address/0xF12432A8B6263D206D5d482ac1FA4bE29744D1A1) |
 | Margin engine, Solidity reference | [`0x68B73e2c70cd61B9d94cCF7c0F3502F9DE93749c`](https://explorer.testnet.chain.robinhood.com/address/0x68B73e2c70cd61B9d94cCF7c0F3502F9DE93749c) |
-| Short positions | [`0x5d0eA334b512be35Bb6CE6949956c7E03589845B`](https://explorer.testnet.chain.robinhood.com/address/0x5d0eA334b512be35Bb6CE6949956c7E03589845B) |
-| Basket `thPAIR` (TSLA and AMZN) | [`0x7c51c996ad7B049D4A57Af9387c3Fee297E3d45F`](https://explorer.testnet.chain.robinhood.com/address/0x7c51c996ad7B049D4A57Af9387c3Fee297E3d45F) |
+| Short positions | [`0xadc174ca32EBD4B27579E3759903F43b8F53D97F`](https://explorer.testnet.chain.robinhood.com/address/0xadc174ca32EBD4B27579E3759903F43b8F53D97F) |
+| Basket `thPAIR` (TSLA and AMZN) | [`0x31B777cCC84236B6f53882890ABC7CD19b4c9575`](https://explorer.testnet.chain.robinhood.com/address/0x31B777cCC84236B6f53882890ABC7CD19b4c9575) |
 | Gap cover | [`0x482434d135eeA48797c1d960DF0f3A01E434ad17`](https://explorer.testnet.chain.robinhood.com/address/0x482434d135eeA48797c1d960DF0f3A01E434ad17) |
 | Sponsor paymaster | [`0x3721b8136593BCC78787943664cF9404d12Ecbd2`](https://explorer.testnet.chain.robinhood.com/address/0x3721b8136593BCC78787943664cF9404d12Ecbd2) |
 | Wrapped TSLA (`wTSLA`) | [`0x588ecCac8c70cdE770b57BA9A192CfF8D636534e`](https://explorer.testnet.chain.robinhood.com/address/0x588ecCac8c70cdE770b57BA9A192CfF8D636534e) |
