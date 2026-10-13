@@ -20,7 +20,7 @@ try {
   const client = createPublicClient({ transport: http(config.rpcUrl) })
   const chainId = await getChainId(client)
   if (chainId !== deployments.chainId)
-    throw new Error(`TAPEHOUSE_RPC_URL serves chain ${chainId}, TAPEHOUSE_DEPLOYMENTS chain ${deployments.chainId}.`)
+    throw new Error(`TAPEHOUSE_RPC_URL serves chain ${chainId}, the registry's chain is ${deployments.chainId}.`)
   const context = {
     client,
     deployments,

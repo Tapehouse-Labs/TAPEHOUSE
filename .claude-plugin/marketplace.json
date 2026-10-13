@@ -1,0 +1,12 @@
+{
+  "name": "tapehouse",
+  "description": "Tapehouse's plugin for Claude Code.",
+  "owner": { "name": "Tapehouse Labs", "url": "https://tapehouse.xyz" },
+  "plugins": [
+    {
+      "name": "tapehouse",
+      "source": "./plugins/tapehouse",
+      "description": "Read Tapehouse's price band, margin accounts and risk on Robinhood Chain, prepare transactions for a wallet to sign, act under a bounded mandate, and pay the API per request in USDG."
+    }
+  ]
+}

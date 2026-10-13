@@ -781,6 +781,17 @@ describe('baskets', () => {
     expect(tools.find((tool) => tool.name === 'registry')?.outputSchema?.properties).toHaveProperty('baskets')
   })
 
+  test("the plugin's tool reference names every tool, and only the tools there are", async () => {
+    const mcp = await legacy(chain({}).client)
+    const { tools } = await mcp.listTools()
+    const reference = readFileSync(
+      new URL('../../../plugins/tapehouse/skills/tapehouse/tools.md', import.meta.url),
+      'utf8',
+    )
+    const named = new Set([...reference.matchAll(/`([a-z]+(?:_[a-z]+)*)`/g)].map((match) => match[1]))
+    expect([...named].sort()).toEqual(tools.map((tool) => tool.name).sort())
+  })
+
   test('the registry declares every field the SDK parses', async () => {
     const mcp = await legacy(chain({}).client)
     const { structured } = await call(mcp, 'registry', {})
@@ -1116,7 +1127,17 @@ describe('configuration', () => {
     expect(() => configFromEnv({ TAPEHOUSE_RPC_URL: 'ftp://rpc', TAPEHOUSE_DEPLOYMENTS: 'd.json' })).toThrow(
       'TAPEHOUSE_RPC_URL is not an http or https URL.',
     )
-    expect(() => configFromEnv({ TAPEHOUSE_RPC_URL: 'https://rpc' })).toThrow('Set TAPEHOUSE_DEPLOYMENTS')
+    expect(() => configFromEnv({ TAPEHOUSE_RPC_URL: 'https://rpc' })).toThrow('Set TAPEHOUSE_NETWORK')
+    expect(configFromEnv({ TAPEHOUSE_RPC_URL: 'https://rpc', TAPEHOUSE_NETWORK: '46630' }).deployments).toMatch(
+      /\/deployments\/46630\.json$/,
+    )
+    expect(configFromEnv({ TAPEHOUSE_RPC_URL: 'https://rpc', TAPEHOUSE_NETWORK: '4663', TAPEHOUSE_DEPLOYMENTS: 'd.json' }).deployments).toBe(
+      'd.json',
+    )
+    for (const network of ['1', '../4663', '46630.json', ''])
+      expect(() => configFromEnv({ TAPEHOUSE_RPC_URL: 'https://rpc', TAPEHOUSE_NETWORK: network })).toThrow(
+        'TAPEHOUSE_NETWORK is not one of 4663, 46630, 42161.',
+      )
     for (const cap of ['10001', '-1', '1.5', 'x'])
       expect(() =>
         configFromEnv({

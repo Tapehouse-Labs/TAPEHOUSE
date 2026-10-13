@@ -24,7 +24,7 @@
     "LICENSE-MIT"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && mkdir -p dist/deployments && cp ../../deployments/*.json dist/deployments/",
     "test": "vitest run",
     "lint": "tsc --noEmit && eslint --max-warnings 0",
     "devnode": "node examples/devnode.ts"

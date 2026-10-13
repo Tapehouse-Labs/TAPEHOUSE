@@ -219,6 +219,7 @@ Each deployment below verifies from the commit that added its row: `git log --re
 | Rust SDK | `crates/sdk` | The same surface on alloy |
 | Go SDK | `services/sdk` | The same surface on go-ethereum |
 | MCP server | `packages/mcp` | Lets an AI agent read the band and the engine |
+| Claude Code plugin | `plugins/tapehouse` | The MCP server and three skills for an agent: read, act under a mandate, pay the API per request |
 | Indexer and API | `services/cmd/indexer` | History, public API, WebSocket stream and RedStone relay |
 | Keepers | `services/cmd/keeper` | Prices, halts and the weekend's routine work |
 | Reference bidder | `services/cmd/bidder` | A bidder for the reopening auction, as an example for others |
@@ -239,6 +240,12 @@ make test
 ```
 
 `make build` initialises the submodules and installs JavaScript dependencies on first run, and stops with a message if Node, Foundry or cargo-stylus does not match the pinned versions. The requirements, every `make` target and each component's commands are in the [reference](docs/REFERENCE.md).
+
+To use Tapehouse from Claude Code, install its plugin, which starts the MCP server and teaches the agent to read a position, act under a mandate and pay the API per request:
+
+```bash
+/plugin install tapehouse --marketplace Tapehouse-Labs/TAPEHOUSE
+```
 
 ```bash
 make devnode                   # a local Nitro node, ArbOS 61
@@ -272,6 +279,7 @@ make test-app-devnode          # the app, driven in Chromium against that deploy
 - `deployments` — contract addresses per chain, one JSON file per chain ID
 - `packages/sdk` — the TypeScript SDK (viem)
 - `packages/mcp` — the MCP server for AI agents, on the TypeScript SDK
+- `plugins/tapehouse` — the Claude Code plugin: the MCP server and three skills
 - `services` — the Go module: the Go SDK in `services/sdk` (go-ethereum), the indexer and public API in `services/cmd/indexer`, the backtester in `services/cmd/backtest`, a reference bidder in `services/cmd/bidder`, the liquidation-risk alerts in `services/cmd/alerts`, the parameter calibrator in `services/cmd/calibrate`, the sponsor service in `services/cmd/sponsor` and the x402 facilitator in `services/cmd/facilitator`
 - `crates` — Rust crates: the Rust SDK in `crates/sdk` (alloy)
 

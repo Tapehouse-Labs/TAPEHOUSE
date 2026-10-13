@@ -12,6 +12,7 @@ The full technical reference: every component, its commands, its parameters and 
 - `deployments` — contract addresses per chain, one JSON file per chain ID
 - `packages/sdk` — the TypeScript SDK (viem)
 - `packages/mcp` — the MCP server for AI agents, on the TypeScript SDK
+- `plugins/tapehouse` — the Claude Code plugin: the MCP server and three skills for an agent, in a marketplace that `.claude-plugin/marketplace.json` lists
 - `services` — the Go module: the Go SDK in `services/sdk` (go-ethereum), the indexer and public API in `services/cmd/indexer`, the backtester in `services/cmd/backtest`, a reference bidder in `services/cmd/bidder`, the liquidation-risk alerts in `services/cmd/alerts`, the parameter calibrator in `services/cmd/calibrate` the sponsor service in `services/cmd/sponsor` and the x402 facilitator in `services/cmd/facilitator`
 - `crates` — Rust crates: the Rust SDK in `crates/sdk` (alloy)
 
@@ -672,7 +673,7 @@ TAPEHOUSE_RPC_URL=https://robinhood.drpc.org TAPEHOUSE_DEPLOYMENTS=deployments/4
 ```
 
 - **No key.** The server never holds or reads a key. A transaction tool returns unsigned calls, an approval first where an allowance is short, for the account, or an address it authorized with `accounts_set_authorization`, to check and sign in its own wallet. `accounts_set_mandate` prepares a bounded alternative to that authorization, a mandate, and `accounts_mandate` reads it and says what an agent may still borrow.
-- **Configuration from the environment.** `TAPEHOUSE_RPC_URL`, which the server never shows a client, `TAPEHOUSE_DEPLOYMENTS`, the registry, which must be for the chain the endpoint serves, `TAPEHOUSE_MAX_SLIPPAGE_BPS`, the most slippage a sale or buy-back may state, 100 basis points unless set, and `TAPEHOUSE_MAX_CALLS_PER_MINUTE`, the most tool calls it answers in a minute, 120 unless set.
+- **Configuration from the environment.** `TAPEHOUSE_RPC_URL`, which the server never shows a client, `TAPEHOUSE_NETWORK`, the chain (`4663`, `46630` or `42161`), whose registry the package carries, or `TAPEHOUSE_DEPLOYMENTS`, the path of a registry, which must be for the chain the endpoint serves, `TAPEHOUSE_MAX_SLIPPAGE_BPS`, the most slippage a sale or buy-back may state, 100 basis points unless set, and `TAPEHOUSE_MAX_CALLS_PER_MINUTE`, the most tool calls it answers in a minute, 120 unless set.
 - **Transports.** stdio by default, for a host that launches it; `--http <port>` serves Streamable HTTP on `127.0.0.1` only, refusing any other `Host` or `Origin`. Any process on the machine can reach it; a hosted endpoint needs TLS, authentication and a front of its own.
 - **Validated input, data out.** Every argument is checked against its schema before any call; every result is structured content with an output schema, its block named, amounts as decimal strings of base units, reverts by name and arguments. What a tool returns is data from the chain or the registry, not instructions, and the server's instructions tell the agent so.
 - **Tested with two clients.** `make test-mcp-devnode` drives it with the official TypeScript client over Streamable HTTP and the official Python client over stdio, against the dev node.
@@ -709,8 +710,19 @@ curl -si https://indexer-production-f5dc.up.railway.app/v1/status    # within th
 - **The protocol.** Version 2 of x402, scheme `exact` on `eip155:<chainId>`, paid in USDG with an EIP-3009 `transferWithAuthorization`, so the payer needs no ether. `PAYMENT-REQUIRED` carries what a request costs, `PAYMENT-SIGNATURE` the payment signed for it, `PAYMENT-RESPONSE` its settlement. The response is released only after the payment settles on the chain: a payment that does not settle is answered 402 again and the read is not served.
 - **The facilitator.** `services/cmd/facilitator`, built on the official Go SDK, `github.com/x402-foundation/x402/go/v2`, is the facilitator Robinhood Chain lacks: `GET /supported`, `POST /verify` and `POST /settle`. It serves only the indexer's bearer token, `TAPEHOUSE_FACILITATOR_TOKEN`, settles USDG only, and pays the gas of each settlement from its own account, so that account holds ether and nothing else; the payments go to `TAPEHOUSE_X402_PAY_TO`. A smart account's signature is accepted by ERC-1271.
 - **Replays.** USDG answers an authorization used before with an event and no transfer, not a revert. So the facilitator reads `authorizationState` before it verifies and again before it settles and refuses a used nonce, and the SDK refuses a settlement whose receipt holds no transfer of the amount. `UsdgForkTest` pins both behaviours against the real token.
-- **The payer's side.** An x402 client refuses a token it was not told to accept. Allow USDG on the chain with a cap per payment a few times the price: in Go, `x402.WithSpendControls(x402.SpendControls{AllowedAssets: []x402.SpendControlAsset{{Network: "eip155:46630", Asset: usdg, MaxAmountPerPayment: "10000"}}})`; the TypeScript client takes the same `spendControls`.
+- **The payer's side.** An x402 client refuses a token it was not told to accept. Allow USDG on the chain with a cap per payment a few times the price: in Go, `x402.WithSpendControls(x402.SpendControls{AllowedAssets: []x402.SpendControlAsset{{Network: "eip155:46630", Asset: usdg, MaxAmountPerPayment: "10000"}}})`; the TypeScript client takes the same `spendControls`. The `tapehouse-x402` skill of the Claude Code plugin says the rest.
 - **Tests.** `make test-payments-devnode` pays through the official Go client against a dev node, with replays, an empty account and six payers at once; `make test-indexer-devnode` also drives the indexer, with its facilitator, from free reads to a paid one. A dev node has no Multicall3, which the facilitator reads through, so the tests give it one, in `internal/payments/paymentstest`.
+
+## Claude Code plugin
+
+`plugins/tapehouse` is a [Claude Code plugin](https://code.claude.com/docs/en/plugins): the `tapehouse` MCP server and three skills, `tapehouse` (read a band, a margin position, a liquidation price; prepare a call and have the user sign it), `tapehouse-mandate` (act for an account under a bounded mandate) and `tapehouse-x402` (read the API by paying per request). The repository is its marketplace.
+
+```bash
+claude plugin marketplace add Tapehouse-Labs/TAPEHOUSE
+claude plugin install tapehouse@tapehouse
+```
+
+It asks for one value, the testnet's RPC endpoint, and starts `@tapehouse/mcp` for chain 46630 with no key. `claude plugin validate .` checks the marketplace and `claude plugin validate plugins/tapehouse` the plugin; a test of the MCP package fails when the skill's tool reference and the server's tools differ.
 
 ## Keepers
 
