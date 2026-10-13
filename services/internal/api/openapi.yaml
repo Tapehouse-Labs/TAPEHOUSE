@@ -20,7 +20,9 @@ info:
     stream announces with a `rewind`.
 
     The public tier is limited per client address. The keyed tier, for integrators, takes an `X-API-Key` the operator
-    issued and is limited per key. Over its limit a request gets 429 with `Retry-After`.
+    issued and is limited per key. Over its limit a request gets 429 with `Retry-After`, or, where the operator sells
+    the requests beyond the public allowance, 402 with the price of the request in USDG, which an x402 client pays and
+    repeats the request with, with no key. The stream and this document are not sold.
   license:
     name: MIT OR Apache-2.0
     identifier: MIT OR Apache-2.0
@@ -48,6 +50,7 @@ paths:
                   head: { $ref: "#/components/schemas/Head" }
                   finalized: { type: integer, description: Zero where the chain reports no finalized block. }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "503": { $ref: "#/components/responses/Error" }
   /v1/contracts:
@@ -74,6 +77,7 @@ paths:
                         binding: { type: string, description: The SDKs' binding whose ABI decodes it. }
                         events: { type: array, items: { type: string } }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /v1/events:
     get:
@@ -113,6 +117,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /v1/contracts/{contract}/views/{function}:
     get:
@@ -144,6 +149,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
@@ -174,6 +180,7 @@ paths:
                         health: { $ref: "#/components/schemas/Health" }
         "404": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
@@ -211,6 +218,7 @@ paths:
                         health: { $ref: "#/components/schemas/Health" }
         "404": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
@@ -246,6 +254,7 @@ paths:
                         oraclePaused: { type: boolean }
         "404": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
@@ -283,6 +292,7 @@ paths:
                         price: { type: [string, "null"], pattern: "^[1-9][0-9]*$" }
                         noPrice: { enum: [stale, halted, sequencerNotSettled, null] }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
@@ -312,6 +322,7 @@ paths:
                         market: { type: object, additionalProperties: true }
         "404": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
@@ -356,6 +367,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
@@ -403,6 +415,7 @@ paths:
                               value: { $ref: "#/components/schemas/Integer" }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "503": { $ref: "#/components/responses/Error" }
   /v1/stream:
@@ -462,6 +475,19 @@ components:
             required: [error]
             properties:
               error: { type: string }
+    PaymentRequired:
+      description: >-
+        Over the public tier's rate, where the operator sells the requests beyond it. The `PAYMENT-REQUIRED` header is
+        the base64 of a JSON document of x402's version 2: what a request costs in USDG, and to whom, on which chain.
+        Repeat the request with `PAYMENT-SIGNATURE`, the base64 of the payment signed for it; it is served once the
+        payment settles, and its `PAYMENT-RESPONSE` header is the settlement.
+      headers:
+        PAYMENT-REQUIRED:
+          schema: { type: string }
+      content:
+        application/json:
+          schema:
+            type: object
     RateLimited:
       description: Over the tier's rate.
       headers:

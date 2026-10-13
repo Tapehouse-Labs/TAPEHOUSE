@@ -32,11 +32,25 @@ var (
 	KeyedLimit  = Limit{Rate: 1000, Burst: 2000, Streams: 50}
 )
 
+// Payment sells the requests a client makes beyond the public tier's allowance, one at a time, in place of a key. Wrap
+// is the paywall: it answers a request with the price, and serves it once it is paid. Priced says which requests it
+// sells, and Attempts limits, per client address, the requests that reach it, which cost a verification on the
+// chain whether or not they pay.
+type Payment struct {
+	Wrap     func(http.Handler) http.Handler
+	Priced   func(*http.Request) bool
+	Attempts Limit
+}
+
+// DefaultAttempts is the allowance of payment attempts a client address gets.
+var DefaultAttempts = Limit{Rate: 5, Burst: 10}
+
 // Tiers admits each request to the public tier, limited per client address, or, with an X-API-Key the operator
 // issued, to the keyed tier, limited per key. The operator configures keys by their SHA-256 digests, so no key is
 // stored where the API runs.
 type Tiers struct {
 	Public, Keyed Limit
+	Payment       *Payment
 	keys          map[[32]byte]bool
 	proxies       []netip.Prefix
 	mu            sync.Mutex
@@ -74,6 +88,10 @@ func Digest(key string) string {
 // Middleware refuses an unknown key with 401 and a request over its tier's rate with 429, and lets every origin read,
 // as the API serves public data and takes no credentials but its keys.
 func (t *Tiers) Middleware(next http.Handler) http.Handler {
+	paid := next
+	if t.Payment != nil {
+		paid = t.Payment.Wrap(next)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		c, tier, ok := t.admit(w, r)
@@ -82,12 +100,28 @@ func (t *Tiers) Middleware(next http.Handler) http.Handler {
 		}
 		w.Header().Set("X-RateLimit-Tier", tier)
 		if delay := c.reserve(t.now()); delay > 0 {
+			if tier == "public" && t.Payment != nil && t.Payment.Priced(r) {
+				t.charge(w, r, paid)
+				return
+			}
 			w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(delay.Seconds()))))
 			writeError(w, http.StatusTooManyRequests, "rate limited: retry later, or use a key of the keyed tier")
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// charge hands a request over the public allowance to the paywall, unless its client has made too many attempts.
+func (t *Tiers) charge(w http.ResponseWriter, r *http.Request, paid http.Handler) {
+	attempts := t.client("payment "+t.address(r), t.Payment.Attempts)
+	if delay := attempts.reserve(t.now()); delay > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(delay.Seconds()))))
+		writeError(w, http.StatusTooManyRequests, "rate limited: too many payment attempts")
+		return
+	}
+	w.Header().Set("X-RateLimit-Tier", "pay-per-request")
+	paid.ServeHTTP(w, r)
 }
 
 // OpenStream counts a stream against the client's tier, refusing one over its limit with 429, and returns the release
@@ -164,7 +198,7 @@ func (t *Tiers) address(r *http.Request) string {
 	}
 	remote, err := netip.ParseAddr(host)
 	if err != nil || !t.trusted(remote) {
-		return host
+		return subnet(host)
 	}
 	hops := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
 	for i := len(hops) - 1; i >= 0; i-- {
@@ -173,10 +207,23 @@ func (t *Tiers) address(r *http.Request) string {
 			break
 		}
 		if !t.trusted(hop) {
-			return hop.String()
+			return subnet(hop.String())
 		}
 	}
-	return host
+	return subnet(host)
+}
+
+// subnet is a client's address, or, for an IPv6 address, its /64, which a single subscriber holds whole.
+func subnet(address string) string {
+	parsed, err := netip.ParseAddr(address)
+	if err != nil || parsed.Unmap().Is4() {
+		return address
+	}
+	prefix, err := parsed.Prefix(64)
+	if err != nil {
+		return address
+	}
+	return prefix.String()
 }
 
 func (t *Tiers) trusted(address netip.Addr) bool {

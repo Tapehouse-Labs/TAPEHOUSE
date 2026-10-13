@@ -19,6 +19,10 @@ contract UsdgForkTest is Test {
     bytes32 internal constant PERMIT_TYPEHASH =
         keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
 
+    bytes32 internal constant TRANSFER_WITH_AUTHORIZATION_TYPEHASH = keccak256(
+        "TransferWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)"
+    );
+
     IUSDG internal usdg;
     address internal morpho;
 
@@ -79,6 +83,41 @@ contract UsdgForkTest is Test {
         vm.prank(spender);
         usdg.transferFrom(owner.addr, spender, 400e6);
         assertEq(usdg.balanceOf(spender), 400e6);
+    }
+
+    function test_UsdgTransferAuthorizationMovesFundsOnceAndAReplayIsASilentNoOp() public {
+        Vm.Wallet memory payer = vm.createWallet("payer");
+        address payee = makeAddr("payee");
+        vm.prank(morpho);
+        usdg.transfer(payer.addr, 1_000e6);
+        uint256 deadline = vm.getBlockTimestamp() + 60;
+
+        bytes32 nonce = keccak256("first");
+        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(payer, payee, 1e6, nonce, deadline);
+        assertFalse(usdg.authorizationState(payer.addr, nonce));
+        vm.prank(makeAddr("anyone"));
+        usdg.transferWithAuthorization(payer.addr, payee, 1e6, 0, deadline, nonce, v, r, s);
+        assertEq(usdg.balanceOf(payee), 1e6);
+        assertTrue(usdg.authorizationState(payer.addr, nonce));
+
+        vm.recordLogs();
+        usdg.transferWithAuthorization(payer.addr, payee, 1e6, 0, deadline, nonce, v, r, s);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(usdg.balanceOf(payee), 1e6);
+        assertEq(logs.length, 1);
+        assertEq(logs[0].topics[0], keccak256("AuthorizationAlreadyUsed(address,bytes32)"));
+
+        bytes32 second = keccak256("second");
+        (v, r, s) = _signAuthorization(payer, payee, 2e6, second, deadline);
+        usdg.transferWithAuthorization(payer.addr, payee, 2e6, 0, deadline, second, abi.encodePacked(r, s, v));
+        assertEq(usdg.balanceOf(payee), 3e6);
+
+        bytes32 expired = keccak256("expired");
+        (v, r, s) = _signAuthorization(payer, payee, 1e6, expired, deadline);
+        vm.warp(deadline + 1);
+        vm.expectRevert();
+        usdg.transferWithAuthorization(payer.addr, payee, 1e6, 0, deadline, expired, v, r, s);
+        assertEq(usdg.balanceOf(payee), 3e6);
     }
 
     function test_UsdgPauseStopsTransfersApprovalsAndPermits() public {
@@ -147,6 +186,19 @@ contract UsdgForkTest is Test {
         vm.stopPrank();
         assertEq(usdg.balanceOf(holder), 0);
         assertEq(usdg.totalSupply(), supply - 1_000e6);
+    }
+
+    function _signAuthorization(
+        Vm.Wallet memory payer,
+        address payee,
+        uint256 value,
+        bytes32 nonce,
+        uint256 validBefore
+    ) internal view returns (uint8, bytes32, bytes32) {
+        bytes32 structHash = keccak256(
+            abi.encode(TRANSFER_WITH_AUTHORIZATION_TYPEHASH, payer.addr, payee, value, 0, validBefore, nonce)
+        );
+        return vm.sign(payer, keccak256(abi.encodePacked("\x19\x01", usdg.DOMAIN_SEPARATOR(), structHash)));
     }
 
     function _signPermit(Vm.Wallet memory owner, address spender, uint256 value, uint256 deadline)

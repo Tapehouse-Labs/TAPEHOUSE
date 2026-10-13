@@ -60,7 +60,15 @@ var loadKeys = make([]string, 8)
 
 func serve(t *testing.T, db string, digests string) *served {
 	t.Helper()
+	return serveWith(t, db, digests, nil)
+}
+
+func serveWith(t *testing.T, db string, digests string, extra map[string]string) *served {
+	t.Helper()
 	cfg, err := app.ConfigFromEnv(func(name string) string {
+		if value, ok := extra[name]; ok {
+			return value
+		}
 		switch name {
 		case "TAPEHOUSE_DB":
 			return db

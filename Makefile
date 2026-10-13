@@ -69,7 +69,7 @@ export ROBINHOOD_RPC_URL ROBINHOOD_TESTNET_RPC_URL ARBITRUM_RPC_URL ROBINHOOD_LO
 	check-toolchains check-node check-foundry check-slither check-reuse check-stylus check-docker submodules \
 	check-go check-golangci-lint check-rust check-uv \
 	build-apps test-apps lint-apps build-services test-services lint-services build-crates test-crates lint-crates \
-	bindings check-bindings test-sdks-devnode test-mcp-devnode test-app-devnode test-indexer-devnode run-indexer backtest test-backtest-devnode test-keeper-devnode run-keeper test-bidder-devnode run-bidder test-alerts-devnode run-alerts calibrate calibrate-snapshot test-calibrate-devnode \
+	bindings check-bindings test-sdks-devnode test-mcp-devnode test-app-devnode test-indexer-devnode test-payments-devnode run-indexer backtest test-backtest-devnode test-keeper-devnode run-keeper test-bidder-devnode run-bidder test-alerts-devnode run-alerts calibrate calibrate-snapshot test-calibrate-devnode \
 	build-contracts test-contracts lint-contracts coverage-contracts gas-contracts snapshot-contracts \
 	build-stylus test-stylus lint-stylus gas-stylus snapshot-stylus check-activation deploy-stylus clone-stylus verify-stylus \
 	devnode devnode-stop deploy-stylus-devnode test-stylus-devnode gas-stylus-devnode snapshot-stylus-devnode gas-table compare-margin \
@@ -486,7 +486,14 @@ test-indexer-devnode: export PRIVATE_KEY := $(DEVNODE_KEY)
 test-indexer-devnode: export TAPEHOUSE_RPC_URL := $(DEVNODE_RPC_URL)
 test-indexer-devnode: export TAPEHOUSE_DEPLOYMENTS := $(abspath stylus/target/devnode-registry.json)
 test-indexer-devnode: check-go
-	cd services && go test -tags devnode -count=1 -v -run TestTheIndexerServesTheDevNodesEventsAndViews ./internal/app/
+	cd services && go test -tags devnode -count=1 -v -run 'TestTheIndexerServesTheDevNodesEventsAndViews|TestTheIndexerSellsTheReadsBeyondThePublicAllowanceInUSDG' ./internal/app/
+
+test-payments-devnode: export PRIVATE_KEY := $(DEVNODE_KEY)
+test-payments-devnode: export TAPEHOUSE_RPC_URL := $(DEVNODE_RPC_URL)
+test-payments-devnode: check-go check-foundry submodules
+	usdg=$$(cd contracts && forge create test/devnode/StubUsdg.sol:StubUsdg --rpc-url $(DEVNODE_RPC_URL) \
+		--private-key $(DEVNODE_KEY) --broadcast --json | jq -r .deployedTo) && \
+		cd services && TAPEHOUSE_USDG=$$usdg go test -tags devnode -count=1 -v ./internal/payments/
 
 test-keeper-devnode: export PRIVATE_KEY := $(DEVNODE_KEY)
 test-keeper-devnode: export TAPEHOUSE_RPC_URL := $(DEVNODE_RPC_URL)

@@ -14,7 +14,9 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
+	"path"
 	"strconv"
+	"strings"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/v2"
@@ -98,6 +100,43 @@ var Routes = []Route{
 	{"GET", "/v1/redstone/payload", "getRedStonePayload", (*Server).redstonePayload},
 	{"GET", "/v1/stream", "stream", (*Server).stream},
 	{"GET", "/v1/openapi.yaml", "getOpenAPI", (*Server).openapi},
+}
+
+// unpriced are the operations a payment does not buy: the stream, which its tier limits by the streams a client holds
+// open, and the specification.
+var unpriced = map[string]bool{"stream": true, "getOpenAPI": true}
+
+var pricedMux = func() *http.ServeMux {
+	mux := http.NewServeMux()
+	for _, route := range Routes {
+		if !unpriced[route.OperationID] {
+			mux.HandleFunc(route.Method+" "+route.Path, func(http.ResponseWriter, *http.Request) {})
+		}
+	}
+	return mux
+}()
+
+// Priced returns the routes that a payment buys, as the x402 middleware reads a route: a method and a path, with each
+// of the path's parameters in brackets.
+func Priced() []string {
+	var patterns []string
+	for _, route := range Routes {
+		if unpriced[route.OperationID] {
+			continue
+		}
+		path := strings.NewReplacer("{", "[", "}", "]").Replace(route.Path)
+		patterns = append(patterns, route.Method+" "+path)
+	}
+	return patterns
+}
+
+// IsPriced reports whether r is a request that a payment buys: a GET of one of the routes, by the path the mux serves.
+func IsPriced(r *http.Request) bool {
+	if r.Method != http.MethodGet || path.Clean(r.URL.Path) != r.URL.Path {
+		return false
+	}
+	_, pattern := pricedMux.Handler(r)
+	return pattern != ""
 }
 
 // Handler returns the API's handler, behind the tiers' keys and rate limits.

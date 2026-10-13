@@ -748,3 +748,114 @@ func TestStreamsAreCountedPerTier(t *testing.T) {
 		t.Fatalf("a stream of an unknown contract: %v", err)
 	}
 }
+
+func TestRequestsOverThePublicAllowanceAreSoldWhereAPaymentIsSet(t *testing.T) {
+	f := newFixture(t)
+	f.seed()
+	tiers, err := api.NewTiers([]string{api.Digest("a key")}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var charged atomic.Int64
+	tiers.Payment = &api.Payment{
+		Wrap: func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				charged.Add(1)
+				if r.Header.Get("PAYMENT-SIGNATURE") == "" {
+					w.WriteHeader(http.StatusPaymentRequired)
+					return
+				}
+				next.ServeHTTP(w, r)
+			})
+		},
+		Priced:   api.IsPriced,
+		Attempts: api.Limit{Rate: 0.001, Burst: 3},
+	}
+	server := api.New(api.Config{Deployments: deployments(t), Catalog: f.catalog, Store: f.store, Index: index{finalized: 20},
+		Backend: f.node, Relay: relay{}, Hub: api.NewHub(), Tiers: tiers, Log: quiet})
+	handler := server.Handler()
+	request := func(path string, header ...string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodGet, path, nil)
+		for i := 0; i < len(header); i += 2 {
+			r.Header.Set(header[i], header[i+1])
+		}
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, r)
+		return recorder
+	}
+	for range api.PublicLimit.Burst {
+		if recorder := request("/v1/status"); recorder.Code != http.StatusOK || charged.Load() != 0 {
+			t.Fatalf("a request within the public allowance: %d, %d charged", recorder.Code, charged.Load())
+		}
+	}
+	if recorder := request("/v1/status"); recorder.Code != http.StatusPaymentRequired ||
+		recorder.Header().Get("X-RateLimit-Tier") != "pay-per-request" {
+		t.Fatalf("a request over the allowance, unpaid: %d %v", recorder.Code, recorder.Header())
+	}
+	if recorder := request("/v1/status", "PAYMENT-SIGNATURE", "paid"); recorder.Code != http.StatusOK {
+		t.Fatalf("a request over the allowance, paid: %d", recorder.Code)
+	}
+	if recorder := request("/v1/contracts/Band/views/halt?args=x"); recorder.Code == http.StatusTooManyRequests {
+		t.Fatal("a parameterised read was refused, not sold")
+	}
+	if recorder := request("/v1/stream"); recorder.Code != http.StatusTooManyRequests {
+		t.Fatalf("the stream, which a payment does not buy, over the allowance: %d", recorder.Code)
+	}
+	if recorder := request("/v1/openapi.yaml"); recorder.Code != http.StatusTooManyRequests {
+		t.Fatalf("the specification over the allowance: %d", recorder.Code)
+	}
+	before := charged.Load()
+	if recorder := request("/v1/status"); recorder.Code != http.StatusTooManyRequests || recorder.Header().Get("Retry-After") == "" ||
+		charged.Load() != before {
+		t.Fatalf("a fourth attempt: %d %v", recorder.Code, recorder.Header())
+	}
+	if recorder := request("/v1/status", "X-API-Key", "a key"); recorder.Code != http.StatusOK {
+		t.Fatalf("the keyed tier: %d", recorder.Code)
+	}
+}
+
+func TestOnlyAGetOfACleanPathIsSold(t *testing.T) {
+	for _, tc := range []struct {
+		method, path string
+		sold         bool
+	}{
+		{http.MethodGet, "/v1/status", true},
+		{http.MethodGet, "/v1/contracts/Band/views/halt", true},
+		{http.MethodHead, "/v1/status", false},
+		{http.MethodGet, "/v1//status", false},
+		{http.MethodGet, "/v1/stream", false},
+		{http.MethodGet, "/v1/openapi.yaml", false},
+		{http.MethodGet, "/v1/unknown", false},
+	} {
+		if got := api.IsPriced(httptest.NewRequest(tc.method, tc.path, nil)); got != tc.sold {
+			t.Errorf("%s %s sold: %v", tc.method, tc.path, got)
+		}
+	}
+}
+
+func TestAnIPv6SubscriberHoldsOneAllowanceForItsWholeSubnet(t *testing.T) {
+	tiers, err := api.NewTiers(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := tiers.Middleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	status := func(remote string) int {
+		r := httptest.NewRequest(http.MethodGet, "/v1/status", nil)
+		r.RemoteAddr = remote
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, r)
+		return recorder.Code
+	}
+	limited := false
+	for i := range 3 * api.PublicLimit.Burst {
+		if status(fmt.Sprintf("[2001:db8:1:2::%x]:443", i+1)) == http.StatusTooManyRequests {
+			limited = true
+		}
+	}
+	if !limited {
+		t.Fatal("addresses of one /64 each had an allowance")
+	}
+	if status("[2001:db8:1:3::1]:443") != http.StatusOK || status("192.0.2.9:443") != http.StatusOK {
+		t.Fatal("another subnet, or an IPv4 client, was limited with it")
+	}
+}

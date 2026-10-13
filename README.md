@@ -223,6 +223,7 @@ Each deployment below verifies from the commit that added its row: `git log --re
 | Keepers | `services/cmd/keeper` | Prices, halts and the weekend's routine work |
 | Reference bidder | `services/cmd/bidder` | A bidder for the reopening auction, as an example for others |
 | Sponsor | `services/cmd/sponsor` | Signs the user operations the paymaster pays for |
+| x402 facilitator | `services/cmd/facilitator` | Settles in USDG the payments of clients that read the API beyond its free allowance, with no key |
 | Alerts | `services/cmd/alerts` | Warns holders before a weekend and before a liquidation |
 | Backtest and calibration | `services/cmd/backtest`, `services/cmd/calibrate` | Replays history and proposes parameters |
 
@@ -271,7 +272,7 @@ make test-app-devnode          # the app, driven in Chromium against that deploy
 - `deployments` — contract addresses per chain, one JSON file per chain ID
 - `packages/sdk` — the TypeScript SDK (viem)
 - `packages/mcp` — the MCP server for AI agents, on the TypeScript SDK
-- `services` — the Go module: the Go SDK in `services/sdk` (go-ethereum), the indexer and public API in `services/cmd/indexer`, the backtester in `services/cmd/backtest`, a reference bidder in `services/cmd/bidder`, the liquidation-risk alerts in `services/cmd/alerts`, the parameter calibrator in `services/cmd/calibrate` and the sponsor service in `services/cmd/sponsor`
+- `services` — the Go module: the Go SDK in `services/sdk` (go-ethereum), the indexer and public API in `services/cmd/indexer`, the backtester in `services/cmd/backtest`, a reference bidder in `services/cmd/bidder`, the liquidation-risk alerts in `services/cmd/alerts`, the parameter calibrator in `services/cmd/calibrate`, the sponsor service in `services/cmd/sponsor` and the x402 facilitator in `services/cmd/facilitator`
 - `crates` — Rust crates: the Rust SDK in `crates/sdk` (alloy)
 
 The [reference](docs/REFERENCE.md) documents each component in turn.

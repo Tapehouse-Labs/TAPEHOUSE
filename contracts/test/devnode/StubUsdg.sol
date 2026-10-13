@@ -3,15 +3,19 @@ pragma solidity 0.8.37;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
+import {ERC3009} from "@openzeppelin/contracts/token/ERC20/extensions/draft-ERC3009.sol";
 
-/// @notice USDG as the conformance tests pin it: six decimals, EIP-2612 permits under "Global Dollar" version 1,
+/// @notice USDG as the conformance tests pin it: six decimals, EIP-2612 permits and EIP-3009 transfer authorizations
+/// under "Global Dollar" version 1,
 /// a pause that stops transfers, approvals and permits with `ContractPaused()`, and frozen addresses that
-/// neither send nor receive (`AddressFrozen()`) and whose balance the operator can wipe. Anyone may mint. Test code
-/// only.
-contract StubUsdg is ERC20Permit {
+/// neither send nor receive (`AddressFrozen()`) and whose balance the operator can wipe. A transfer authorization used
+/// before is a no-op that emits `AuthorizationAlreadyUsed`, not a revert. Anyone may mint. Test code only.
+contract StubUsdg is ERC20Permit, ERC3009 {
     address public immutable operator;
     bool public paused;
     mapping(address => bool) public isFrozen;
+
+    event AuthorizationAlreadyUsed(address, bytes32);
 
     error ContractPaused();
     error AddressFrozen();
@@ -62,6 +66,21 @@ contract StubUsdg is ERC20Permit {
     {
         if (paused) revert ContractPaused();
         super.permit(owner, spender, value, deadline, v, r, s);
+    }
+
+    function _transferWithAuthorization(
+        address from,
+        address to,
+        uint256 value,
+        uint256 validAfter,
+        uint256 validBefore,
+        bytes32 nonce
+    ) internal override {
+        if (authorizationState(from, nonce)) {
+            emit AuthorizationAlreadyUsed(from, nonce);
+            return;
+        }
+        super._transferWithAuthorization(from, to, value, validAfter, validBefore, nonce);
     }
 
     function _update(address from, address to, uint256 value) internal override {

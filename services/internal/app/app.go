@@ -23,10 +23,12 @@ import (
 	"github.com/tapehouse/tapehouse/services/internal/api"
 	"github.com/tapehouse/tapehouse/services/internal/catalog"
 	"github.com/tapehouse/tapehouse/services/internal/indexer"
+	"github.com/tapehouse/tapehouse/services/internal/payments"
 	"github.com/tapehouse/tapehouse/services/internal/redact"
 	"github.com/tapehouse/tapehouse/services/internal/redstone"
 	"github.com/tapehouse/tapehouse/services/internal/store"
 	"github.com/tapehouse/tapehouse/services/sdk"
+	x402 "github.com/x402-foundation/x402/go/v2"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
@@ -53,6 +55,22 @@ type Config struct {
 	// RPCRate is the most requests a second the indexer and the API send the RPC together, 20 unless
 	// TAPEHOUSE_RPC_RATE names another: providers refuse a client over its plan's rate.
 	RPCRate float64
+	// Payments, where set, sells the requests beyond the public allowance one at a time, in USDG, instead of a key.
+	Payments *Payments
+}
+
+// Payments is how the API is paid per request, over x402.
+type Payments struct {
+	// Facilitator is the base URL of the x402 facilitator that verifies and settles the payments:
+	// TAPEHOUSE_X402_FACILITATOR.
+	Facilitator string
+	// Token is the facilitator's bearer token: TAPEHOUSE_X402_FACILITATOR_TOKEN.
+	Token string
+	// PayTo receives the payments: TAPEHOUSE_X402_PAY_TO.
+	PayTo common.Address
+	// Price is what a request costs, in USDG's atomic units, 1000 (0.001 USDG) unless TAPEHOUSE_X402_PRICE names
+	// another.
+	Price *big.Int
 }
 
 // ConfigFromEnv reads the configuration from the environment.
@@ -94,7 +112,43 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 		}
 		cfg.Proxies = append(cfg.Proxies, prefix)
 	}
+	if facilitator := getenv("TAPEHOUSE_X402_FACILITATOR"); facilitator != "" {
+		payTo := getenv("TAPEHOUSE_X402_PAY_TO")
+		if getenv("TAPEHOUSE_X402_FACILITATOR_TOKEN") == "" {
+			return cfg, errors.New("TAPEHOUSE_X402_FACILITATOR_TOKEN is required with the facilitator")
+		}
+		if !common.IsHexAddress(payTo) {
+			return cfg, errors.New("TAPEHOUSE_X402_PAY_TO must be the address that receives the payments")
+		}
+		cfg.Payments = &Payments{Facilitator: facilitator, Token: getenv("TAPEHOUSE_X402_FACILITATOR_TOKEN"), PayTo: common.HexToAddress(payTo), Price: big.NewInt(1000)}
+		if text := getenv("TAPEHOUSE_X402_PRICE"); text != "" {
+			price, ok := new(big.Int).SetString(text, 10)
+			if !ok || price.Sign() <= 0 {
+				return cfg, errors.New("TAPEHOUSE_X402_PRICE must be a positive number of USDG's atomic units")
+			}
+			cfg.Payments.Price = price
+		}
+	}
 	return cfg, nil
+}
+
+// sell is the tiers' payment: the paywall at the price in USDG, which the facilitator settles.
+func sell(ctx context.Context, chain *throttled, deployments *sdk.Deployments, pay *Payments) (*api.Payment, error) {
+	usdg, ok := deployments.Tokens["USDG"]
+	if !ok {
+		return nil, errors.New("the registry has no USDG to be paid in")
+	}
+	name, version, err := payments.TokenDomain(ctx, chain, usdg)
+	if err != nil {
+		return nil, err
+	}
+	wrap, err := payments.Paywall(payments.Terms{Network: x402.Network(fmt.Sprintf("eip155:%d", deployments.ChainID)),
+		Asset: usdg, Name: name, Version: version, PayTo: pay.PayTo, Price: pay.Price, Facilitator: pay.Facilitator, Token: pay.Token,
+		Patterns: api.Priced()})
+	if err != nil {
+		return nil, err
+	}
+	return &api.Payment{Wrap: wrap, Priced: api.IsPriced, Attempts: api.DefaultAttempts}, nil
 }
 
 // Run indexes the registry's chain and serves the API until ctx ends. ready, where set, is called with the API's
@@ -126,6 +180,11 @@ func run(ctx context.Context, cfg Config, log *slog.Logger, ready func(net.Addr)
 	}
 	defer dialed.Close()
 	client := &throttled{dialed, rate.NewLimiter(rate.Limit(cfg.RPCRate), 1)}
+	if cfg.Payments != nil {
+		if tiers.Payment, err = sell(ctx, client, deployments, cfg.Payments); err != nil {
+			return err
+		}
+	}
 	if cfg.DB == "" {
 		cfg.DB = fmt.Sprintf("tapehouse-%d.db", deployments.ChainID)
 	}
@@ -142,6 +201,10 @@ func run(ctx context.Context, cfg Config, log *slog.Logger, ready func(net.Addr)
 	server := api.New(api.Config{Deployments: deployments, Catalog: contracts, Store: index, Index: follower,
 		Backend: client, Relay: redstone.New(cfg.Gateways, &http.Client{Timeout: 10 * time.Second}), Hub: hub,
 		Tiers: tiers, Log: log})
+	if cfg.Payments != nil {
+		log.Info("selling the requests beyond the public allowance", "price", cfg.Payments.Price.String(),
+			"payTo", cfg.Payments.PayTo.Hex(), "chainId", deployments.ChainID)
+	}
 	listener, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return err

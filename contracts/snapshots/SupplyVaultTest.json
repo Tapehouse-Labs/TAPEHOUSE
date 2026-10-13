@@ -1,7 +1,7 @@
 {
-  "borrow": "78476",
-  "deposit": "145138",
-  "depositWithPermit": "127821",
+  "borrow": "78565",
+  "deposit": "145116",
+  "depositWithPermit": "127813",
   "repay": "71679",
-  "withdraw": "104864"
+  "withdraw": "104931"
 }
