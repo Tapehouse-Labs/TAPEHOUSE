@@ -76,6 +76,8 @@ On the testnet's two assets it compares 32 calls (the views, scenarios, the dige
 | Reopening auction | Deployed; its phases need a real reopening | Step 5. Tested with `vm.warp` in the contract suite, and end to end in the app against a node front that states each phase (`apps/app/e2e/auction.spec.ts`) |
 | Sponsor paymaster, bundler, smart accounts | Live | The app: a wallet with no ether creates its account and deposits for free |
 | Indexer and public API | Live | <https://indexer-production-f5dc.up.railway.app/v1/status> |
+| Pay per request over x402 | Live: beyond the free allowance a read is answered 402 and paid in USDG, with no key. Settled on the testnet in [`0x8e6651bc…df9345`](https://explorer.testnet.chain.robinhood.com/tx/0x8e6651bc96582ef77329e3a209982d15a2c54c8b6dcefedbb562709d26df9345) by Tapehouse's own facilitator, since the chain has none | `curl -si` the API over 10 requests a second for the 402; [the reference](docs/REFERENCE.md#paying-per-request) |
+| Claude Code plugin | In the repository: the MCP server and three skills; `@tapehouse/mcp` is not on npm yet, so the plugin cannot start until it is | `claude plugin validate plugins/tapehouse` |
 | SDKs, MCP server | The TypeScript SDK is published as `@tapehouse/sdk`; the Rust and Go SDKs and the MCP server are in the repository | `npm view @tapehouse/sdk` |
 | **Robinhood Chain mainnet** | **Not live** | Arbitrum paused new Stylus activations on 2 October 2026, which blocks deploying the band and margin programs on any network until it lifts |
 | Third-party audit | **None yet** | The reference's slither run, the fork tests and the reproducible builds are what stands in for it |
@@ -91,12 +93,12 @@ On the testnet's two assets it compares 32 calls (the views, scenarios, the dige
 
 | Suite | Tests |
 |---|---|
-| Solidity contracts, with invariants and fork tests (`forge test`) | 552 |
+| Solidity contracts, with invariants and fork tests (`forge test`) | 566 |
 | Uniswap deployment for the testnet (`forge test`) | 7 |
 | Stylus programs (`cargo test`) | 208 |
 | Rust SDK | 33 |
-| Go: services and SDK | 295 |
-| TypeScript: SDK, MCP server, app and website | 273 |
+| Go: services and SDK | 316 |
+| TypeScript: SDK, MCP server, app and website | 285 |
 
 The app's end-to-end tests (`make test-app-devnode`, desktop and phone Chromium, with axe's WCAG 2.2 AA checks) and the services' dev-node tests run against a local Nitro node. One fork test needs a logs RPC that serves wide ranges, and fails without it.
 
