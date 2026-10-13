@@ -26,6 +26,11 @@
     "Blocked": "O emissor bloqueou este endereço de movimentar o token.",
     "IsPaused": "O emissor pausou as transferências do token.",
     "AddressFrozen": "O emissor do USDG congelou este endereço.",
+    "MandateExpired": "O mandato que {account} deu a este agente terminou em {time} UTC.",
+    "MandateDebtLimit": "Tomar tanto emprestado levaria a dívida da posição a {debt} USDG, acima dos {max} USDG que seu mandato permite.",
+    "MandateLeverageLimit": "Isso levaria a alavancagem da posição a {leverage}×, acima dos {max}× que seu mandato permite.",
+    "MandateReceiver": "Os empréstimos e saques de um agente só podem ir para a conta que lhe deu o mandato, não para {receiver}.",
+    "InvalidMandate": "Um mandato deve terminar no futuro e permitir uma alavancagem de pelo menos 1×.",
     "ZeroAmount": "Digite um valor maior que zero."
   },
   "unknownRevert": "{name}({args})",

@@ -59,6 +59,12 @@ export function formatters(locale: Locale) {
       return `${value / 100n}${fraction ? `${decimal}${fraction}` : ""}%`;
     },
 
+    /** Leverage in basis points as a multiple with one decimal, rounded half up and without a trailing zero: `2.5`. */
+    multiple: (bps: bigint | number): string => {
+      const tenths = (BigInt(bps) + 500n) / 1_000n;
+      return `${tenths / 10n}${tenths % 10n ? `${decimal}${tenths % 10n}` : ""}`;
+    },
+
     /** A moment as its day, month and time in UTC, without the zone. */
     utc: (date: Date): string => utc.format(date),
 

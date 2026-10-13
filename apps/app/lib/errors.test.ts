@@ -15,6 +15,8 @@ import { formatters } from "./format";
 import { MessageError, msg } from "./messages";
 import { say } from "./say";
 
+const alice = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+const bob = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
 const tell = (error: unknown, locale: "en" | "es" | "pt" = "en") => say(explain(formatters(locale), error), locale);
 
 function reverted(data: `0x${string}`) {
@@ -58,6 +60,19 @@ describe("explain", () => {
     expect(say("AssetRecovering", ["0x4e56444100000000000000000000000000000000000000000000000000000000", 1_790_001_800n])).toBe(
       "NVDA's band was halted or had a multiplier change pending less than half an hour ago, so nothing new can be borrowed or withdrawn against it until 21 Sept, 14:43 UTC.",
     );
+    expect(say("MandateExpired", [alice, bob, 1_790_001_800n])).toBe(
+      "The mandate 0x7099…79C8 gave this agent ended at 21 Sept, 14:43 UTC.",
+    );
+    expect(say("MandateDebtLimit", [6_000_000n, 5_000_000n])).toBe(
+      "Borrowing that much would take the position's debt to 6.00 USDG, over the 5.00 USDG its mandate allows.",
+    );
+    expect(say("MandateLeverageLimit", [30_000n, 20_000n])).toBe(
+      "That would take the position's leverage to 3×, over the 2× its mandate allows.",
+    );
+    expect(say("MandateReceiver", [bob, alice])).toBe(
+      "An agent's loans and withdrawals may go only to the account that gave it its mandate, not to 0x3C44…93BC.",
+    );
+    expect(say("InvalidMandate", [])).toBe("A mandate must end in the future and allow a leverage of at least 1×.");
     expect(say("BasketFrozen", ["0x152c42eda481651B6053f7f59bf617046c960EAB"])).toBe(
       "A basket the position holds is frozen: it backs no new loan or withdrawal until it moves again.",
     );

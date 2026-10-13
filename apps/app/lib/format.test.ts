@@ -45,6 +45,18 @@ describe("shortAddress", () => {
   });
 });
 
+describe("multiple", () => {
+  test("renders leverage in basis points with one decimal, rounded half up, without a trailing zero", () => {
+    expect(en.multiple(10_000n)).toBe("1");
+    expect(en.multiple(25_000)).toBe("2.5");
+    expect(en.multiple(20_449n)).toBe("2");
+    expect(en.multiple(20_500n)).toBe("2.1");
+    expect(en.multiple(30_000n)).toBe("3");
+    expect(es.multiple(25_000n)).toBe("2,5");
+    expect(pt.multiple(12_500n)).toBe("1,3");
+  });
+});
+
 describe("usd", () => {
   test("renders 18-decimal USD as dollars and cents, rounded half up", () => {
     expect(en.usd(9_812_404_999_999_999_999_999n)).toBe("$9,812.40");

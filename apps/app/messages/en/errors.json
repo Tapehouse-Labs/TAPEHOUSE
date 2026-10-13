@@ -26,6 +26,11 @@
     "Blocked": "The issuer has blocked this address from moving the token.",
     "IsPaused": "The issuer has paused the token's transfers.",
     "AddressFrozen": "USDG's issuer has frozen this address.",
+    "MandateExpired": "The mandate {account} gave this agent ended at {time} UTC.",
+    "MandateDebtLimit": "Borrowing that much would take the position's debt to {debt} USDG, over the {max} USDG its mandate allows.",
+    "MandateLeverageLimit": "That would take the position's leverage to {leverage}×, over the {max}× its mandate allows.",
+    "MandateReceiver": "An agent's loans and withdrawals may go only to the account that gave it its mandate, not to {receiver}.",
+    "InvalidMandate": "A mandate must end in the future and allow a leverage of at least 1×.",
     "ZeroAmount": "Enter an amount above zero."
   },
   "unknownRevert": "{name}({args})",

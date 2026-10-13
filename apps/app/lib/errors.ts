@@ -24,6 +24,20 @@ const WORDS: Record<string, (f: Formatters, args: readonly unknown[]) => Msg> = 
   AssetHalted: (_, [symbol]) => msg("errors.revert.AssetHalted", { asset: asset(symbol) }),
   AssetRecovering: (f, [symbol, until]) =>
     msg("errors.revert.AssetRecovering", { asset: asset(symbol), until: f.utc(new Date(Number(until) * 1000)) }),
+  MandateExpired: (f, [account, , expiresAt]) =>
+    msg("errors.revert.MandateExpired", {
+      account: f.shortAddress(account as string),
+      time: f.utc(new Date(Number(expiresAt) * 1000)),
+    }),
+  MandateDebtLimit: (f, [debt, max]) =>
+    msg("errors.revert.MandateDebtLimit", { debt: f.usdg(debt as bigint), max: f.usdg(max as bigint) }),
+  MandateLeverageLimit: (f, [leverage, max]) =>
+    msg("errors.revert.MandateLeverageLimit", {
+      leverage: f.multiple(leverage as bigint),
+      max: f.multiple(max as bigint),
+    }),
+  MandateReceiver: (f, [receiver]) => msg("errors.revert.MandateReceiver", { receiver: f.shortAddress(receiver as string) }),
+  InvalidMandate: () => msg("errors.revert.InvalidMandate"),
   OutOfReach: (f, args) =>
     args.length === 3
       ? msg("errors.revert.OutOfReachOfAsset", {
