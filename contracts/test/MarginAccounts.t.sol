@@ -419,6 +419,124 @@ contract MarginAccountsTest is Test {
         assertEq(vm.getRecordedLogs().length, 1);
     }
 
+    function _mandate(uint128 maxDebt, uint32 maxLeverage) internal returns (address agent, uint64 expiresAt) {
+        agent = makeAddr("agent");
+        expiresAt = uint64(vm.getBlockTimestamp() + 1 days);
+        vm.prank(alice);
+        accounts.setMandate(agent, expiresAt, maxDebt, maxLeverage);
+    }
+
+    function test_AnAgentWithAMandateBorrowsToItsAccountWithinItsDebtAndLeverage() public {
+        _deposit(alice, CROSS, address(nvda), 10 * SHARE);
+        (address agent,) = _mandate(500 * uint128(USDG), 20_000);
+        vm.prank(agent);
+        accounts.borrow(CROSS, 400 * USDG, alice, alice);
+        assertEq(accounts.debt(alice, CROSS), 400 * USDG);
+        assertEq(usdg.balanceOf(alice), 400 * USDG);
+        vm.expectPartialRevert(MarginAccounts.MandateDebtLimit.selector);
+        vm.prank(agent);
+        accounts.borrow(CROSS, 101 * USDG, alice, alice);
+        vm.prank(agent);
+        accounts.borrow(CROSS, 99 * USDG, alice, alice);
+    }
+
+    function test_AMandateBoundsLeverageAsAFractionOfEquity() public {
+        _deposit(alice, CROSS, address(nvda), 10 * SHARE);
+        (address agent,) = _mandate(1_000 * uint128(USDG), 12_500);
+        vm.expectPartialRevert(MarginAccounts.MandateLeverageLimit.selector);
+        vm.prank(agent);
+        accounts.borrow(CROSS, 500 * USDG, alice, alice);
+        vm.prank(agent);
+        accounts.borrow(CROSS, 400 * USDG, alice, alice);
+    }
+
+    function test_AnAgentsLoansAndWithdrawalsGoToItsAccountAndNowhereElse() public {
+        _deposit(alice, CROSS, address(nvda), 10 * SHARE);
+        (address agent,) = _mandate(500 * uint128(USDG), 20_000);
+        vm.expectRevert(abi.encodeWithSelector(MarginAccounts.MandateReceiver.selector, agent, alice));
+        vm.prank(agent);
+        accounts.borrow(CROSS, 100 * USDG, alice, agent);
+        vm.expectRevert(abi.encodeWithSelector(MarginAccounts.MandateReceiver.selector, agent, alice));
+        vm.prank(agent);
+        accounts.withdraw(CROSS, address(nvda), 1 * SHARE, alice, agent);
+        vm.prank(agent);
+        accounts.withdraw(CROSS, address(nvda), 1 * SHARE, alice, alice);
+        assertEq(nvda.balanceOf(alice), 1 * SHARE);
+    }
+
+    function test_AMandateEndsAtItsExpiryAndAnAgentWithoutOneIsNotAuthorized() public {
+        _deposit(alice, CROSS, address(nvda), 10 * SHARE);
+        (address agent, uint64 expiresAt) = _mandate(500 * uint128(USDG), 20_000);
+        vm.expectRevert(abi.encodeWithSelector(MarginAccounts.Unauthorized.selector, bob, alice));
+        vm.prank(bob);
+        accounts.borrow(CROSS, 1 * USDG, alice, alice);
+        vm.warp(expiresAt);
+        vm.expectRevert(abi.encodeWithSelector(MarginAccounts.MandateExpired.selector, alice, agent, expiresAt));
+        vm.prank(agent);
+        accounts.borrow(CROSS, 1 * USDG, alice, alice);
+        _borrow(alice, CROSS, 1 * USDG);
+    }
+
+    function test_AnAgentOverItsLimitsCanStillAddCollateral() public {
+        _deposit(alice, CROSS, address(nvda), 10 * SHARE);
+        (address agent,) = _mandate(1_000 * uint128(USDG), 12_500);
+        vm.prank(agent);
+        accounts.borrow(CROSS, 400 * USDG, alice, alice);
+        _quote(NVDA, 3, 150e8);
+        (MarginAccounts.MandateReason reason,) = accounts.mandateStatus(alice, agent, CROSS);
+        assertEq(uint8(reason), uint8(MarginAccounts.MandateReason.LeverageLimit));
+        nvda.mint(agent, 1 * SHARE);
+        vm.startPrank(agent);
+        nvda.approve(address(accounts), 1 * SHARE);
+        accounts.deposit(CROSS, address(nvda), 1 * SHARE, alice);
+        vm.stopPrank();
+        assertEq(accounts.collateral(alice, CROSS, address(nvda)), 11 * SHARE);
+    }
+
+    function test_AFullyAuthorizedAddressIsNotBoundByAMandate() public {
+        _deposit(alice, CROSS, address(nvda), 10 * SHARE);
+        (address agent,) = _mandate(1 * uint128(USDG), 10_000);
+        vm.prank(alice);
+        accounts.setAuthorization(agent, true);
+        vm.prank(agent);
+        accounts.borrow(CROSS, 100 * USDG, alice, agent);
+        assertEq(usdg.balanceOf(agent), 100 * USDG);
+    }
+
+    function test_AMandateIsSetAndRevokedByItsAccountAndStatesWhyItStops() public {
+        address agent = makeAddr("agent");
+        _deposit(alice, CROSS, address(nvda), 10 * SHARE);
+        (MarginAccounts.MandateReason reason, uint256 room) = accounts.mandateStatus(alice, agent, CROSS);
+        assertEq(uint8(reason), uint8(MarginAccounts.MandateReason.None));
+        assertEq(room, 0);
+        uint64 expiresAt = uint64(vm.getBlockTimestamp() + 1 days);
+        vm.expectEmit(address(accounts));
+        emit MarginAccounts.MandateSet(alice, agent, expiresAt, 500 * uint128(USDG), 20_000);
+        vm.prank(alice);
+        accounts.setMandate(agent, expiresAt, 500 * uint128(USDG), 20_000);
+        (reason, room) = accounts.mandateStatus(alice, agent, CROSS);
+        assertEq(uint8(reason), uint8(MarginAccounts.MandateReason.Ok));
+        assertEq(room, 500 * USDG);
+        vm.prank(agent);
+        accounts.borrow(CROSS, 500 * USDG, alice, alice);
+        (reason, room) = accounts.mandateStatus(alice, agent, CROSS);
+        assertEq(uint8(reason), uint8(MarginAccounts.MandateReason.DebtLimit));
+        assertEq(room, 0);
+        vm.warp(expiresAt);
+        (reason,) = accounts.mandateStatus(alice, agent, CROSS);
+        assertEq(uint8(reason), uint8(MarginAccounts.MandateReason.Expired));
+        vm.expectRevert(abi.encodeWithSelector(MarginAccounts.InvalidMandate.selector));
+        vm.prank(alice);
+        accounts.setMandate(agent, uint64(vm.getBlockTimestamp()), 1, 10_000);
+        vm.expectRevert(abi.encodeWithSelector(MarginAccounts.InvalidMandate.selector));
+        vm.prank(alice);
+        accounts.setMandate(agent, uint64(vm.getBlockTimestamp() + 1), 1, 0);
+        vm.prank(alice);
+        accounts.setMandate(agent, 0, 0, 0);
+        (reason,) = accounts.mandateStatus(alice, agent, CROSS);
+        assertEq(uint8(reason), uint8(MarginAccounts.MandateReason.None));
+    }
+
     function test_APositionRepaysWithItsUsdgWhileAnAssetIsHalted() public {
         _deposit(alice, CROSS, address(nvda), 10 * SHARE);
         _borrow(alice, CROSS, 1_000 * USDG);

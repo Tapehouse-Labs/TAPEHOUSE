@@ -38,6 +38,51 @@ func (r Recovery) Recovering(now uint64) bool {
 	return r.UnusableAt != 0 && now < r.Until
 }
 
+// Mandate is the authority an account gave an agent: until ExpiresAt, in seconds, the agent may borrow and withdraw
+// only to the account itself while the position's debt stays at most MaxDebt, in USDG, and its leverage at most
+// MaxLeverage, in basis points.
+type Mandate struct {
+	ExpiresAt   uint64
+	MaxDebt     *big.Int
+	MaxLeverage uint32
+}
+
+// MandateReason is why a mandate does or does not let its agent borrow now.
+type MandateReason uint8
+
+// The reasons MandateStatus reports.
+const (
+	MandateOk MandateReason = iota
+	MandateNone
+	MandateExpired
+	MandateDebtLimit
+	MandateLeverageLimit
+)
+
+// String names the reason.
+func (r MandateReason) String() string {
+	switch r {
+	case MandateOk:
+		return "Ok"
+	case MandateNone:
+		return "None"
+	case MandateExpired:
+		return "Expired"
+	case MandateDebtLimit:
+		return "DebtLimit"
+	case MandateLeverageLimit:
+		return "LeverageLimit"
+	}
+	return fmt.Sprintf("MandateReason(%d)", uint8(r))
+}
+
+// MandateStatus is whether an agent's mandate lets it borrow against a position, and how much more USDG it may borrow
+// under its debt limit.
+type MandateStatus struct {
+	Reason   MandateReason
+	DebtRoom *big.Int
+}
+
 // Accounts returns the margin accounts of the registry's .tapehouse.MarginAccounts.
 func (c *Client) Accounts() *Accounts {
 	return &Accounts{
@@ -52,6 +97,17 @@ func (c *Client) Accounts() *Accounts {
 // Unauthorized(caller, account).
 func (a *Accounts) SetAuthorization(authorized common.Address, allowed bool) (Tx, error) {
 	return a.tx(a.accounts.TryPackSetAuthorization(authorized, allowed))
+}
+
+// SetMandate gives agent a bounded authority over the sender's account until expiresAt, in seconds: it may borrow and
+// withdraw only to the account itself while the position's debt is at most maxDebt, in USDG, and its leverage, in basis
+// points, at most maxLeverage, which is at least 10,000; it may also deposit, repay and lend. A zero expiresAt ends the
+// mandate. An address authorized in full is not bound by one.
+func (a *Accounts) SetMandate(agent common.Address, expiresAt uint64, maxDebt *big.Int, maxLeverage uint32) (Tx, error) {
+	if err := present(maxDebt); err != nil {
+		return Tx{}, err
+	}
+	return a.tx(a.accounts.TryPackSetMandate(agent, expiresAt, maxDebt, maxLeverage))
 }
 
 // Deposit deposits amount of token from the sender into account's position: Cross or an asset's symbol. A basket's
@@ -104,6 +160,19 @@ func (a *Accounts) Unwrap(account common.Address, key string, shares *big.Int) (
 // IsAuthorized reports whether authorized may act for account.
 func (a *Accounts) IsAuthorized(opts *bind.CallOpts, account, authorized common.Address) (bool, error) {
 	return read(a.c, opts, a.target, a.accounts.UnpackIsAuthorized)(a.accounts.TryPackIsAuthorized(account, authorized))
+}
+
+// Mandate reads the mandate account gave agent.
+func (a *Accounts) Mandate(opts *bind.CallOpts, account, agent common.Address) (Mandate, error) {
+	out, err := read(a.c, opts, a.target, a.accounts.UnpackMandates)(a.accounts.TryPackMandates(account, agent))
+	return Mandate{out.ExpiresAt, out.MaxDebt, out.MaxLeverage}, err
+}
+
+// MandateStatus reads whether agent's mandate from account lets it borrow against account's position now, and how much
+// more USDG it may borrow under its debt limit.
+func (a *Accounts) MandateStatus(opts *bind.CallOpts, account, agent common.Address, position [32]byte) (MandateStatus, error) {
+	out, err := read(a.c, opts, a.target, a.accounts.UnpackMandateStatus)(a.accounts.TryPackMandateStatus(account, agent, position))
+	return MandateStatus{MandateReason(out.Reason), out.DebtRoom}, err
 }
 
 // Repayment reads what repays all account's position owes: its debt and its premium, both at opts' block, or at the

@@ -19,6 +19,29 @@ export function setAuthorization(deployments: Deployments, authorized: Address, 
 }
 
 /**
+ * Gives `agent` a bounded authority over the caller's account until `expiresAt`, in Unix seconds: it may borrow and
+ * withdraw only to the account itself while a position's debt is at most `maxDebt`, in USDG base units, and its
+ * leverage at most `maxLeverage`, in basis points of at least 10,000; it may also deposit, repay and lend. An
+ * `expiresAt` of 0 ends the mandate. An address authorized in full is not bound by one.
+ */
+export function setMandate(
+  deployments: Deployments,
+  {
+    agent,
+    expiresAt,
+    maxDebt,
+    maxLeverage,
+  }: { agent: Address; expiresAt: bigint; maxDebt: bigint; maxLeverage: number },
+) {
+  return {
+    address: accounts(deployments),
+    abi: marginAccountsAbi,
+    functionName: 'setMandate',
+    args: [agent, expiresAt, maxDebt, maxLeverage],
+  } as const
+}
+
+/**
  * Deposits `amount` of `token` from the caller into `account`'s `position`: `CROSS` or an asset's symbol. A basket's
  * address deposits its shares, into `CROSS` alone.
  */
@@ -228,6 +251,51 @@ export function isAuthorized(
     args: [account, authorized],
     ...at,
   })
+}
+
+/**
+ * The mandate `account` gave `agent`: when it ends, in Unix seconds, its debt limit in USDG base units and its leverage
+ * limit in basis points.
+ */
+export async function mandate(
+  client: Client,
+  deployments: Deployments,
+  { account, agent }: { account: Address; agent: Address },
+  at: At = {},
+) {
+  const [expiresAt, maxDebt, maxLeverage] = await readContract(client, {
+    address: accounts(deployments),
+    abi: marginAccountsAbi,
+    functionName: 'mandates',
+    args: [account, agent],
+    ...at,
+  })
+  return { expiresAt, maxDebt, maxLeverage }
+}
+
+const mandateReasons = ['ok', 'none', 'expired', 'debtLimit', 'leverageLimit'] as const
+
+/**
+ * Whether `agent` may borrow and withdraw for `account` against its `position` under its mandate now, and how much more
+ * USDG it may borrow under the debt limit. `reason` is `ok`, or what stops it: `none` for no mandate, `expired`,
+ * `debtLimit` or `leverageLimit`.
+ */
+export async function mandateStatus(
+  client: Client,
+  deployments: Deployments,
+  { account, agent, position }: { account: Address; agent: Address; position: Hex },
+  at: At = {},
+) {
+  const [reason, debtRoom] = await readContract(client, {
+    address: accounts(deployments),
+    abi: marginAccountsAbi,
+    functionName: 'mandateStatus',
+    args: [account, agent, position],
+    ...at,
+  })
+  const named = mandateReasons[reason]
+  if (named === undefined) throw new Error(`Unknown mandate reason ${reason}.`)
+  return { reason: named, debtRoom }
 }
 
 /** What repays all `account`'s `position` owes now: its debt and its premium, in USDG, both read at one block. */

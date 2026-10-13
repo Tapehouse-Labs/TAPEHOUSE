@@ -201,6 +201,19 @@ describe('transactions', () => {
     expect(decodeFunctionData({ abi: marginAccountsAbi, data }).args).toEqual([bob, true])
   })
 
+  test('a mandate bounds what an agent may do for the caller', () => {
+    const call = accounts.setMandate(testnet, {
+      agent: bob,
+      expiresAt: 1_790_001_800n,
+      maxDebt: 5_000_000n,
+      maxLeverage: 20_000,
+    })
+    expect(call.address).toBe(testnet.tapehouse.MarginAccounts)
+    const data = encodeFunctionData(call)
+    expect(data.slice(0, 10)).toBe(toFunctionSelector('setMandate(address,uint64,uint128,uint32)'))
+    expect(decodeFunctionData({ abi: marginAccountsAbi, data }).args).toEqual([bob, 1_790_001_800n, 5_000_000n, 20_000])
+  })
+
   test('a repayment and a withdrawal name the position', () => {
     const repay = accounts.repay(testnet, { position: CROSS, assets: 5n, account: alice })
     expect(decodeFunctionData({ abi: marginAccountsAbi, data: encodeFunctionData(repay) }).args).toEqual([
@@ -295,6 +308,20 @@ describe('errors', () => {
     })
     expect(decodeRevertData(router)).toEqual({ errorName: 'Error', args: ['Too little received'] })
     expect(decodeRevertData('0xdeadbeef')).toBeUndefined()
+  })
+
+  test("a mandate's five reverts are told by name and arguments", () => {
+    const reverts = [
+      ['MandateExpired', [alice, bob, 1_790_001_800n]],
+      ['MandateDebtLimit', [6_000_000n, 5_000_000n]],
+      ['MandateLeverageLimit', [30_000n, 20_000n]],
+      ['MandateReceiver', [bob, alice]],
+      ['InvalidMandate', []],
+    ] as const
+    for (const [errorName, args] of reverts) {
+      const data = encodeErrorResult({ abi: marginAccountsAbi, errorName, args } as never)
+      expect(decodeRevertData(data)).toEqual({ errorName, args })
+    }
   })
 
   test('the revert behind a failed call is decoded', () => {
@@ -404,6 +431,18 @@ describe('account reads', () => {
           expect(args).toEqual([alice, CROSS, toBytes32('SPY'), 5n])
           return encodeFunctionResult({ abi: marginAccountsAbi, functionName, result: 69_412_000_000n })
         }
+        if (functionName === 'mandates') {
+          expect(args).toEqual([alice, bob])
+          return encodeFunctionResult({
+            abi: marginAccountsAbi,
+            functionName,
+            result: [1_790_001_800n, 5_000_000n, 20_000],
+          })
+        }
+        if (functionName === 'mandateStatus') {
+          expect(args).toEqual([alice, bob, CROSS])
+          return encodeFunctionResult({ abi: marginAccountsAbi, functionName, result: [3, 0n] })
+        }
         const result = { debt: 100n, premium: 3n, collateral: 2n * 10n ** 18n, leverage: 25_000n }
         if (!(functionName in result)) throw new Error(`unexpected ${functionName}`)
         return encodeFunctionResult({
@@ -418,6 +457,19 @@ describe('account reads', () => {
   test('a repayment reads the debt and the premium at one block', async () => {
     expect(await accounts.repayment(client, testnet, alice, CROSS)).toEqual({ debt: 100n, premium: 3n, assets: 103n })
     expect(blockTags.splice(0).map((tag) => hexToBigInt(tag as Hex))).toEqual([7n, 7n])
+  })
+
+  test("an agent's mandate and its status are read", async () => {
+    expect(await accounts.mandate(client, testnet, { account: alice, agent: bob })).toEqual({
+      expiresAt: 1_790_001_800n,
+      maxDebt: 5_000_000n,
+      maxLeverage: 20_000,
+    })
+    expect(await accounts.mandateStatus(client, testnet, { account: alice, agent: bob, position: CROSS })).toEqual({
+      reason: 'debtLimit',
+      debtRoom: 0n,
+    })
+    blockTags.splice(0)
   })
 
   test("a position's collateral, leverage and liquidation price are read", async () => {

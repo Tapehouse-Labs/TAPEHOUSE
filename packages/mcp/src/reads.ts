@@ -649,6 +649,42 @@ export function registerReads(server: McpServer, context: Context) {
   tool(
     server,
     context,
+    'accounts_mandate',
+    {
+      title: "An agent's mandate",
+      description:
+        "The mandate an account gave an agent with accounts_set_mandate: when it ends (expiresAt, Unix seconds), the most debt a position may carry under it (maxDebt, USDG base units, 6 decimals) and its highest leverage (maxLeverage, basis points); and where the agent stands now against one position: reason ok, none (no mandate), expired, debtLimit or leverageLimit, and debtRoom, how much more USDG it may borrow under the debt limit. Without a position, the cross position is read. An address authorized in full is not bound by a mandate.",
+      input: z.strictObject({
+        account,
+        agent: address('The address the mandate was given to.'),
+        position: position
+          .optional()
+          .describe("CROSS for the account's cross position, the default, or an asset's symbol, such as NVDA."),
+      }),
+      output: z.object({
+        ...block,
+        expiresAt: uint,
+        maxDebt: uint,
+        maxLeverage: uint,
+        reason: z.enum(['ok', 'none', 'expired', 'debtLimit', 'leverageLimit']),
+        debtRoom: uint,
+      }),
+      openWorld: true,
+    },
+    async (args) => {
+      const read = await at(context)
+      const mandate = { account: checksummed(args.account), agent: checksummed(args.agent) }
+      const [terms, status] = await Promise.all([
+        accounts.mandate(client, d, mandate, read),
+        accounts.mandateStatus(client, d, { ...mandate, position: positionId(args.position ?? 'CROSS') }, read),
+      ])
+      return { ...read, ...terms, maxLeverage: BigInt(terms.maxLeverage), ...status }
+    },
+  )
+
+  tool(
+    server,
+    context,
     'shorts_position',
     {
       title: 'A short position',

@@ -105,7 +105,7 @@ try {
   await mcp.connect(new StreamableHTTPClientTransport(url))
   check(mcp.getProtocolEra() === 'modern', 'the client did not reach the 2026-07-28 protocol')
   const { tools } = await mcp.listTools()
-  check(tools.length === 47 && tools.every((tool) => tool.annotations?.readOnlyHint), 'the tools are not all listed')
+  check(tools.length === 49 && tools.every((tool) => tool.annotations?.readOnlyHint), 'the tools are not all listed')
 
   const spy = await use('band_quote', { asset: 'SPY' })
   const at = { blockNumber: BigInt(spy.blockNumber as string) }

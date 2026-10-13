@@ -161,6 +161,44 @@ impl Recovery {
     }
 }
 
+/// The authority an account gave an agent: until `expires_at`, in seconds, the agent may borrow and withdraw only to the
+/// account itself while the position's debt stays at most `max_debt`, in USDG, and its leverage at most `max_leverage`,
+/// in basis points.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Mandate {
+    /// When the mandate ends; zero if there is none.
+    pub expires_at: u64,
+    /// The most the position may owe, in USDG.
+    pub max_debt: u128,
+    /// The most its gross exposure may be over its equity, in basis points.
+    pub max_leverage: u32,
+}
+
+/// Why a mandate does or does not let its agent borrow now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MandateReason {
+    /// The agent may borrow.
+    Ok,
+    /// The account gave the agent no mandate.
+    None,
+    /// The mandate has expired.
+    Expired,
+    /// The position's debt is at the mandate's limit.
+    DebtLimit,
+    /// The position's leverage is at the mandate's limit.
+    LeverageLimit,
+}
+
+/// Whether an agent's mandate lets it borrow against a position, and how much more USDG it may borrow under its debt
+/// limit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MandateStatus {
+    /// Whether the agent may borrow, and if not, why.
+    pub reason: MandateReason,
+    /// How much more USDG the agent may borrow under its debt limit.
+    pub debt_room: U256,
+}
+
 /// An asset's gap cover series over one closure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Series {
@@ -536,6 +574,63 @@ impl<P: Provider + Clone> Tapehouse<P> {
             .accounts()?
             .observe(to_bytes32(asset)?)
             .with_cloned_provider())
+    }
+
+    /// The margin accounts' `setMandate`, which gives `agent` a bounded authority over the sender's account until
+    /// `expires_at`, in seconds: it may borrow and withdraw only to the account itself while the position's debt is at
+    /// most `max_debt`, in USDG, and its leverage, in basis points, at most `max_leverage`, which is at least 10,000; it
+    /// may also deposit, repay and lend. A zero `expires_at` ends the mandate. An address authorized in full is not
+    /// bound by one.
+    pub fn set_mandate(
+        &self,
+        agent: Address,
+        expires_at: u64,
+        max_debt: u128,
+        max_leverage: u32,
+    ) -> Result<SolCallBuilder<P, MarginAccounts::setMandateCall>> {
+        Ok(self
+            .accounts()?
+            .setMandate(agent, expires_at, max_debt, max_leverage)
+            .with_cloned_provider())
+    }
+
+    /// The mandate `account` gave `agent`.
+    pub async fn mandate(&self, account: Address, agent: Address) -> Result<Mandate> {
+        let out = self.accounts()?.mandates(account, agent).call().await?;
+        Ok(Mandate {
+            expires_at: out.expiresAt,
+            max_debt: out.maxDebt,
+            max_leverage: out.maxLeverage,
+        })
+    }
+
+    /// Whether `agent`'s mandate from `account` lets it borrow against `account`'s `position` now, and how much more
+    /// USDG it may borrow under its debt limit.
+    pub async fn mandate_status(
+        &self,
+        account: Address,
+        agent: Address,
+        position: B256,
+    ) -> Result<MandateStatus> {
+        let out = self
+            .accounts()?
+            .mandateStatus(account, agent, position)
+            .call()
+            .await?;
+        let reason = match out.reason {
+            0 => MandateReason::Ok,
+            1 => MandateReason::None,
+            2 => MandateReason::Expired,
+            3 => MandateReason::DebtLimit,
+            4 => MandateReason::LeverageLimit,
+            other => {
+                return Err(Error::Unexpected(format!("unknown mandate reason {other}")));
+            }
+        };
+        Ok(MandateStatus {
+            reason,
+            debt_room: out.debtRoom,
+        })
     }
 
     /// When `asset` last became unusable and until when positions holding it cannot borrow or withdraw, both read at

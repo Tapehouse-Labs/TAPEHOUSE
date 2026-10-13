@@ -10,8 +10,9 @@ mod deployments;
 mod revert;
 
 pub use client::{
-    BuyBack, Components, CoverQuote, Layer, NoPrice, OraclePrice, PackageSource, PendingTarget,
-    PricingGap, Recovery, Repayment, Sale, Sales, Series, SeriesStatus, Tapehouse, payout,
+    BuyBack, Components, CoverQuote, Layer, Mandate, MandateReason, MandateStatus, NoPrice,
+    OraclePrice, PackageSource, PendingTarget, PricingGap, Recovery, Repayment, Sale, Sales,
+    Series, SeriesStatus, Tapehouse, payout,
 };
 pub use deployments::{
     CROSS, Deployments, SHARE_PRICE_CHAINS, SharePriceFeed, TokenPriceFeed, to_bytes32,

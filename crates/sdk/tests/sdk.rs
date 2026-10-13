@@ -11,8 +11,8 @@ use tapehouse_sdk::bindings::{
     StockLendingVault, StockToken,
 };
 use tapehouse_sdk::{
-    CROSS, Deployments, Error, Layer, NoPrice, OraclePrice, PackageSource, PricingGap, Sales,
-    SeriesStatus, Tapehouse, decode_revert_data, payout, to_bytes32,
+    CROSS, Deployments, Error, Layer, MandateReason, NoPrice, OraclePrice, PackageSource,
+    PricingGap, Sales, SeriesStatus, Tapehouse, decode_revert_data, payout, to_bytes32,
 };
 
 const ALICE: Address = address!("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
@@ -220,6 +220,66 @@ fn an_authorization_lets_one_address_act_for_the_sender() {
 }
 
 #[test]
+fn a_mandate_bounds_what_an_agent_may_do_for_the_sender() {
+    let tapehouse = offline(registry(46630));
+    let call = tapehouse
+        .set_mandate(BOB, 1_790_775_000, 5_000_000, 30_000)
+        .unwrap();
+    assert_eq!(
+        call.calldata()[..4],
+        MarginAccounts::setMandateCall::SELECTOR
+    );
+    let decoded = MarginAccounts::setMandateCall::abi_decode(call.calldata()).unwrap();
+    assert_eq!(
+        (
+            decoded.agent,
+            decoded.expiresAt,
+            decoded.maxDebt,
+            decoded.maxLeverage
+        ),
+        (BOB, 1_790_775_000, 5_000_000, 30_000)
+    );
+}
+
+#[tokio::test]
+async fn a_mandate_and_its_status_are_read() {
+    let asserter = Asserter::new();
+    let tapehouse = Tapehouse::new(
+        ProviderBuilder::new().connect_mocked_client(asserter.clone()),
+        registry(46630),
+    );
+    asserter.push_success(&Bytes::from(
+        (1_790_775_000u64, 5_000_000u128, 30_000u32).abi_encode_params(),
+    ));
+    let mandate = tapehouse.mandate(ALICE, BOB).await.unwrap();
+    assert_eq!(
+        (mandate.expires_at, mandate.max_debt, mandate.max_leverage),
+        (1_790_775_000, 5_000_000, 30_000)
+    );
+    for (reason, expected) in [
+        (0u8, MandateReason::Ok),
+        (1, MandateReason::None),
+        (2, MandateReason::Expired),
+        (3, MandateReason::DebtLimit),
+        (4, MandateReason::LeverageLimit),
+    ] {
+        asserter.push_success(&Bytes::from(
+            (U256::from(reason), U256::from(7)).abi_encode_params(),
+        ));
+        let status = tapehouse.mandate_status(ALICE, BOB, CROSS).await.unwrap();
+        assert_eq!((status.reason, status.debt_room), (expected, U256::from(7)));
+    }
+    asserter.push_success(&Bytes::from(
+        (U256::from(9), U256::ZERO).abi_encode_params(),
+    ));
+    assert!(matches!(
+        tapehouse.mandate_status(ALICE, BOB, CROSS).await,
+        Err(Error::Unexpected(_))
+    ));
+    assert!(asserter.read_q().is_empty());
+}
+
+#[test]
 fn a_contract_missing_from_the_registry_is_named() {
     let empty = Deployments::parse(r#"{"chainId":1}"#).unwrap();
     assert_eq!(
@@ -319,6 +379,43 @@ fn the_reverts_of_tapehouse_the_band_the_issuer_and_the_router_are_decoded() {
         (
             MarginAccounts::BasketFrozen { basket: BOB }.abi_encode(),
             format!("BasketFrozen({BOB})"),
+        ),
+        (
+            MarginAccounts::MandateExpired {
+                account: ALICE,
+                agent: BOB,
+                expiresAt: 1790775000,
+            }
+            .abi_encode(),
+            format!("MandateExpired({ALICE}, {BOB}, 1790775000)"),
+        ),
+        (
+            MarginAccounts::MandateDebtLimit {
+                debt: U256::from(6),
+                maxDebt: U256::from(5),
+            }
+            .abi_encode(),
+            "MandateDebtLimit(6, 5)".into(),
+        ),
+        (
+            MarginAccounts::MandateLeverageLimit {
+                leverage: U256::from(40000),
+                maxLeverage: U256::from(30000),
+            }
+            .abi_encode(),
+            "MandateLeverageLimit(40000, 30000)".into(),
+        ),
+        (
+            MarginAccounts::MandateReceiver {
+                receiver: BOB,
+                account: ALICE,
+            }
+            .abi_encode(),
+            format!("MandateReceiver({BOB}, {ALICE})"),
+        ),
+        (
+            MarginAccounts::InvalidMandate {}.abi_encode(),
+            "InvalidMandate()".into(),
         ),
         (
             Basket::PastTarget { symbol: b32("SPY") }.abi_encode(),

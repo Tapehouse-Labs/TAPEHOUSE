@@ -156,6 +156,57 @@ export function registerTransactions(server: McpServer, context: Context) {
   tool(
     server,
     context,
+    'accounts_set_mandate',
+    {
+      title: 'Give an agent a mandate',
+      description:
+        "Prepares the margin accounts' setMandate for the account itself to sign: the bounded alternative to accounts_set_authorization. Until expiresAt the agent may borrow and withdraw only to the account itself, while a position's debt is at most maxDebt (USDG base units, 6 decimals) and its leverage at most maxLeverage (basis points, at least 10000); it may also deposit, repay and lend. An expiresAt of 0 ends the mandate. An address authorized in full is not bound by one; accounts_mandate reads where the agent stands.",
+      input: z.strictObject({
+        agent: address("The address that may act within the mandate, such as an agent's own wallet."),
+        expiresAt: z
+          .number()
+          .int()
+          .min(0)
+          .max(Number.MAX_SAFE_INTEGER)
+          .describe('When the mandate ends, in Unix seconds, in the future; 0 ends the mandate.'),
+        maxDebt: units('The most debt a position may carry under the mandate, in USDG base units (6 decimals).'),
+        maxLeverage: z
+          .number()
+          .int()
+          .min(10_000)
+          .max(4_294_967_295)
+          .describe('The highest leverage, gross exposure over equity, in basis points: 10000 is 1x.'),
+      }),
+      output: prepared.extend({ limits: z.string().describe('What the signed call lets the agent do.') }),
+      openWorld: false,
+    },
+    async (args) => {
+      const agent = checksummed(args.agent)
+      const maxDebt = BigInt(args.maxDebt)
+      return {
+        chainId,
+        signer: 'the account, which gives the agent its mandate',
+        limits:
+          args.expiresAt === 0
+            ? `Nothing: ${agent} has no mandate.`
+            : `${agent} may borrow and withdraw only to the account itself until ${args.expiresAt}, while a position's debt is at most ${maxDebt} USDG base units and its leverage at most ${args.maxLeverage} basis points; it may also deposit, repay and lend.`,
+        calls: [
+          call(
+            accounts.setMandate(d, {
+              agent,
+              expiresAt: BigInt(args.expiresAt),
+              maxDebt,
+              maxLeverage: args.maxLeverage,
+            }),
+          ),
+        ],
+      }
+    },
+  )
+
+  tool(
+    server,
+    context,
     'accounts_deposit',
     {
       title: 'Deposit collateral',

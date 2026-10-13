@@ -8867,6 +8867,74 @@ export const marginAccountsAbi = [
   },
   {
     "type": "function",
+    "name": "mandateStatus",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "agent",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "position",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "reason",
+        "type": "uint8",
+        "internalType": "enum MarginAccounts.MandateReason"
+      },
+      {
+        "name": "debtRoom",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "mandates",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "agent",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "expiresAt",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "maxDebt",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "maxLeverage",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "observe",
     "inputs": [
       {
@@ -9247,6 +9315,34 @@ export const marginAccountsAbi = [
         "name": "newLiquidator",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setMandate",
+    "inputs": [
+      {
+        "name": "agent",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "expiresAt",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "maxDebt",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "maxLeverage",
+        "type": "uint32",
+        "internalType": "uint32"
       }
     ],
     "outputs": [],
@@ -9890,6 +9986,43 @@ export const marginAccountsAbi = [
         "type": "address",
         "indexed": true,
         "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "MandateSet",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "agent",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "expiresAt",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      },
+      {
+        "name": "maxDebt",
+        "type": "uint128",
+        "indexed": false,
+        "internalType": "uint128"
+      },
+      {
+        "name": "maxLeverage",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
       }
     ],
     "anonymous": false
@@ -10557,6 +10690,11 @@ export const marginAccountsAbi = [
   },
   {
     "type": "error",
+    "name": "InvalidMandate",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidPremium",
     "inputs": []
   },
@@ -10605,6 +10743,75 @@ export const marginAccountsAbi = [
         "name": "symbol",
         "type": "bytes32",
         "internalType": "bytes32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "MandateDebtLimit",
+    "inputs": [
+      {
+        "name": "debt",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxDebt",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "MandateExpired",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "agent",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "expiresAt",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "MandateLeverageLimit",
+    "inputs": [
+      {
+        "name": "leverage",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxLeverage",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "MandateReceiver",
+    "inputs": [
+      {
+        "name": "receiver",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
       }
     ]
   },

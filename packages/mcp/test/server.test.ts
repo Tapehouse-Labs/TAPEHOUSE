@@ -165,6 +165,7 @@ describe('tools', () => {
       'accounts_repayment',
       'accounts_recovery',
       'accounts_is_authorized',
+      'accounts_mandate',
       'shorts_position',
       'shorts_health',
       'shorts_restriction',
@@ -174,6 +175,7 @@ describe('tools', () => {
       'gap_cover_position',
       'gap_cover_vault',
       'accounts_set_authorization',
+      'accounts_set_mandate',
       'accounts_deposit',
       'accounts_withdraw',
       'accounts_borrow',
@@ -307,6 +309,25 @@ describe('reads', () => {
     expect(new Set(calls.map((c) => c.block))).toEqual(new Set(['0x7']))
   })
 
+  test("an agent's mandate and where it stands are read at one block, the cross position by default", async () => {
+    const { client, calls } = chain({
+      mandates: [1_790_001_800n, 5_000_000n, 20_000],
+      mandateStatus: [3, 0n],
+    })
+    const { structured } = await call(await legacy(client), 'accounts_mandate', { account: alice, agent: bob })
+    expect(structured).toEqual({
+      blockNumber: '7',
+      expiresAt: '1790001800',
+      maxDebt: '5000000',
+      maxLeverage: '20000',
+      reason: 'debtLimit',
+      debtRoom: '0',
+    })
+    expect(calls.find((c) => c.functionName === 'mandates')?.args).toEqual([alice, bob])
+    expect(calls.find((c) => c.functionName === 'mandateStatus')?.args).toEqual([alice, bob, CROSS])
+    expect(new Set(calls.map((c) => c.block))).toEqual(new Set(['0x7']))
+  })
+
   test("Chainlink's token and share prices are kept apart", async () => {
     const { text, result } = await call(await legacy(chain({}).client), 'chainlink_round', {
       feed: 'NVDA_USD',
@@ -407,6 +428,52 @@ describe('prepared transactions', () => {
     const [prepared] = structured.calls as [{ data: Hex }]
     expect(decodeFunctionData({ abi: marginAccountsAbi, data: prepared.data }).args).toEqual([bob, true])
     expect(methods.filter((method) => method.startsWith('eth_send') || method.startsWith('eth_sign'))).toEqual([])
+  })
+
+  test('a mandate is prepared for the account to sign, bounded by what it states', async () => {
+    const mcp = await legacy(chain({}).client)
+    const { structured } = await call(mcp, 'accounts_set_mandate', {
+      agent: bob,
+      expiresAt: 1_790_001_800,
+      maxDebt: '5000000',
+      maxLeverage: 20_000,
+    })
+    expect(structured).toEqual({
+      chainId: 4663,
+      signer: 'the account, which gives the agent its mandate',
+      limits: expect.stringContaining(`${bob} may borrow and withdraw only to the account itself`),
+      calls: [
+        {
+          to: accounts,
+          data: expect.stringMatching(/^0x/),
+          value: '0',
+          functionName: 'setMandate',
+          args: { agent: bob, expiresAt: '1790001800', maxDebt: '5000000', maxLeverage: 20_000 },
+        },
+      ],
+    })
+    const [prepared] = structured.calls as [{ data: Hex }]
+    expect(decodeFunctionData({ abi: marginAccountsAbi, data: prepared.data }).args).toEqual([
+      bob,
+      1_790_001_800n,
+      5_000_000n,
+      20_000,
+    ])
+    const ended = await call(mcp, 'accounts_set_mandate', {
+      agent: bob,
+      expiresAt: 0,
+      maxDebt: '0',
+      maxLeverage: 10_000,
+    })
+    expect(ended.structured.limits).toBe(`Nothing: ${bob} has no mandate.`)
+  })
+
+  test('a mandate below 1x leverage or with a debt above what a wallet holds is refused', async () => {
+    const mcp = await legacy(chain({}).client)
+    const base = { agent: bob, expiresAt: 1_790_001_800, maxDebt: '5000000', maxLeverage: 20_000 }
+    expect((await call(mcp, 'accounts_set_mandate', { ...base, maxLeverage: 9_999 })).result.isError).toBe(true)
+    expect((await call(mcp, 'accounts_set_mandate', { ...base, maxDebt: '-1' })).result.isError).toBe(true)
+    expect((await call(mcp, 'accounts_set_mandate', { ...base, agent: 'bob' })).result.isError).toBe(true)
   })
 
   test('an authorization states everything it grants', async () => {

@@ -196,6 +196,66 @@ func TestAnAuthorizationLetsOneAddressActForTheSender(t *testing.T) {
 	}
 }
 
+func TestAMandateBoundsWhatAnAgentMayDoForTheSender(t *testing.T) {
+	d := registry(t, "46630")
+	tx, err := sdk.NewClient(nil, d).Accounts().SetMandate(bob, 1_790_775_000, big.NewInt(5_000_000), 30_000)
+	if err != nil || tx.To != d.Tapehouse["MarginAccounts"] {
+		t.Fatalf("setMandate: %v, %v", tx, err)
+	}
+	args := unpack(t, &marginaccounts.MarginAccountsMetaData, "setMandate", tx.Data)
+	if args[0] != bob || args[1] != uint64(1_790_775_000) || args[2].(*big.Int).Cmp(big.NewInt(5_000_000)) != 0 || args[3] != uint32(30_000) {
+		t.Fatalf("setMandate args %v", args)
+	}
+	if _, err := sdk.NewClient(nil, d).Accounts().SetMandate(bob, 1, nil, 10_000); err == nil {
+		t.Fatal("a nil debt limit was packed")
+	}
+}
+
+type mandateBackend struct {
+	bind.ContractBackend
+	t *testing.T
+}
+
+func (m mandateBackend) HeaderByNumber(context.Context, *big.Int) (*types.Header, error) {
+	return &types.Header{Number: big.NewInt(7)}, nil
+}
+
+func (m mandateBackend) CallContract(_ context.Context, call ethereum.CallMsg, _ *big.Int) ([]byte, error) {
+	parsed, _ := marginaccounts.MarginAccountsMetaData.ParseABI()
+	method, err := parsed.MethodById(call.Data)
+	if err != nil {
+		m.t.Fatal(err)
+	}
+	switch method.Name {
+	case "mandates":
+		return method.Outputs.Pack(uint64(1_790_775_000), big.NewInt(5_000_000), uint32(30_000))
+	case "mandateStatus":
+		return method.Outputs.Pack(uint8(sdk.MandateDebtLimit), big.NewInt(0))
+	}
+	m.t.Fatalf("unexpected %s", method.Name)
+	return nil, nil
+}
+
+func TestAMandateAndItsStatusAreRead(t *testing.T) {
+	accounts := sdk.NewClient(mandateBackend{t: t}, registry(t, "46630")).Accounts()
+	mandate, err := accounts.Mandate(&bind.CallOpts{}, alice, bob)
+	if err != nil || mandate.ExpiresAt != 1_790_775_000 || mandate.MaxDebt.Cmp(big.NewInt(5_000_000)) != 0 || mandate.MaxLeverage != 30_000 {
+		t.Fatalf("mandate %+v, %v", mandate, err)
+	}
+	status, err := accounts.MandateStatus(&bind.CallOpts{}, alice, bob, sdk.Cross)
+	if err != nil || status.Reason != sdk.MandateDebtLimit || status.DebtRoom.Sign() != 0 {
+		t.Fatalf("status %+v, %v", status, err)
+	}
+	for reason, name := range map[sdk.MandateReason]string{
+		sdk.MandateOk: "Ok", sdk.MandateNone: "None", sdk.MandateExpired: "Expired",
+		sdk.MandateDebtLimit: "DebtLimit", sdk.MandateLeverageLimit: "LeverageLimit", 9: "MandateReason(9)",
+	} {
+		if reason.String() != name {
+			t.Errorf("%d is %s, want %s", reason, reason, name)
+		}
+	}
+}
+
 func TestAContractMissingFromTheRegistryIsNamed(t *testing.T) {
 	empty, err := sdk.ParseDeployments([]byte(`{"chainId":1}`))
 	if err != nil {
@@ -271,6 +331,11 @@ func TestTheRevertsOfTapehouseTheBandTheIssuerAndTheRouterAreDecoded(t *testing.
 		{&marginaccounts.MarginAccountsMetaData, "DebtCapExceeded", []any{big.NewInt(2), big.NewInt(1)}, "DebtCapExceeded(2, 1)"},
 		{&marginaccounts.MarginAccountsMetaData, "BasketFrozen", []any{bob}, "BasketFrozen(" + bob.Hex() + ")"},
 		{&marginaccounts.MarginAccountsMetaData, "AssetRecovering", []any{bytes32(t, "SPY"), uint64(1790776800)}, "AssetRecovering(0x5350590000000000000000000000000000000000000000000000000000000000, 1790776800)"},
+		{&marginaccounts.MarginAccountsMetaData, "MandateExpired", []any{alice, bob, uint64(1790775000)}, "MandateExpired(" + alice.Hex() + ", " + bob.Hex() + ", 1790775000)"},
+		{&marginaccounts.MarginAccountsMetaData, "MandateDebtLimit", []any{big.NewInt(6), big.NewInt(5)}, "MandateDebtLimit(6, 5)"},
+		{&marginaccounts.MarginAccountsMetaData, "MandateLeverageLimit", []any{big.NewInt(40000), big.NewInt(30000)}, "MandateLeverageLimit(40000, 30000)"},
+		{&marginaccounts.MarginAccountsMetaData, "MandateReceiver", []any{bob, alice}, "MandateReceiver(" + bob.Hex() + ", " + alice.Hex() + ")"},
+		{&marginaccounts.MarginAccountsMetaData, "InvalidMandate", nil, "InvalidMandate()"},
 		{&basket.BasketMetaData, "PastTarget", []any{bytes32(t, "SPY")}, "PastTarget(0x5350590000000000000000000000000000000000000000000000000000000000)"},
 		{&liquidator.LiquidatorMetaData, "NotLiquidatable", []any{bob, sdk.Cross}, "NotLiquidatable(" + bob.Hex() + ", 0x0000000000000000000000000000000000000000000000000000000000000000)"},
 		{&stocklendingvault.StockLendingVaultMetaData, "InsufficientLiquidity", []any{big.NewInt(2), big.NewInt(1)}, "InsufficientLiquidity(2, 1)"},

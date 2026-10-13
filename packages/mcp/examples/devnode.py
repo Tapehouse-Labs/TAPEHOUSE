@@ -43,7 +43,7 @@ async def main(rpc: str, registry: str, server: str) -> None:
             return result.structured_content
 
         tools = (await client.list_tools()).tools
-        check(len(tools) == 47, f"{len(tools)} tools")
+        check(len(tools) == 49, f"{len(tools)} tools")
         check(all(tool.annotations.read_only_hint and tool.output_schema for tool in tools), "a tool is not read-only")
 
         spy = await use("band_quote", {"asset": "SPY"})

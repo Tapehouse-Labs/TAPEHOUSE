@@ -153,6 +153,27 @@ contract MarginAccounts is Ownable2Step {
     /// Tokens and USDG into it.
     mapping(address account => mapping(address authorized => bool)) public isAuthorized;
 
+    /// @notice What an agent of an account may do with it: until `expiresAt`, borrow and withdraw only to the account,
+    /// and only while the position's debt is at most `maxDebt`, in USDG, and its leverage, gross exposure over equity
+    /// in basis points, at most `maxLeverage`. Zero `expiresAt` is no mandate.
+    struct Mandate {
+        uint64 expiresAt;
+        uint128 maxDebt;
+        uint32 maxLeverage;
+    }
+
+    /// @notice Why a mandate lets an agent no further.
+    enum MandateReason {
+        Ok,
+        None,
+        Expired,
+        DebtLimit,
+        LeverageLimit
+    }
+
+    /// @notice The mandate `account` gave `agent`.
+    mapping(address account => mapping(address agent => Mandate)) public mandates;
+
     bytes32[] private _symbols;
     address[] private _tokens;
     mapping(bytes32 symbol => uint256) private _indexOfSymbol;
@@ -226,6 +247,10 @@ contract MarginAccounts is Ownable2Step {
     event WriteOff(address indexed account, bytes32 indexed position, uint256 assets, uint256 shares, uint256 premium);
     /// @notice `account` allowed or stopped `authorized` acting for it.
     event AuthorizationSet(address indexed account, address indexed authorized, bool allowed);
+    /// @notice `account` gave `agent` a mandate, or ended it with a zero `expiresAt`.
+    event MandateSet(
+        address indexed account, address indexed agent, uint64 expiresAt, uint128 maxDebt, uint32 maxLeverage
+    );
     /// @notice The liquidator was set.
     event LiquidatorSet(address indexed liquidator);
     /// @notice The guardian was set.
@@ -299,6 +324,16 @@ contract MarginAccounts is Ownable2Step {
     error SequencerNotSettled();
     /// @notice `caller` may not act for `account`.
     error Unauthorized(address caller, address account);
+    /// @notice `agent`'s mandate from `account` ended at `expiresAt`.
+    error MandateExpired(address account, address agent, uint64 expiresAt);
+    /// @notice The position's debt would pass what the agent's mandate allows.
+    error MandateDebtLimit(uint256 debt, uint256 maxDebt);
+    /// @notice The position's leverage would pass what the agent's mandate allows.
+    error MandateLeverageLimit(uint256 leverage, uint256 maxLeverage);
+    /// @notice An agent's loan or withdrawal may go to its account alone.
+    error MandateReceiver(address receiver, address account);
+    /// @notice A mandate must end in the future and allow a leverage of at least 1×, 10,000 basis points.
+    error InvalidMandate();
     /// @notice Only the liquidator may seize collateral and write debt off.
     error NotLiquidator(address caller);
     /// @notice The liquidator is already set, to `current`.
@@ -580,9 +615,25 @@ contract MarginAccounts is Ownable2Step {
     /// @notice The gross exposure of `account`'s `position` to the engine's assets over its equity, in basis
     /// points; the largest value for a position without equity. `weekendLeverage` caps it before a closure.
     function leverage(address account, bytes32 position) external view returns (uint256) {
-        Valuation memory v = _value(account, position, false);
-        if (v.equity <= 0) return type(uint256).max;
-        return v.gross * BPS / SafeCast.toUint256(v.equity);
+        return _leverage(account, position);
+    }
+
+    /// @notice Why `agent`'s mandate from `account` would let it go no further in `position`, `Ok` while it may, and
+    /// how much more USDG it may borrow under its debt limit; the leverage limit may stop it sooner.
+    function mandateStatus(address account, address agent, bytes32 position)
+        external
+        view
+        returns (MandateReason reason, uint256 debtRoom)
+    {
+        Mandate memory m = mandates[account][agent];
+        if (m.expiresAt == 0) return (MandateReason.None, 0);
+        // forge-lint: disable-next-line(block-timestamp)
+        if (block.timestamp >= m.expiresAt) return (MandateReason.Expired, 0);
+        uint256 owed = debt(account, position);
+        debtRoom = owed >= m.maxDebt ? 0 : m.maxDebt - owed;
+        if (debtRoom == 0) return (MandateReason.DebtLimit, 0);
+        if (_leverage(account, position) >= m.maxLeverage) return (MandateReason.LeverageLimit, debtRoom);
+        return (MandateReason.Ok, debtRoom);
     }
 
     /// @notice The price of `symbol`, in USD with 8 decimals, at or above which `account`'s `position` meets its
@@ -618,6 +669,22 @@ contract MarginAccounts is Ownable2Step {
     function setAuthorization(address authorized, bool allowed) external {
         isAuthorized[msg.sender][authorized] = allowed;
         emit AuthorizationSet(msg.sender, authorized, allowed);
+    }
+
+    /// @notice Gives `agent` a mandate over the caller's positions until `expiresAt`: it may borrow and withdraw to the
+    /// caller alone, with the position's debt at most `maxDebt`, in USDG, and its leverage at most `maxLeverage`, in
+    /// basis points of equity, at least 10,000. It may deposit, repay and lend as an authorized address may. A zero
+    /// `expiresAt` ends the mandate. An address the caller authorized in full is not bound by one.
+    function setMandate(address agent, uint64 expiresAt, uint128 maxDebt, uint32 maxLeverage) external {
+        if (expiresAt == 0) {
+            delete mandates[msg.sender][agent];
+            emit MandateSet(msg.sender, agent, 0, 0, 0);
+            return;
+        }
+        // forge-lint: disable-next-line(block-timestamp)
+        if (expiresAt <= block.timestamp || maxLeverage < BPS) revert InvalidMandate();
+        mandates[msg.sender][agent] = Mandate(expiresAt, maxDebt, maxLeverage);
+        emit MandateSet(msg.sender, agent, expiresAt, maxDebt, maxLeverage);
     }
 
     /// @notice Sets the only address that may seize collateral and write debt off. It can be set once, and never to
@@ -951,7 +1018,7 @@ contract MarginAccounts is Ownable2Step {
     /// them, leaves only for an account and caller the issuer has not blocklisted. A position in debt must then pass its
     /// checks, and waits while the guardian has paused borrowing.
     function withdraw(bytes32 position, address token, uint256 amount, address account, address receiver) external {
-        _checkAuthorized(account);
+        bool mandated = _checkAuthorized(account);
         uint256 index = _indexOfToken[token];
         if (index != 0) {
             _checkNotBlocked(index - 1, account);
@@ -966,6 +1033,7 @@ contract MarginAccounts is Ownable2Step {
             _syncHeld(account, position);
             _check(account, position);
         }
+        if (mandated) _checkMandate(account, position, receiver);
         emit Withdraw(msg.sender, account, position, token, amount, receiver);
         IERC20(token).safeTransfer(receiver, amount);
     }
@@ -1010,7 +1078,7 @@ contract MarginAccounts is Ownable2Step {
     function borrow(bytes32 position, uint256 assets, address account, address receiver) external {
         if (assets == 0) revert ZeroAmount();
         if (borrowingPaused) revert BorrowingIsPaused();
-        _checkAuthorized(account);
+        bool mandated = _checkAuthorized(account);
         _checkPosition(position);
         Position storage p = _positions[account][position];
         if (p.usdg != 0) revert BorrowingAgainstUsdg();
@@ -1028,6 +1096,7 @@ contract MarginAccounts is Ownable2Step {
         emit Borrow(msg.sender, account, position, assets, shares, receiver);
         vault.borrow(assets, receiver);
         _check(account, position);
+        if (mandated) _checkMandate(account, position, receiver);
     }
 
     /// @notice Repays up to `assets` of `account`'s `position` debt with the caller's USDG, then its premium with what
@@ -1599,8 +1668,29 @@ contract MarginAccounts is Ownable2Step {
         // forge-lint: disable-end(calls-loop, require-revert-in-loop)
     }
 
-    function _checkAuthorized(address account) private view {
-        if (msg.sender != account && !isAuthorized[account][msg.sender]) revert Unauthorized(msg.sender, account);
+    /// @dev Whether the caller acts under a mandate, which a loan or a withdrawal then checks it keeps.
+    function _checkAuthorized(address account) private view returns (bool mandated) {
+        if (msg.sender == account || isAuthorized[account][msg.sender]) return false;
+        uint64 expiresAt = mandates[account][msg.sender].expiresAt;
+        if (expiresAt == 0) revert Unauthorized(msg.sender, account);
+        // forge-lint: disable-next-line(block-timestamp)
+        if (block.timestamp >= expiresAt) revert MandateExpired(account, msg.sender, expiresAt);
+        return true;
+    }
+
+    function _checkMandate(address account, bytes32 position, address receiver) private view {
+        if (receiver != account) revert MandateReceiver(receiver, account);
+        Mandate memory m = mandates[account][msg.sender];
+        uint256 owed = debt(account, position);
+        if (owed > m.maxDebt) revert MandateDebtLimit(owed, m.maxDebt);
+        uint256 lev = _leverage(account, position);
+        if (lev > m.maxLeverage) revert MandateLeverageLimit(lev, m.maxLeverage);
+    }
+
+    function _leverage(address account, bytes32 position) private view returns (uint256) {
+        Valuation memory v = _value(account, position, false);
+        if (v.equity <= 0) return type(uint256).max;
+        return v.gross * BPS / SafeCast.toUint256(v.equity);
     }
 
     function _checkPosition(bytes32 position) private view {
