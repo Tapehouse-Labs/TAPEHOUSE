@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "tapehouse",
   "displayName": "Tapehouse",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read Tapehouse's price band, margin accounts and risk on Robinhood Chain, prepare transactions for a wallet to sign, act for an account under a bounded mandate, and pay the API per request in USDG.",
   "author": { "name": "Tapehouse Labs", "url": "https://tapehouse.xyz" },
   "homepage": "https://tapehouse.xyz",
@@ -12,7 +12,7 @@
   "mcpServers": {
     "tapehouse": {
       "command": "npx",
-      "args": ["-y", "@tapehouse/mcp@0.1.0"],
+      "args": ["-y", "@tapehouse/mcp@0.1.1"],
       "env": {
         "TAPEHOUSE_NETWORK": "46630",
         "TAPEHOUSE_RPC_URL": "${user_config.rpc_url}"

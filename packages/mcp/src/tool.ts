@@ -5,7 +5,21 @@ import { type Address, BaseError, type Client, getAddress, type Hex, isAddress, 
 import * as z from 'zod'
 
 /** What every tool reads from: the chain's client, its registry, the slippage cap, and the limit on calls. */
-export type Context = { client: Client; deployments: Deployments; maxSlippageBps: number; rateLimit: RateLimit }
+export type Context = {
+  client: Client
+  deployments: Deployments
+  maxSlippageBps: number
+  rateLimit: RateLimit
+  /** The wait before a read is made again, in milliseconds: 400 unless a test sets it. */
+  retryMs?: number
+}
+
+const attempts = 3
+
+/** Whether the node refused the read's parameters, as a public endpoint does that answers from a block behind. */
+function behind(error: unknown): boolean {
+  return error instanceof BaseError && error.walk((cause) => (cause as { code?: number }).code === -32602) !== null
+}
 
 /**
  * A sliding window of a minute over every tool call the process answers. It lives in the context, not in a server,
@@ -175,7 +189,7 @@ function json(value: unknown): Record<string, unknown> {
  */
 export function tool<Input extends z.ZodObject>(
   server: McpServer,
-  { rateLimit }: Context,
+  { rateLimit, retryMs = 400 }: Context,
   name: string,
   config: {
     title: string
@@ -192,11 +206,17 @@ export function tool<Input extends z.ZodObject>(
         content: [{ type: 'text', text: `At most ${rateLimit.perMinute} tool calls a minute: try again later.` }],
         isError: true,
       }
-    try {
-      const result = json(await run(args))
-      return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result }
-    } catch (error) {
-      return { content: [{ type: 'text', text: explain(error) }], isError: true }
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const result = json(await run(args))
+        return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result }
+      } catch (error) {
+        if (attempt < attempts && behind(error)) {
+          await new Promise((resolve) => setTimeout(resolve, retryMs * attempt))
+          continue
+        }
+        return { content: [{ type: 'text', text: explain(error) }], isError: true }
+      }
     }
   }
   server.registerTool(

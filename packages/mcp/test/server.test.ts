@@ -792,6 +792,44 @@ describe('baskets', () => {
     expect([...named].sort()).toEqual(tools.map((tool) => tool.name).sort())
   })
 
+  test('a read the node refuses as invalid is made again, and given up on after three tries', async () => {
+    const { client } = chain({ unusableAt: 1_790_000_000n, RECOVERY: 1_800n })
+    const refusing = (times: number) => {
+      let left = times
+      return createClient({
+        transport: custom(
+          {
+            async request(request) {
+              if (request.method === 'eth_call' && left-- > 0)
+                throw Object.assign(new Error('Missing or invalid parameters.'), { code: -32602 })
+              return client.request(request as Parameters<typeof client.request>[0])
+            },
+          },
+          { retryCount: 0 },
+        ),
+      })
+    }
+    const serve = async (times: number) => {
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+      await createServer({
+        client: refusing(times),
+        deployments,
+        maxSlippageBps: 100,
+        rateLimit: new RateLimit(120),
+        retryMs: 1,
+      }).connect(serverTransport)
+      const mcp = new Client({ name: 'test', version: '1.0.0' })
+      await mcp.connect(clientTransport)
+      open.push(mcp)
+      return mcp
+    }
+    const recovered = await call(await serve(1), 'accounts_recovery', { asset: 'NVDA' })
+    expect(recovered.result.isError).not.toBe(true)
+    expect(recovered.structured).toMatchObject({ unusableAt: '1790000000' })
+    const given = await call(await serve(1000), 'accounts_recovery', { asset: 'NVDA' })
+    expect(given.result.isError).toBe(true)
+  })
+
   test('the registry declares every field the SDK parses', async () => {
     const mcp = await legacy(chain({}).client)
     const { structured } = await call(mcp, 'registry', {})

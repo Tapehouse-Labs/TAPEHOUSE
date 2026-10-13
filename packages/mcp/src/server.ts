@@ -15,7 +15,7 @@ export { RateLimit } from './tool.js'
  */
 export function createServer(context: Context): McpServer {
   const server = new McpServer(
-    { name: 'tapehouse', version: '0.1.0' },
+    { name: 'tapehouse', version: '0.1.1' },
     {
       instructions: [
         `Tapehouse prices Robinhood Chain's Stock Tokens as a band and lends against its low edge. This server reads the band, its feeds, the Morpho oracles, the baskets of Stock Tokens, the margin accounts, the short positions and the weekend gap cover on chain ${context.deployments.chainId}, and prepares their transactions.`,

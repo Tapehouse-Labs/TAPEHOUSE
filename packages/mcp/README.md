@@ -11,7 +11,7 @@ The server takes its configuration from the environment and no key at all:
 | Variable | What it is |
 |---|---|
 | `TAPEHOUSE_RPC_URL` | The chain's JSON-RPC endpoint, `http` or `https`. It may carry an API key: the server never shows it to a client, not even in an error. |
-| `TAPEHOUSE_NETWORK` | The chain, `4663` (Robinhood Chain), `46630` (its testnet) or `42161` (Arbitrum One): the package carries each one's registry. |
+| `TAPEHOUSE_NETWORK` | The chain, `4663` (Robinhood Chain), `46630` (its testnet) or `42161` (Arbitrum One): the package carries each one's registry as it was when it was published, so a redeploy of a chain's contracts is a new release of the package. |
 | `TAPEHOUSE_DEPLOYMENTS` | The path of the chain's registry, `deployments/<chainId>.json` from the Tapehouse repository, instead of `TAPEHOUSE_NETWORK`. The server refuses an endpoint that serves another chain. |
 | `TAPEHOUSE_MAX_SLIPPAGE_BPS` | The most slippage a sale or buy-back may state, from 0 to 10,000 basis points; 100 unless set. |
 | `TAPEHOUSE_MAX_CALLS_PER_MINUTE` | The most tool calls the server answers in a minute, from 1 to 100,000; 120 unless set. A call beyond it is refused before it reads anything. |
