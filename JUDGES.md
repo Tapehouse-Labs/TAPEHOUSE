@@ -77,8 +77,9 @@ On the testnet's two assets it compares 32 calls (the views, scenarios, the dige
 | Sponsor paymaster, bundler, smart accounts | Live | The app: a wallet with no ether creates its account and deposits for free |
 | Indexer and public API | Live | <https://indexer-production-f5dc.up.railway.app/v1/status> |
 | Pay per request over x402 | Live: beyond the free allowance a read is answered 402 and paid in USDG, with no key. Settled on the testnet in [`0x8e6651bc…df9345`](https://explorer.testnet.chain.robinhood.com/tx/0x8e6651bc96582ef77329e3a209982d15a2c54c8b6dcefedbb562709d26df9345) by Tapehouse's own facilitator, since the chain has none | `curl -si` the API over 10 requests a second for the 402; [the reference](docs/REFERENCE.md#paying-per-request) |
-| Claude Code plugin | In the repository: the MCP server and three skills; `@tapehouse/mcp` is not on npm yet, so the plugin cannot start until it is | `claude plugin validate plugins/tapehouse` |
-| SDKs, MCP server | The TypeScript SDK is published as `@tapehouse/sdk`; the Rust and Go SDKs and the MCP server are in the repository | `npm view @tapehouse/sdk` |
+| Claude Code plugin | The MCP server and three skills, in the repository; the plugin starts `@tapehouse/mcp` from npm | `claude plugin marketplace add Tapehouse-Labs/TAPEHOUSE`, then `claude plugin install tapehouse@tapehouse` |
+| SDKs, MCP server | The TypeScript SDK and the MCP server are published as `@tapehouse/sdk` and `@tapehouse/mcp`; the Rust and Go SDKs are in the repository | `npm view @tapehouse/sdk`, `npm view @tapehouse/mcp` |
+| Documentation | Live at <https://docs.tapehouse.xyz>: concepts, guides, every contract and the API reference generated from the indexer's OpenAPI specification, with a request panel against this testnet; each page is also Markdown | Open any page and add `.md`; `/llms.txt` lists them |
 | **Robinhood Chain mainnet** | **Not live** | Arbitrum paused new Stylus activations on 2 October 2026, which blocks deploying the band and margin programs on any network until it lifts |
 | Third-party audit | **None yet** | The reference's slither run, the fork tests and the reproducible builds are what stands in for it |
 
@@ -98,12 +99,13 @@ On the testnet's two assets it compares 32 calls (the views, scenarios, the dige
 | Stylus programs (`cargo test`) | 208 |
 | Rust SDK | 33 |
 | Go: services and SDK | 316 |
-| TypeScript: SDK, MCP server, app and website | 285 |
+| TypeScript: SDK, MCP server, app, website and documentation | 292 |
 
 The app's end-to-end tests (`make test-app-devnode`, desktop and phone Chromium, with axe's WCAG 2.2 AA checks) and the services' dev-node tests run against a local Nitro node. One fork test needs a logs RPC that serves wide ranges, and fails without it.
 
 ## Where to read next
 
 - [`README.md`](README.md): the problem, the architecture and every deployed address.
+- [The documentation](https://docs.tapehouse.xyz): how to use each part, from the band to the contracts and the API.
 - [`docs/REFERENCE.md`](docs/REFERENCE.md): each component in turn, with its commands.
 - `contracts/src`, `stylus/contracts/band`, `stylus/contracts/margin`: the code the steps above exercise.

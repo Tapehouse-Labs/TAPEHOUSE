@@ -4,7 +4,7 @@
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { Link } from "@/i18n/navigation";
-import { APP_URL } from "../site";
+import { APP_URL, DOCS_URL } from "../site";
 import { LanguageSwitch } from "./LanguageSwitch";
 import { Mark } from "./Mark";
 import { Seal } from "./Seal";
@@ -140,6 +140,9 @@ export function Hero() {
             <span className="hidden sm:inline-flex">
               <Seal />
             </span>
+            <a href={DOCS_URL} className="hidden whitespace-nowrap text-[14px] opacity-80 transition-opacity hover:opacity-100 sm:inline">
+              {t("docs")}
+            </a>
             <a href={APP_URL} className="btn-ghost !py-[0.55em] whitespace-nowrap text-[14px]">
               {t("openApp")}
             </a>

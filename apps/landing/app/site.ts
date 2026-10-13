@@ -5,6 +5,7 @@
  */
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://tapehouse.xyz";
 export const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.tapehouse.xyz";
+export const DOCS_URL = process.env.NEXT_PUBLIC_DOCS_URL ?? "https://docs.tapehouse.xyz";
 
 export const X_HANDLE = "tapehouseHQ";
 

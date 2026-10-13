@@ -4,6 +4,7 @@
 import { useTranslations } from "next-intl";
 import { useId } from "react";
 import { useFormat } from "@/lib/i18n";
+import { DOCS_URL } from "@/lib/links";
 import { useWallet } from "@/lib/hooks";
 import { Wallets } from "./Wallets";
 
@@ -32,7 +33,10 @@ export function WalletControl() {
       >
         <p className="label">{t("connected")}</p>
         <p className="addr num mt-1.5 break-all text-[12.5px] text-strong">{wallet.address}</p>
-        <button type="button" onClick={wallet.disconnect} className="btn btn-quiet mt-4 w-full">
+        <a href={DOCS_URL} target="_blank" rel="noopener noreferrer" className="mt-4 block text-muted underline hover:text-strong">
+          {t("docs")}
+        </a>
+        <button type="button" onClick={wallet.disconnect} className="btn btn-quiet mt-3 w-full">
           {t("disconnect")}
         </button>
       </div>

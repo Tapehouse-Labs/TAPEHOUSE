@@ -8,6 +8,7 @@
     "auction": "Auction",
     "simulator": "Simulator"
   },
+  "docs": "Documentation",
   "faucet": "Get test USDG",
   "theme": "Switch between light and dark",
   "language": "Language",

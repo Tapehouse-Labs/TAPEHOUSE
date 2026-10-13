@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
-import { APP_URL, CONTACT_EMAIL, EXTERNAL, SECURITY_EMAIL } from "../site";
+import { APP_URL, CONTACT_EMAIL, DOCS_URL, EXTERNAL, SECURITY_EMAIL } from "../site";
 import { LanguageSwitch } from "./LanguageSwitch";
 import { Mark } from "./Mark";
 
@@ -23,6 +23,7 @@ export function Footer() {
     {
       title: t("builders"),
       items: [
+        { label: t("docs"), href: DOCS_URL, external: true },
         { label: t("feed"), href: "/#ch-method" },
         { label: t("methodology"), href: "/methodology" },
         { label: t("vulnerability"), href: `mailto:${SECURITY_EMAIL}`, external: true },

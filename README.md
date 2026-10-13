@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://app.tapehouse.xyz">Live app</a> · <a href="#how-it-works">How It Works</a> · <a href="JUDGES.md">For the judges</a> · <a href="#stylus-versus-solidity">Stylus</a> · <a href="#deployed-contracts">Contracts</a> · <a href="#getting-started">Run Locally</a>
+  <a href="https://app.tapehouse.xyz">Live app</a> · <a href="https://docs.tapehouse.xyz">Docs</a> · <a href="#how-it-works">How It Works</a> · <a href="JUDGES.md">For the judges</a> · <a href="#stylus-versus-solidity">Stylus</a> · <a href="#deployed-contracts">Contracts</a> · <a href="#getting-started">Run Locally</a>
 </p>
 
 ---
@@ -104,7 +104,7 @@ Test USDG comes from [Paxos' faucet](https://faucet.paxos.com/?network=robinhood
 | It runs on a public network | The [live app](https://app.tapehouse.xyz) and the [addresses below](#deployed-contracts) |
 | Every claim is tested | The CI badge above, and `make test` |
 | The weekend parameters come from history | [`docs/BACKTEST.md`](docs/BACKTEST.md): 890 closures since 2010, with where the model falls short |
-| It can be integrated | [SDKs](#services-and-sdks) in TypeScript, Rust and Go, and an MCP server for agents |
+| It can be integrated | The [documentation](https://docs.tapehouse.xyz), the [SDKs](#services-and-sdks) in TypeScript, Rust and Go, and an MCP server for agents |
 
 ---
 
@@ -218,7 +218,7 @@ Each deployment below verifies from the commit that added its row: `git log --re
 | TypeScript SDK | `packages/sdk` | Typed reads and transactions on viem, published as [`@tapehouse/sdk`](https://www.npmjs.com/package/@tapehouse/sdk) |
 | Rust SDK | `crates/sdk` | The same surface on alloy |
 | Go SDK | `services/sdk` | The same surface on go-ethereum |
-| MCP server | `packages/mcp` | Lets an AI agent read the band and the engine |
+| MCP server | `packages/mcp` | Lets an AI agent read the band and the engine, published as [`@tapehouse/mcp`](https://www.npmjs.com/package/@tapehouse/mcp) |
 | Claude Code plugin | `plugins/tapehouse` | The MCP server and three skills for an agent: read, act under a mandate, pay the API per request |
 | Indexer and API | `services/cmd/indexer` | History, public API, WebSocket stream and RedStone relay |
 | Keepers | `services/cmd/keeper` | Prices, halts and the weekend's routine work |
@@ -227,6 +227,7 @@ Each deployment below verifies from the commit that added its row: `git log --re
 | x402 facilitator | `services/cmd/facilitator` | Settles in USDG the payments of clients that read the API beyond its free allowance, with no key |
 | Alerts | `services/cmd/alerts` | Warns holders before a weekend and before a liquidation |
 | Backtest and calibration | `services/cmd/backtest`, `services/cmd/calibrate` | Replays history and proposes parameters |
+| Documentation | `apps/docs` | [docs.tapehouse.xyz](https://docs.tapehouse.xyz): concepts, guides, the SDKs, the contracts and the API reference, each page also served as Markdown for agents |
 
 ---
 
@@ -239,12 +240,13 @@ make build
 make test
 ```
 
-`make build` initialises the submodules and installs JavaScript dependencies on first run, and stops with a message if Node, Foundry or cargo-stylus does not match the pinned versions. The requirements, every `make` target and each component's commands are in the [reference](docs/REFERENCE.md).
+`make build` initialises the submodules and installs JavaScript dependencies on first run, and stops with a message if Node, Foundry or cargo-stylus does not match the pinned versions. The requirements, every `make` target and each component's commands are in the [reference](docs/REFERENCE.md); the [documentation](https://docs.tapehouse.xyz) explains how to use each part.
 
 To use Tapehouse from Claude Code, install its plugin, which starts the MCP server and teaches the agent to read a position, act under a mandate and pay the API per request:
 
 ```bash
-/plugin install tapehouse --marketplace Tapehouse-Labs/TAPEHOUSE
+claude plugin marketplace add Tapehouse-Labs/TAPEHOUSE
+claude plugin install tapehouse@tapehouse
 ```
 
 ```bash
