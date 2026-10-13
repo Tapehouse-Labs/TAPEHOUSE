@@ -5,6 +5,7 @@ import {
   ContractFunctionExecutionError,
   ContractFunctionRevertedError,
   encodeErrorResult,
+  InsufficientFundsError,
   InvalidParamsRpcError,
   RpcRequestError,
   UserRejectedRequestError,
@@ -81,6 +82,13 @@ describe("explain", () => {
   test("a request the wallet's owner declined", () => {
     expect(tell(new UserRejectedRequestError(new Error("denied")))).toBe(
       "You declined the request in your wallet.",
+    );
+  });
+
+  test("a wallet without ether is told what pays for the step and where to get some", () => {
+    const poor = new InsufficientFundsError({ cause: new BaseError("exceeds the balance of the account") });
+    expect(tell(poor)).toBe(
+      "Your wallet has no ether for this step: wrapping a Stock Token is a transaction your wallet pays. Get testnet ether from Robinhood's faucet.",
     );
   });
 

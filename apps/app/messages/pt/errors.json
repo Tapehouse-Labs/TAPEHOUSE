@@ -35,6 +35,7 @@
   },
   "unknownRevert": "{name}({args})",
   "declined": "Você recusou a solicitação na sua carteira.",
+  "noGas": "Sua carteira não tem ether para este passo: envolver um Stock Token é uma transação que a sua carteira paga. Pegue ether de teste na faucet da Robinhood.",
   "refused": "Recusado: {details}.",
   "text": "{text}",
   "connectFirst": "Conecte primeiro a sua carteira.",

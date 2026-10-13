@@ -35,6 +35,7 @@
   },
   "unknownRevert": "{name}({args})",
   "declined": "You declined the request in your wallet.",
+  "noGas": "Your wallet has no ether for this step: wrapping a Stock Token is a transaction your wallet pays. Get testnet ether from Robinhood's faucet.",
   "refused": "Refused: {details}.",
   "text": "{text}",
   "connectFirst": "Connect your wallet first.",

@@ -35,6 +35,7 @@
   },
   "unknownRevert": "{name}({args})",
   "declined": "Rechazaste la solicitud en tu wallet.",
+  "noGas": "Tu wallet no tiene ether para este paso: envolver un Stock Token es una transacción que paga tu wallet. Consigue ether de prueba en la faucet de Robinhood.",
   "refused": "Rechazado: {details}.",
   "text": "{text}",
   "connectFirst": "Conecta primero tu wallet.",

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import { decodeRevert, type Revert } from "@tapehouse/sdk";
-import { BaseError, type Hex, hexToString, RpcRequestError, UserRejectedRequestError } from "viem";
+import { BaseError, type Hex, hexToString, InsufficientFundsError, RpcRequestError, UserRejectedRequestError } from "viem";
 import type { Formatters } from "./format";
 import { MessageError, type Msg, msg } from "./messages";
 
@@ -78,6 +78,7 @@ export function explain(f: Formatters, error: unknown): Msg {
   if (error instanceof MessageError) return error.msg;
   if (error instanceof BaseError) {
     if (error.walk((cause) => cause instanceof UserRejectedRequestError)) return msg("errors.declined");
+    if (error.walk((cause) => cause instanceof InsufficientFundsError)) return msg("errors.noGas");
     const refused = error.walk((cause) => cause instanceof RpcRequestError);
     if (refused instanceof RpcRequestError && refused.details) return msg("errors.refused", { details: refused.details });
     return msg("errors.text", { text: error.shortMessage });

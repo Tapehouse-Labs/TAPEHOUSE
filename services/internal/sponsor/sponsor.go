@@ -56,7 +56,8 @@ type Limits struct {
 	// FeeMultiple bounds the fee cap to this many times the latest base fee.
 	FeeMultiple int64
 	// StaticPreVerificationGas is the pre-verification gas allowed beyond 130% of the operation's L1 gas, as
-	// Arbitrum's NodeInterface estimates it.
+	// Arbitrum's NodeInterface estimates it, and beyond the 16 gas a byte of its calldata costs, which a bundler adds
+	// where the chain's L1 price is zero and NodeInterface's estimate with it.
 	StaticPreVerificationGas uint64
 	// Validity is how long a signature stays valid.
 	Validity time.Duration
@@ -64,6 +65,9 @@ type Limits struct {
 	// GlobalDaily how many all clients get together.
 	Daily, GlobalDaily int
 }
+
+// calldataGas is the gas of each byte of calldata, which bounds pre-verification gas where the chain's L1 price is zero.
+const calldataGas = 16
 
 // DefaultLimits are the service's limits unless configured otherwise.
 var DefaultLimits = Limits{MaxVerificationGas: 1_000_000, MaxCreationCallGas: 50_000, MaxCallGas: 2_000_000,
@@ -448,11 +452,11 @@ func (s *Service) checkGas(ctx context.Context, op *UserOperation) error {
 	if limit := new(big.Int).Mul(head.BaseFee, big.NewInt(s.limits.FeeMultiple)); op.MaxFeePerGas.ToInt().Cmp(limit) > 0 {
 		return refuse("the fee cap is above %d times the base fee", s.limits.FeeMultiple)
 	}
-	l1, err := s.l1Gas(ctx, op)
+	l1, size, err := s.l1Gas(ctx, op)
 	if err != nil {
 		return err
 	}
-	limit := l1*13/10 + s.limits.StaticPreVerificationGas
+	limit := l1*13/10 + s.limits.StaticPreVerificationGas + calldataGas*uint64(size)
 	if !op.PreVerificationGas.ToInt().IsUint64() || op.PreVerificationGas.ToInt().Uint64() > limit {
 		return refuse("the pre-verification gas is above %d", limit)
 	}
@@ -488,27 +492,27 @@ func (s *Service) callGasLimit(ctx context.Context, op *UserOperation) (uint64, 
 
 // l1Gas is the L1 gas of handleOps carrying the operation, signed by the account and the service, as Arbitrum's
 // NodeInterface estimates it. A SimpleAccount's signature is 65 bytes, whatever the operation carries yet.
-func (s *Service) l1Gas(ctx context.Context, op *UserOperation) (uint64, error) {
+func (s *Service) l1Gas(ctx context.Context, op *UserOperation) (l1 uint64, size int, err error) {
 	signed := *op
 	signed.Signature = make([]byte, 65)
 	handleOps, err := entryPointABI.Pack("handleOps", []packedUserOperation{pack(&signed, paymasterAndData(s.paymaster,
 		paymasterData(0, 0, make([]byte, 65))))}, common.Address{})
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	data, err := nodeInterfaceABI.Pack("gasEstimateL1Component", s.entryPoint, false, handleOps)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	out, err := s.call(ctx, nodeInterface, data)
 	if err != nil {
-		return 0, fmt.Errorf("NodeInterface's L1 estimate: %w", err)
+		return 0, 0, fmt.Errorf("NodeInterface's L1 estimate: %w", err)
 	}
 	values, err := nodeInterfaceABI.Unpack("gasEstimateL1Component", out)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return values[0].(uint64), nil
+	return values[0].(uint64), len(handleOps), nil
 }
 
 // allowStub spends one of the client's stubs, a second each with bursts of 20, or reports that none is left.

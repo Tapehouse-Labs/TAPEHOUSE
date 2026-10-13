@@ -54,6 +54,7 @@ type fakeChain struct {
 	baseFee    *big.Int
 	l1Gas      uint64
 	failHeader bool
+	freeL1     bool
 	estimate   uint64
 	ownerReads int
 }
@@ -124,6 +125,9 @@ func (c *fakeChain) CallContract(_ context.Context, msg ethereum.CallMsg, _ *big
 		}
 		args, _ := nodeInterfaceABI.Methods["gasEstimateL1Component"].Inputs.Unpack(msg.Data[4:])
 		l1 := c.l1Gas + uint64(len(args[2].([]byte)))*16
+		if c.freeL1 {
+			l1 = 0
+		}
 		return nodeInterfaceABI.Methods["gasEstimateL1Component"].Outputs.Pack(l1, c.baseFee, big.NewInt(1))
 	}
 	if c.code[*msg.To] != nil && bytes.Equal(msg.Data, accountABI.Methods["owner"].ID) {
@@ -606,15 +610,34 @@ func TestTheCallGasFollowsTheCalls(t *testing.T) {
 	refused(t, err, "the calls fail")
 }
 
+func TestWhereTheChainsL1PriceIsZeroTheBoundCoversTheCalldataABundlerCharges(t *testing.T) {
+	chain := newChain()
+	chain.freeL1 = true
+	s := service(t, chain)
+	ctx := context.Background()
+	op := creation(execute(accounts, 0, authorize))
+	_, size, err := s.l1Gas(ctx, op)
+	if err != nil || size == 0 {
+		t.Fatalf("the size of what the bundler posts: %d %v", size, err)
+	}
+	op.PreVerificationGas = big64(int64(s.limits.StaticPreVerificationGas) + 16*int64(size))
+	if _, err := s.Data(ctx, op); err != nil {
+		t.Fatalf("the static allowance and the calldata's gas: %v", err)
+	}
+	op.PreVerificationGas = big64(int64(s.limits.StaticPreVerificationGas) + 16*int64(size) + 1)
+	_, err = s.Data(ctx, op)
+	refused(t, err, "pre-verification gas is above")
+}
+
 func TestTheL1EstimateCountsA65ByteSignature(t *testing.T) {
 	s := service(t, newChain())
 	op := creation(execute(accounts, 0, authorize))
-	short, err := s.l1Gas(context.Background(), op)
+	short, _, err := s.l1Gas(context.Background(), op)
 	if err != nil {
 		t.Fatal(err)
 	}
 	op.Signature = make([]byte, 60_000)
-	long, err := s.l1Gas(context.Background(), op)
+	long, _, err := s.l1Gas(context.Background(), op)
 	if err != nil || long != short {
 		t.Fatalf("a long dummy signature moved the estimate from %d to %d: %v", short, long, err)
 	}
