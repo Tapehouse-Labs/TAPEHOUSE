@@ -41,6 +41,14 @@ describe("backstopActions", () => {
       ["covered", 10n, 7n],
     ]);
   });
+
+  test("leaves out a cover that paid nothing and wrote nothing off, which is no shortfall", () => {
+    const actions = backstopActions([
+      event({ contract: "tapehouse.GapBackstop", event: "Covered", args: { position: "0x00", closesMs: "0", paid: "0", written: "0" } }),
+      event({ contract: "tapehouse.GapBackstop", event: "Covered", args: { position: "0x00", closesMs: "30", paid: "0", written: "5" } }),
+    ]);
+    expect(actions.map((a) => [a.kind, a.closesMs, a.amount])).toEqual([["covered", 30n, 0n]]);
+  });
 });
 
 describe("fetchEvents", () => {

@@ -57,7 +57,7 @@ export function backstopActions(events: readonly Indexed[]): BackstopAction[] {
   return events
     .flatMap((e): BackstopAction[] => {
       if (e.event === "Covered")
-        return [{ kind: "covered", closesMs: BigInt(e.args.closesMs ?? 0), position: (e.args.position ?? "0x") as Hex, amount: BigInt(e.args.paid ?? 0), tx: e.tx, finalized: e.finalized }];
+        return BigInt(e.args.paid ?? 0) === 0n && BigInt(e.args.written ?? 0) === 0n ? [] : [{ kind: "covered", closesMs: BigInt(e.args.closesMs ?? 0), position: (e.args.position ?? "0x") as Hex, amount: BigInt(e.args.paid ?? 0), tx: e.tx, finalized: e.finalized }];
       if (e.event === "RemainderBought")
         return [{ kind: "bought", closesMs: BigInt(e.args.closesMs ?? 0), position: (e.args.position ?? "0x") as Hex, amount: BigInt(e.args.cost ?? 0), tx: e.tx, finalized: e.finalized }];
       return [];
